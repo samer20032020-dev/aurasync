@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>فك قفل الملف — Aura Vault</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-drag: none; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", "Noto Sans Arabic", sans-serif;
+      background: radial-gradient(120% 120% at 50% -10%, #182642 0%, #0b111d 55%, #070b12 100%);
+      color: #e7eefc;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(120, 160, 255, 0.18);
+      border-radius: 18px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .drag { -webkit-app-region: drag; }
+    .no-drag { -webkit-app-region: no-drag; }
+
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px 6px;
+    }
+    .brand { display: flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 700; color: #9db6ff; letter-spacing: .2px; }
+    .brand .dot { width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #8b5cf6, #22d3ee); box-shadow: 0 0 10px rgba(99, 132, 255, .7); }
+    .close-btn {
+      -webkit-app-region: no-drag;
+      width: 28px; height: 28px; border: none; border-radius: 9px; cursor: pointer;
+      background: rgba(255, 255, 255, 0.05); color: #9fb0cc; font-size: 15px; line-height: 1;
+      display: flex; align-items: center; justify-content: center; transition: .18s;
+    }
+    .close-btn:hover { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+
+    .content { flex: 1; display: flex; flex-direction: column; padding: 6px 24px 22px; }
+
+    .hero { display: flex; flex-direction: column; align-items: center; text-align: center; margin-top: 4px; }
+    .lock-badge {
+      width: 62px; height: 62px; border-radius: 20px; display: flex; align-items: center; justify-content: center;
+      font-size: 28px; margin-bottom: 12px;
+      background: linear-gradient(140deg, rgba(99, 132, 255, .28), rgba(34, 211, 238, .2));
+      border: 1px solid rgba(120, 160, 255, .35);
+      box-shadow: 0 10px 26px rgba(56, 120, 255, .22);
+    }
+    .hero h1 { font-size: 16px; font-weight: 800; letter-spacing: .2px; }
+    .hero .sub { font-size: 12px; color: #93a4c4; margin-top: 5px; line-height: 1.6; max-width: 320px; }
+    .hero .name {
+      margin-top: 10px; max-width: 340px; font-size: 12.5px; font-weight: 700; color: #cdd9f5;
+      background: rgba(255, 255, 255, 0.045); border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 7px 14px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .field { position: relative; margin: 22px auto 0; width: 100%; max-width: 330px; }
+    input[type="password"], input[type="text"] {
+      width: 100%; text-align: center; font-family: inherit;
+      background: rgba(9, 15, 26, 0.85);
+      border: 1.5px solid rgba(120, 160, 255, 0.22);
+      border-radius: 14px; padding: 15px 46px; color: #fff;
+      font-size: 18px; letter-spacing: 6px; outline: none; transition: .2s;
+    }
+    input::placeholder { letter-spacing: normal; font-size: 13.5px; color: #5f729a; }
+    input:focus { border-color: #6d8dff; box-shadow: 0 0 0 4px rgba(99, 132, 255, .18); }
+    .toggle-pass {
+      position: absolute; inset-inline-start: 10px; top: 50%; transform: translateY(-50%);
+      background: transparent; border: none; color: #8296bd; cursor: pointer; font-size: 15px; padding: 6px; border-radius: 8px;
+    }
+    .toggle-pass:hover { color: #fff; background: rgba(255,255,255,.06); }
+
+    .dots { display: flex; gap: 9px; justify-content: center; margin-top: 14px; height: 10px; }
+    .dots span { width: 9px; height: 9px; border-radius: 50%; background: rgba(120, 160, 255, .2); transition: .15s; }
+    .dots span.on { background: linear-gradient(135deg, #8b5cf6, #22d3ee); box-shadow: 0 0 8px rgba(99, 132, 255, .6); }
+
+    .hint { text-align: center; font-size: 11.5px; color: #6f81a6; margin-top: 12px; }
+    .hint b { color: #a9bcf0; }
+
+    .error {
+      display: none; align-items: center; justify-content: center; gap: 7px;
+      margin: 14px auto 0; max-width: 330px; font-size: 12px; color: #fca5a5;
+      background: rgba(239, 68, 68, 0.13); border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 9px 12px; border-radius: 11px; animation: shake .32s;
+    }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
+
+    .actions { margin-top: auto; display: flex; flex-direction: column; gap: 9px; padding-top: 20px; }
+    .btn {
+      border: none; border-radius: 13px; padding: 13px 16px; font-size: 13.5px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px; transition: .18s; font-family: inherit;
+    }
+    .btn-primary { background: linear-gradient(135deg, #5b7cfa, #22d3ee); color: #04101f; box-shadow: 0 10px 24px rgba(56, 120, 255, .3); }
+    .btn-primary:hover { filter: brightness(1.07); transform: translateY(-1px); }
+    .btn-ghost { background: rgba(255, 255, 255, 0.055); color: #c3d1ee; border: 1px solid rgba(255, 255, 255, 0.09); }
+    .btn-ghost:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; transform: none; filter: none; }
+    .spinner { width: 14px; height: 14px; border: 2px solid rgba(4,16,31,.35); border-top-color: #04101f; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+    .btn-ghost .spinner { border-color: rgba(195,209,238,.35); border-top-color: #c3d1ee; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="topbar drag">
+    <div class="brand"><span class="dot"></span><span id="brandText">Aura Vault</span></div>
+    <button class="close-btn no-drag" id="closeBtn" title="إغلاق">✕</button>
+  </div>
+
+  <div class="content">
+    <div class="hero">
+      <div class="lock-badge" id="lockBadge">🔒</div>
+      <h1 id="titleText">فك قفل الملف</h1>
+      <div class="sub" id="subText">أدخل كلمة المرور أو الرقم السري لفتح العنصر المحمي.</div>
+      <div class="name" id="fileName">جاري القراءة...</div>
+    </div>
+
+    <div class="field">
+      <input type="password" id="passwordInput" placeholder="كلمة المرور أو الرقم السري..." autofocus autocomplete="off" inputmode="numeric" />
+      <button type="button" class="toggle-pass" id="togglePassBtn" title="إظهار / إخفاء">👁️</button>
+    </div>
+
+    <div class="dots" id="dots">
+      <span></span><span></span><span></span><span></span>
+    </div>
+
+    <div class="hint" id="hintBox" style="display:none;">💡 تلميح: <b id="hintText"></b></div>
+    <div class="hint" id="lenHint">يمكنك استخدام 4 خانات فقط — ويُفتح تلقائياً عند إكمال 4 أرقام.</div>
+
+    <div class="error" id="errorMsg">
+      <span>⚠️</span>
+      <span id="errorText">كلمة المرور غير صحيحة</span>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="unlockOpenBtn">
+        <span class="spinner" id="openSpinner"></span>
+        <span id="openText">🔓 فتح الآن</span>
+      </button>
+      <button class="btn btn-ghost" id="unlockRestoreBtn">
+        <span class="spinner" id="restoreSpinner"></span>
+        <span id="restoreText">📦 استعادة دائمة (إلغاء القفل)</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetPath = urlParams.get('path');
+
+    const el = (id) => document.getElementById(id);
+    const fileNameEl = el('fileName');
+    const titleText = el('titleText');
+    const subText = el('subText');
+    const lockBadge = el('lockBadge');
+    const brandText = el('brandText');
+    const passwordInput = el('passwordInput');
+    const togglePassBtn = el('togglePassBtn');
+    const hintBox = el('hintBox');
+    const hintText = el('hintText');
+    const lenHint = el('lenHint');
+    const errorMsg = el('errorMsg');
+    const errorText = el('errorText');
+    const openBtn = el('unlockOpenBtn');
+    const restoreBtn = el('unlockRestoreBtn');
+    const openSpinner = el('openSpinner');
+    const openText = el('openText');
+    const restoreSpinner = el('restoreSpinner');
+    const restoreText = el('restoreText');
+    const closeBtn = el('closeBtn');
+    const dots = el('dots');
+    const dotEls = Array.from(dots.children);
+
+    let isFolder = false;
+    let busy = false;
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
+      return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+    }
+
+    async function loadInfo() {
+      if (!targetPath) { fileNameEl.textContent = 'لم يتم تحديد المسار'; return; }
+      try {
+        if (window.electronAPI && window.electronAPI.vaultGetUnlockFileInfo) {
+          const info = await window.electronAPI.vaultGetUnlockFileInfo(targetPath);
+          if (info) {
+            isFolder = info.entryType === 'folder' || info.fileType === 'folder' || info.isDirectory === true;
+            fileNameEl.textContent = info.originalName || info.fileName;
+            fileNameEl.title = fileNameEl.textContent;
+            if (info.hint) { hintBox.style.display = 'block'; hintText.textContent = info.hint; }
+            if (isFolder) {
+              lockBadge.textContent = '📁';
+              titleText.textContent = 'فتح المجلد المحمي';
+              subText.textContent = 'أدخل كلمة المرور لفتح المجلد بأمان. يُفتح في جلسة معزولة بدون إنشاء أي نسخة مكشوفة بجانبه.';
+              openText.textContent = '📂 فتح آمن (يبقى مقفلاً وبدون نسخ مكشوفة)';
+              restoreText.textContent = '📦 استعادة دائمة وإلغاء القفل نهائياً';
+              lenHint.textContent = 'يُفتح تلقائياً عند إكمال 4 أرقام — أو اضغط Enter.';
+            } else {
+              lockBadge.textContent = '🔒';
+              titleText.textContent = 'فتح الملف المحمي';
+              subText.textContent = 'أدخل كلمة المرور لفتح الملف بأمان. يُفتح في جلسة معزولة ويبقى الملف الأصلي مشفراً ومحمياً دائماً.';
+              openText.textContent = '🚀 فتح آمن فوراً (يبقى مقفلاً)';
+              restoreText.textContent = '📦 استعادة دائمة وإلغاء القفل نهائياً';
+            }
+          }
+        }
+      } catch (_) {
+        fileNameEl.textContent = targetPath.split(/[\\/]/).pop();
+      }
+    }
+
+    function updateDots() {
+      const n = Math.min(passwordInput.value.length, 4);
+      dotEls.forEach((d, i) => d.classList.toggle('on', i < n));
+    }
+
+    togglePassBtn.addEventListener('click', () => {
+      const show = passwordInput.type === 'password';
+      passwordInput.type = show ? 'text' : 'password';
+      togglePassBtn.textContent = show ? '🔒' : '👁️';
+      passwordInput.focus();
+    });
+
+    closeBtn.addEventListener('click', () => closeDialog());
+    function closeDialog() {
+      if (window.electronAPI && window.electronAPI.vaultCloseUnlockDialog) window.electronAPI.vaultCloseUnlockDialog();
+      else window.close();
+    }
+
+    async function handleUnlock(launchAfter) {
+      if (busy) return;
+      const password = passwordInput.value;
+      if (!password) { showError('يرجى كتابة كلمة المرور أو الرقم السري'); passwordInput.focus(); return; }
+
+      busy = true;
+      errorMsg.style.display = 'none';
+      openBtn.disabled = true;
+      restoreBtn.disabled = true;
+
+      if (launchAfter) { openSpinner.style.display = 'inline-block'; openText.textContent = isFolder ? 'جاري فتح المجلد...' : 'جاري فك التشفير...'; }
+      else { restoreSpinner.style.display = 'inline-block'; restoreText.textContent = 'جاري فك التشفير...'; }
+
+      try {
+        if (window.electronAPI && window.electronAPI.vaultUnlockAndLaunch) {
+          const res = await window.electronAPI.vaultUnlockAndLaunch(targetPath, password, launchAfter);
+          if (res && res.success) { closeDialog(); return; }
+        }
+        showError('تعذّر إتمام العملية، حاول مجدداً');
+      } catch (err) {
+        showError(err && err.message ? err.message : 'كلمة المرور غير صحيحة');
+      } finally {
+        busy = false;
+        openBtn.disabled = false;
+        restoreBtn.disabled = false;
+        openSpinner.style.display = 'none';
+        restoreSpinner.style.display = 'none';
+        openText.textContent = isFolder ? '📂 فتح المجلد (يُبقى مقفلاً)' : '🚀 فتح وتشغيل فوراً';
+        restoreText.textContent = isFolder ? '📦 استعادة دائمة وإلغاء القفل' : '📦 استعادة إلى مكانه الأصلي';
+      }
+    }
+
+    function showError(msg) {
+      errorText.textContent = msg;
+      errorMsg.style.display = 'flex';
+      passwordInput.focus();
+      passwordInput.select();
+    }
+
+    openBtn.addEventListener('click', () => handleUnlock(true));
+    restoreBtn.addEventListener('click', () => handleUnlock(false));
+
+    passwordInput.addEventListener('input', () => {
+      updateDots();
+      errorMsg.style.display = 'none';
+      // Smooth auto-unlock as soon as a 4-digit numeric code is complete.
+      const v = passwordInput.value;
+      if (/^\d{4}$/.test(v)) setTimeout(() => { if (passwordInput.value === v) handleUnlock(true); }, 220);
+    });
+
+    passwordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleUnlock(true);
+      else if (e.key === 'Escape') closeDialog();
+    });
+
+    loadInfo();
+    setTimeout(() => passwordInput.focus(), 160);
+  </script>
+</body>
+</html>

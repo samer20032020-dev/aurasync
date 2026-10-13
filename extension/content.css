@@ -1,0 +1,174 @@
+/* AuraSync Browser Guard — Content Script Styles */
+#aurasync-guard-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(10, 15, 29, 0.95) !important;
+  backdrop-filter: blur(25px) !important;
+  -webkit-backdrop-filter: blur(25px) !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", sans-serif !important;
+  color: #ffffff !important;
+  direction: rtl !important;
+  opacity: 1 !important;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-sizing: border-box !important;
+  user-select: none !important;
+}
+
+#aurasync-guard-overlay.aurasync-closing {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.aurasync-card {
+  width: 360px !important;
+  max-width: 92vw !important;
+  padding: 32px 28px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 28px !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(56, 189, 248, 0.1) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+
+.aurasync-shield {
+  width: 60px !important;
+  height: 60px !important;
+  border-radius: 20px !important;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(20, 184, 166, 0.15)) !important;
+  border: 1px solid rgba(56, 189, 248, 0.4) !important;
+  color: #38bdf8 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 28px !important;
+  margin-bottom: 18px !important;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.2) !important;
+}
+
+.aurasync-title {
+  font-size: 19px !important;
+  font-weight: 800 !important;
+  color: #ffffff !important;
+  margin: 0 0 6px 0 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.aurasync-subtitle {
+  font-size: 12px !important;
+  color: #94a3b8 !important;
+  margin: 0 0 22px 0 !important;
+  line-height: 1.5 !important;
+}
+
+.aurasync-domain-badge {
+  display: inline-block !important;
+  padding: 4px 12px !important;
+  border-radius: 12px !important;
+  background: rgba(56, 189, 248, 0.1) !important;
+  border: 1px solid rgba(56, 189, 248, 0.25) !important;
+  color: #38bdf8 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  font-family: monospace !important;
+  direction: ltr !important;
+  margin-bottom: 16px !important;
+}
+
+.aurasync-dots {
+  display: flex !important;
+  gap: 12px !important;
+  margin-bottom: 22px !important;
+  direction: ltr !important;
+}
+
+.aurasync-dot {
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.aurasync-dot.filled {
+  background: #38bdf8 !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 12px #38bdf8 !important;
+  transform: scale(1.15) !important;
+}
+
+.aurasync-dots.shake {
+  animation: aurasync-shake 0.45s ease-in-out !important;
+}
+
+@keyframes aurasync-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-9px); }
+  40%, 80% { transform: translateX(9px); }
+}
+
+.aurasync-keypad {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 10px !important;
+  width: 100% !important;
+  direction: ltr !important;
+}
+
+.aurasync-key {
+  height: 48px !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: #f1f5f9 !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+}
+
+.aurasync-key:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  transform: translateY(-1px) !important;
+}
+
+.aurasync-key:active {
+  transform: scale(0.95) !important;
+  background: rgba(56, 189, 248, 0.15) !important;
+}
+
+.aurasync-key.action {
+  font-size: 13px !important;
+  color: #94a3b8 !important;
+}
+
+.aurasync-error {
+  min-height: 20px !important;
+  margin-top: 14px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  color: #fb7185 !important;
+  opacity: 0 !important;
+  transition: opacity 0.2s ease !important;
+}
+
+.aurasync-error.show {
+  opacity: 1 !important;
+}

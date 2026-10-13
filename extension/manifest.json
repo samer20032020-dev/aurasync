@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "AuraSync Browser Guard",
+  "version": "1.0.0",
+  "description": "الحارس الذكي للتبويبات والصفحات المفتوحة - مدمج مع برنامج AuraSync",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_title": "AuraSync Browser Guard"
+  },
+  "permissions": [
+    "tabs",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_start"
+    }
+  ]
+}

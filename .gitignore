@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+releases-archive/
+*.exe
+scratch/
+
+# Secrets & private data
+token.json
+onedrive-token.json
+dropbox-token.json
+credentials.json
+provider-credentials.json
+onedrive-credentials.json
+dropbox-credentials.json
+accounts.json
+cloudvault.db
+client_secret_*.json
+
+# Logs & debug output
+*.log
+renderer-debug.log
+app-startup.log
+
+# OS junk
+desktop.ini
+Thumbs.db
+.DS_Store
+
+# Editor
+.vscode/
+.idea/

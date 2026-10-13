@@ -1,0 +1,97 @@
+{
+  "name": "cloudvault-backup",
+  "version": "1.7.74",
+  "description": "AuraSync — Secure Multi-Cloud Desktop Backup with Zero-Deletion Policy",
+  "author": "AuraSync",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev:react": "vite",
+    "dev:electron": "wait-on -t 30000 tcp:5173 && cross-env NODE_ENV=development electron .",
+    "dev": "concurrently -k -n \"VITE,ELECTRON\" -c \"cyan,magenta\" \"npm run dev:react\" \"npm run dev:electron\"",
+    "build": "vite build",
+    "start": "electron .",
+    "pack": "vite build && electron-builder --dir",
+    "dist": "vite build && node scripts/patch-portable-splash.js && electron-builder && node scripts/clean-release.js",
+    "test": "node scripts/test-suite.js",
+    "check": "node --check electron/main.js && node --check electron/preload.js && node --check electron/database.js && node --check electron/oauth-page.js && node --check electron/oauth-server.js && node --check electron/provider-credentials.js && node --check electron/google-drive.js && node --check electron/onedrive.js && node --check electron/dropbox.js && node --check electron/cloud-providers.js && node --check electron/account-manager.js && node --check electron/protocols/webdav.js && node --check electron/protocols/s3.js && node --check electron/sync-engine.js && node --check electron/transfer-engine.js && node --check electron/safe-path.js && node --check electron/tray.js && node --check electron/folder-decorator.js && node --check electron/uninstaller-script.js && node --check electron/snapshots.js && node --check electron/vault-manager.js && node --check electron/context-menu.js && node --check electron/browser-guard.js && node --check electron/browser-extension-server.js && node --check scripts/test-suite.js"
+  },
+  "build": {
+    "appId": "com.aurasync.backup",
+    "productName": "AuraSync",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/sql.js/dist/sql-wasm.wasm",
+      "node_modules/sql.js/dist/sql-wasm.js"
+    ],
+    "electronLanguages": [
+      "en-US",
+      "ar"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico"
+    },
+    "portable": {
+      "artifactName": "AuraSync-Portable.exe",
+      "splashImage": "assets/installer-splash.bmp"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "node_modules/sql.js/dist/sql-wasm.wasm",
+      "node_modules/sql.js/dist/sql-wasm.js",
+      "credentials.json",
+      "icon.png",
+      "icon.ico",
+      "tray-icon.png",
+      "assets/**/*",
+      "extension/**/*",
+      "package.json",
+      "!**/token.json",
+      "!**/*.log",
+      "!**/cloudvault.db",
+      "!**/LICENSES.chromium.html"
+    ],
+    "extraFiles": [
+      "credentials.json",
+      "provider-credentials.json",
+      "icon.ico",
+      "extension"
+    ]
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "cliui": "^8.0.1",
+    "googleapis": "^182.0.0",
+    "lucide-react": "^1.48.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "sql.js": "^1.12.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
+    "electron": "^44.4.5",
+    "electron-builder": "26.15.3",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.1",
+    "wait-on": "^9.4.0"
+  },
+  "overrides": {
+    "@electron/get": "5.1.0",
+    "shell-quote": "1.12.0"
+  }
+}
