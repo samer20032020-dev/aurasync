@@ -107,6 +107,15 @@ async function publishVersion(version, isHistorical = false) {
     if (fs.existsSync(f)) {
       const stat = fs.statSync(f);
       if (stat.size > 50 * 1024 * 1024) { // Only valid electron bundles (> 50MB)
+        // Ensure the PE version matches the target version
+        try {
+          const peVer = execSync(`powershell -Command "(Get-Item '${f}').VersionInfo.ProductVersion"`, { encoding: 'utf8', windowsHide: true }).trim();
+          if (peVer && !peVer.startsWith(version)) {
+            console.warn(`⚠️ Skipping stale asset ${f} (PE version is ${peVer}, expected ${version})`);
+            continue;
+          }
+        } catch (_) {}
+
         let uploadName = path.basename(f);
         if (uploadName === 'AuraSync-Setup.exe') uploadName = `AuraSync-Setup-v${version}.exe`;
         if (uploadName === 'AuraSync-Portable.exe') uploadName = `AuraSync-Portable-v${version}.exe`;

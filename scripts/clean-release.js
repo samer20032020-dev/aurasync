@@ -1,18 +1,21 @@
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
-const releaseDir = path.resolve(__dirname, '..', 'release');
+const rootDir = path.resolve(__dirname, '..');
+const releaseDir = path.join(rootDir, 'release');
+const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+const expectedVersion = pkg.version;
 
 if (!fs.existsSync(releaseDir)) {
   console.log('No release directory found.');
   process.exit(0);
 }
 
-console.log('Cleaning and streamlining release directory...');
+console.log(`Cleaning and streamlining release directory for v${expectedVersion}...`);
 
 // Ensure no running AuraSync processes lock output binaries
 try {
-  const { execSync } = require('child_process');
   execSync('powershell -Command "Get-Process -Name AuraSync*,electron* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"', { windowsHide: true });
 } catch (_) {}
 
@@ -60,115 +63,102 @@ if (fs.existsSync(winUnpackedTmp)) {
   safeRemoveDir(winUnpackedTmp);
 }
 
-// 3. Normalize Portable executable name to AuraSync-Portable.exe (version-agnostic)
+// 3. Remove stale archived binaries from older versions in release/
 try {
-  const portableCandidates = fs
-    .readdirSync(releaseDir)
-    .filter((f) => /\.exe$/i.test(f) && /^AuraSync/i.test(f) && !/setup/i.test(f) && f !== 'AuraSync-Portable.exe');
-
-  for (const name of portableCandidates) {
-    const p = path.join(releaseDir, name);
-    const target = path.join(releaseDir, 'AuraSync-Portable.exe');
-    try {
-      const stat = fs.statSync(p);
-      // Only accept the full packaged executable (> 50 MB)
-      if (stat.size > 50 * 1024 * 1024) {
-        if (fs.existsSync(target)) {
-          try { fs.unlinkSync(target); } catch {}
-        }
+  const files = fs.readdirSync(releaseDir);
+  for (const f of files) {
+    if (f.endsWith('.exe')) {
+      // If file contains a version tag that is NOT the current expected version, purge it!
+      const match = f.match(/v(\d+\.\d+\.\d+)/i);
+      if (match && match[1] !== expectedVersion) {
         try {
-          fs.renameSync(p, target);
-          console.log(`Renamed portable to: AuraSync-Portable.exe (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
-          break;
-        } catch {
-          // If rename fails, try copy
-          fs.copyFileSync(p, target);
-          try { fs.unlinkSync(p); } catch {}
-          console.log(`Copied portable to: AuraSync-Portable.exe (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
-          break;
-        }
+          fs.unlinkSync(path.join(releaseDir, f));
+          console.log(`Purged stale older version executable: ${f}`);
+        } catch (_) {}
       }
-    } catch (e) {
-      console.warn(`Error processing candidate ${name}:`, e.message);
     }
   }
 } catch (e) {
-  console.warn('Error normalizing portable executable:', e.message);
+  console.warn('Notice checking stale binaries:', e.message);
 }
 
-// 4. Normalize Installer executable name to AuraSync-Setup.exe (version-agnostic)
-try {
-  const setupCandidates = fs
-    .readdirSync(releaseDir)
-    .filter((f) => /\.exe$/i.test(f) && /^AuraSync/i.test(f) && /setup/i.test(f) && f !== 'AuraSync-Setup.exe');
-
-  for (const name of setupCandidates) {
-    const p = path.join(releaseDir, name);
-    const target = path.join(releaseDir, 'AuraSync-Setup.exe');
-    try {
-      const stat = fs.statSync(p);
-      if (stat.size > 50 * 1024 * 1024) {
-        if (fs.existsSync(target)) {
-          try {
-            const targetStat = fs.statSync(target);
-            if (targetStat.size < 50 * 1024 * 1024) {
-              fs.unlinkSync(target);
-              fs.renameSync(p, target);
-              console.log(`Replaced stub with full installer: AuraSync-Setup.exe (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
-            }
-          } catch {}
-        } else {
-          try {
-            fs.renameSync(p, target);
-            console.log(`Renamed installer to: AuraSync-Setup.exe (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
-          } catch {
-            fs.copyFileSync(p, target);
-            try { fs.unlinkSync(p); } catch {}
-            console.log(`Copied installer to: AuraSync-Setup.exe (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
-          }
-        }
-        break;
-      }
-    } catch (e) {
-      console.warn(`Error processing setup candidate ${name}:`, e.message);
-    }
-  }
-} catch (e) {
-  console.warn('Error normalizing setup executable:', e.message);
-}
-
-const rootDir = path.resolve(__dirname, '..');
+// 4. Locate the newly compiled portable executable
 const portableFinal = path.join(releaseDir, 'AuraSync-Portable.exe');
 const setupFinal = path.join(releaseDir, 'AuraSync-Setup.exe');
-if (fs.existsSync(portableFinal)) {
-  try {
-    fs.copyFileSync(portableFinal, setupFinal);
-    const stat = fs.statSync(setupFinal);
-    console.log(`Updated AuraSync-Setup.exe (cloud-shaped installer) (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
-    const copyWithRetry = (src, dst) => {
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          fs.copyFileSync(src, dst);
-          return true;
-        } catch (err) {
-          if (attempt === 4) throw err;
-          const { execSync } = require('child_process');
-          try { execSync('powershell -Command "Start-Sleep -Milliseconds 300"', { windowsHide: true }); } catch (_) {}
-        }
-      }
-    };
-    try {
-      if (fs.existsSync(setupFinal)) {
-        copyWithRetry(setupFinal, path.join(rootDir, 'AuraSync-Setup.exe'));
-      }
-      copyWithRetry(portableFinal, path.join(rootDir, 'AuraSync-Portable.exe'));
-      console.log(`Updated root AuraSync-Setup.exe & AuraSync-Portable.exe`);
-    } catch (rootCopyErr) {
-      console.warn('Could not update root executables (may be in use):', rootCopyErr.message);
+const setupVersioned = path.join(releaseDir, `AuraSync-Setup-v${expectedVersion}.exe`);
+const portableVersioned = path.join(releaseDir, `AuraSync-Portable-v${expectedVersion}.exe`);
+
+if (!fs.existsSync(portableFinal)) {
+  // If electron-builder named it differently, check candidate
+  const candidates = fs.readdirSync(releaseDir).filter((f) => f.endsWith('.exe') && !f.includes('Setup'));
+  for (const c of candidates) {
+    const full = path.join(releaseDir, c);
+    const stat = fs.statSync(full);
+    if (stat.size > 50 * 1024 * 1024) {
+      fs.copyFileSync(full, portableFinal);
+      break;
     }
-  } catch (e) {
-    console.warn('Could not finalize setup executables:', e.message);
   }
+}
+
+if (!fs.existsSync(portableFinal)) {
+  console.error(`FATAL: No portable executable found in ${releaseDir}`);
+  process.exit(1);
+}
+
+// 5. Verify the newly compiled portable executable has the correct PE ProductVersion
+try {
+  const peVer = execSync(`powershell -Command "(Get-Item '${portableFinal}').VersionInfo.ProductVersion"`, { encoding: 'utf8', windowsHide: true }).trim();
+  console.log(`🔍 [PE Check] Built executable ProductVersion: ${peVer} (Target: ${expectedVersion})`);
+  if (!peVer.startsWith(expectedVersion)) {
+    throw new Error(`CRITICAL VERSION MISMATCH: Built executable is ${peVer}, but package.json requires ${expectedVersion}!`);
+  }
+  console.log(`✅ [PE Check] Executable version strictly validated as v${expectedVersion}!`);
+} catch (peErr) {
+  console.error(peErr.message);
+  process.exit(1);
+}
+
+// 6. Generate Setup and versioned binaries from the freshly verified portable build
+const copyWithRetry = (src, dst) => {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      if (fs.existsSync(dst)) {
+        try { fs.unlinkSync(dst); } catch (_) {}
+      }
+      fs.copyFileSync(src, dst);
+      return true;
+    } catch (err) {
+      try {
+        execSync('powershell -Command "Get-Process -Name AuraSync*,electron* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"', { windowsHide: true });
+        execSync('powershell -Command "Start-Sleep -Milliseconds 400"', { windowsHide: true });
+      } catch (_) {}
+      if (attempt === 9) throw err;
+    }
+  }
+};
+
+try {
+  copyWithRetry(portableFinal, setupFinal);
+  copyWithRetry(portableFinal, setupVersioned);
+  copyWithRetry(portableFinal, portableVersioned);
+  const stat = fs.statSync(setupFinal);
+  console.log(`Updated AuraSync-Setup.exe (cloud-shaped installer) (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+
+  // Update root files
+  copyWithRetry(setupFinal, path.join(rootDir, 'AuraSync-Setup.exe'));
+  copyWithRetry(portableFinal, path.join(rootDir, 'AuraSync-Portable.exe'));
+  console.log(`Updated root AuraSync-Setup.exe & AuraSync-Portable.exe to v${expectedVersion}`);
+
+  // Final root PE verification
+  const rootVer = execSync(`powershell -Command "(Get-Item '${path.join(rootDir, 'AuraSync-Setup.exe')}').VersionInfo.ProductVersion"`, { encoding: 'utf8', windowsHide: true }).trim();
+  if (!rootVer.startsWith(expectedVersion)) {
+    throw new Error(`CRITICAL ROOT MISMATCH: Root AuraSync-Setup.exe is ${rootVer}, expected ${expectedVersion}!`);
+  }
+  console.log(`✅ [Root Verification] Root installer is confirmed as v${rootVer}!`);
+} catch (copyErr) {
+  console.error('Fatal error copying binaries:', copyErr.message);
+  process.exit(1);
 }
 
 console.log('\nFinal Release Contents:');
@@ -188,7 +178,7 @@ try {
 
 console.log('Release directory cleaning complete.');
 
-// 5. Automatically publish build to GitHub Releases and optimize local disk space
+// 7. Automatically publish build to GitHub Releases and optimize local disk space
 try {
   console.log('\n🚀 Automatically syncing build with GitHub Releases...');
   const { execFileSync } = require('child_process');
