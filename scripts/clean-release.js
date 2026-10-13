@@ -10,6 +10,12 @@ if (!fs.existsSync(releaseDir)) {
 
 console.log('Cleaning and streamlining release directory...');
 
+// Ensure no running AuraSync processes lock output binaries
+try {
+  const { execSync } = require('child_process');
+  execSync('powershell -Command "Get-Process -Name AuraSync*,electron* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"', { windowsHide: true });
+} catch (_) {}
+
 // Helper for safe directory removal without crashing Node on locked files
 function safeRemoveDir(dir) {
   if (!fs.existsSync(dir)) return;
