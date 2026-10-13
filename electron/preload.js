@@ -248,5 +248,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (event, data) => callback(data);
     ipcRenderer.on('transfer:progress', subscription);
     return () => ipcRenderer.removeListener('transfer:progress', subscription);
+  },
+
+  // 1-Click GitHub Auto-Updater APIs
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  startUpdateDownload: (downloadUrl) => ipcRenderer.invoke('updater:start-download', downloadUrl),
+  onUpdateProgress: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('updater:progress', subscription);
+    return () => ipcRenderer.removeListener('updater:progress', subscription);
+  },
+  onUpdateAvailable: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('updater:update-available', subscription);
+    return () => ipcRenderer.removeListener('updater:update-available', subscription);
   }
 });

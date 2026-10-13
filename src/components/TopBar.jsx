@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, ArrowUp, Search } from 'lucide-react';
+import { RefreshCw, ArrowUp, Search, Sparkles } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { formatBytes } from '../format';
 
@@ -19,7 +19,17 @@ const PAGE_KEYS = {
   settings: { title: 'settings.title', subtitle: 'settings.subtitle' }
 };
 
-export default function TopBar({ page, stats, hasAccounts, isSyncing, onSyncAll, uploadSpeed = 0, onOpenSearch }) {
+export default function TopBar({
+  page,
+  stats,
+  hasAccounts,
+  isSyncing,
+  onSyncAll,
+  uploadSpeed = 0,
+  onOpenSearch,
+  updateInfo = null,
+  onOpenUpdate = null
+}) {
   const { t } = useI18n();
   const keys = PAGE_KEYS[page] || PAGE_KEYS.dashboard;
 
@@ -60,6 +70,23 @@ export default function TopBar({ page, stats, hasAccounts, isSyncing, onSyncAll,
               {formatBytes(uploadSpeed)}/s
             </span>
           </span>
+        )}
+
+        {updateInfo?.updateAvailable && onOpenUpdate && (
+          <button
+            onClick={onOpenUpdate}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-extrabold transition-all border animate-pulse"
+            style={{
+              background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.22) 0%, rgba(59, 130, 246, 0.22) 100%)',
+              borderColor: 'rgba(6, 182, 212, 0.6)',
+              color: '#38bdf8',
+              boxShadow: '0 0 14px rgba(6, 182, 212, 0.25)'
+            }}
+            title="تحديث جديد متوفر على GitHub — اضغط للتحديث الفوري"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+            <span>تحديث متوفر (v{updateInfo.latestVersion})</span>
+          </button>
         )}
 
         <button

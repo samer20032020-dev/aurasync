@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.76', 'package.json version is 1.7.76', pkg.version);
+  assert(pkg.version === '1.7.77', 'package.json version is 1.7.77', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1527,8 +1527,8 @@ async function runTests() {
     'Settings page exposes exactCopyMode and archiveInstallerVersions UI switches'
   );
 
-  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.76) ---
-  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.76) ---');
+  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.77) ---
+  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.77) ---');
   browserGuardMod.setGuardMode('full');
   assert(browserGuardMod.getGuardMode() === 'full', 'BrowserGuard defaults strictly to Full Browser Lock mode');
   assert(browserGuardMod.setGuardMode('full').mode === 'full', 'BrowserGuard enforces full mode');
@@ -1584,7 +1584,47 @@ async function runTests() {
   const ghRelSrc = fs.readFileSync(path.join(rootDir, 'scripts', 'github-release.js'), 'utf8');
   assert(ghRelSrc.includes("rmdirSync(path.join(ROOT, 'scratch'))"), 'github-release.js implements automatic scratch directory pruning');
   assert(!fs.existsSync(path.join(rootDir, 'scratch')), 'scratch directory is cleanly pruned from workspace');
-  assert(pkg.version === '1.7.76', 'package.json version matches 1.7.76');
+
+  // --- 28. Compact Speed Slider & 1-Click GitHub Auto-Updater (v1.7.77) ---
+  console.log('\n--- 28. Compact Speed Slider & 1-Click GitHub Auto-Updater (v1.7.77) ---');
+  const updaterEngine = require('../electron/updater-engine');
+  assert(typeof updaterEngine.compareVersions === 'function', 'updaterEngine exports compareVersions');
+  assert(updaterEngine.compareVersions('1.7.76', '1.7.77') < 0, 'compareVersions correctly recognizes higher version');
+  assert(updaterEngine.compareVersions('1.7.77', '1.7.77') === 0, 'compareVersions matches identical version');
+  assert(updaterEngine.compareVersions('1.7.78', '1.7.77') > 0, 'compareVersions detects older version');
+  assert(typeof updaterEngine.checkForUpdates === 'function', 'updaterEngine exports checkForUpdates method');
+  assert(typeof updaterEngine.downloadAndInstall === 'function', 'updaterEngine exports downloadAndInstall method');
+
+  const preloadSrc28 = fs.readFileSync(path.join(rootDir, 'electron', 'preload.js'), 'utf8');
+  assert(
+    preloadSrc28.includes('checkForUpdates') &&
+    preloadSrc28.includes('startUpdateDownload') &&
+    preloadSrc28.includes('onUpdateProgress') &&
+    preloadSrc28.includes('onUpdateAvailable'),
+    'preload.js exposes comprehensive updater APIs to renderer'
+  );
+
+  const mainSrc28 = fs.readFileSync(path.join(rootDir, 'electron', 'main.js'), 'utf8');
+  assert(
+    mainSrc28.includes('updater:check') && mainSrc28.includes('updater:start-download'),
+    'main.js registers updater IPC handlers'
+  );
+
+  const settingsSrc28 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'SettingsPage.jsx'), 'utf8');
+  assert(
+    settingsSrc28.includes('CONCURRENCY_STEPS') &&
+    settingsSrc28.includes('CONCURRENCY_META') &&
+    settingsSrc28.includes('handleSliderChange'),
+    'SettingsPage incorporates the new compact speed slider'
+  );
+
+  const updateModalSrc = fs.readFileSync(path.join(rootDir, 'src', 'components', 'UpdateModal.jsx'), 'utf8');
+  assert(
+    updateModalSrc.includes('تحديث البرنامج تلقائياً الآن') &&
+    updateModalSrc.includes('transferredMB'),
+    'UpdateModal provides 1-click update trigger and live progress display'
+  );
+  assert(pkg.version === '1.7.77', 'package.json version matches 1.7.77');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);

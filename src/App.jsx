@@ -12,6 +12,7 @@ import QuickSearch from './components/QuickSearch';
 import CloudTitleBar from './components/CloudTitleBar';
 const CloudInstaller = lazy(() => import('./components/CloudInstaller'));
 const VaultPage = lazy(() => import('./components/VaultPage'));
+import UpdateModal from './components/UpdateModal';
 import { I18nProvider, translate } from './i18n';
 import { Info, CheckCircle2, AlertCircle, ShieldCheck, ArrowLeftRight, X, Trash2, Cloud, CloudCog, CloudOff, Loader2, Check, FolderCog, Flame } from 'lucide-react';
 
@@ -81,11 +82,15 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [folderDeleteModal, setFolderDeleteModal] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState('1.7.76');
+  const [appVersion, setAppVersion] = useState('1.7.77');
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   // Ctrl+K global quick search
   useEffect(() => {
@@ -124,6 +129,80 @@ export default function App() {
       return unsub;
     }
   }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    let unsubAvailable;
+    let unsubProgress;
+    if (window.electronAPI.onUpdateAvailable) {
+      unsubAvailable = window.electronAPI.onUpdateAvailable((info) => {
+        if (info) setUpdateInfo(info);
+      });
+    }
+    if (window.electronAPI.onUpdateProgress) {
+      unsubProgress = window.electronAPI.onUpdateProgress((prog) => {
+        if (prog) setUpdateProgress(prog);
+      });
+    }
+    // Check GitHub releases quietly 4 seconds after launch
+    const t = setTimeout(() => {
+      if (window.electronAPI?.checkForUpdates) {
+        window.electronAPI.checkForUpdates().then((res) => {
+          if (res && res.updateAvailable) {
+            setUpdateInfo(res);
+          }
+        }).catch(() => {});
+      }
+    }, 4000);
+    return () => {
+      clearTimeout(t);
+      if (unsubAvailable) unsubAvailable();
+      if (unsubProgress) unsubProgress();
+    };
+  }, []);
+
+  const handleCheckForUpdates = async () => {
+    if (!window.electronAPI?.checkForUpdates) {
+      showToast('خدمة التحديث غير متاحة خارج تطبيق سطح المكتب', 'warning');
+      return null;
+    }
+    try {
+      showToast('جارٍ فحص التحديثات من GitHub...', 'info');
+      const res = await window.electronAPI.checkForUpdates();
+      if (res && res.updateAvailable) {
+        setUpdateInfo(res);
+        setShowUpdateModal(true);
+        showToast(`يتوفر تحديث جديد: v${res.latestVersion}`, 'success');
+      } else {
+        setUpdateInfo(res);
+        showToast('أنت تستخدم أحدث إصدار بالفعل!', 'success');
+      }
+      return res;
+    } catch (err) {
+      showToast(`فشل فحص التحديثات: ${err.message}`, 'error');
+      return null;
+    }
+  };
+
+  const handleStartUpdate = async () => {
+    if (!updateInfo?.downloadUrl || !window.electronAPI?.startUpdateDownload) {
+      showToast('رابط ملف التحديث غير متوفر', 'error');
+      return;
+    }
+    try {
+      setIsDownloadingUpdate(true);
+      setShowUpdateModal(true);
+      showToast('بدأ تحميل التحديث وتثبيته تلقائياً...', 'info');
+      const res = await window.electronAPI.startUpdateDownload(updateInfo.downloadUrl);
+      if (!res || !res.success) {
+        setIsDownloadingUpdate(false);
+        showToast(`فشل تثبيت التحديث: ${res?.error || 'خطأ غير معروف'}`, 'error');
+      }
+    } catch (err) {
+      setIsDownloadingUpdate(false);
+      showToast(`خطأ أثناء التحديث: ${err.message}`, 'error');
+    }
+  };
 
   const mainScrollRef = useRef(null);
   const languageRef = useRef('ar');
@@ -780,6 +859,8 @@ export default function App() {
               stats={stats}
               isSyncing={isSyncing}
               version={appVersion}
+              updateInfo={updateInfo}
+              onOpenUpdate={() => setShowUpdateModal(true)}
             />
 
             <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative">
@@ -791,6 +872,8 @@ export default function App() {
                 onSyncAll={handleSyncAll}
                 uploadSpeed={uploadSpeed}
                 onOpenSearch={() => setSearchOpen(true)}
+                updateInfo={updateInfo}
+                onOpenUpdate={() => setShowUpdateModal(true)}
               />
 
           <main
@@ -903,6 +986,11 @@ export default function App() {
                 folders={folders}
                 showToast={showToast}
                 appVersion={appVersion}
+                updateInfo={updateInfo}
+                isDownloadingUpdate={isDownloadingUpdate}
+                updateProgress={updateProgress}
+                onCheckUpdates={handleCheckForUpdates}
+                onStartUpdate={handleStartUpdate}
               />
             )}
             </Suspense>
@@ -1559,6 +1647,17 @@ export default function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* GitHub 1-Click Auto-Update Modal */}
+        {showUpdateModal && updateInfo?.updateAvailable && (
+          <UpdateModal
+            updateInfo={updateInfo}
+            isDownloading={isDownloadingUpdate}
+            progress={updateProgress}
+            onStartUpdate={handleStartUpdate}
+            onClose={() => setShowUpdateModal(false)}
+          />
         )}
 
         </div>

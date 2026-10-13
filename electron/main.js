@@ -19,6 +19,7 @@ const folderDecorator = require('./folder-decorator');
 const vaultManager = require('./vault-manager');
 const contextMenu = require('./context-menu');
 const browserGuard = require('./browser-guard');
+const updaterEngine = require('./updater-engine');
 const { buildUninstallerScript } = require('./uninstaller-script');
 const { initTray } = require('./tray');
 
@@ -828,7 +829,7 @@ function setupIpcHandlers() {
     try {
       return app.getVersion();
     } catch (_) {
-      return '1.7.76';
+      return '1.7.77';
     }
   });
 
@@ -1900,6 +1901,19 @@ function setupIpcHandlers() {
   ipcMain.handle('browser-guard:launch-browser-extension', async (event, browserId) => {
     return browserGuard.launchBrowserWithExtension(browserId);
   });
+
+  // 1-Click GitHub Auto-Updater Handlers
+  ipcMain.handle('updater:check', async () => {
+    return await updaterEngine.checkForUpdates();
+  });
+
+  ipcMain.handle('updater:start-download', async (event, downloadUrl) => {
+    return await updaterEngine.downloadAndInstall(downloadUrl, (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:progress', progress);
+      }
+    });
+  });
 }
 
 function registerInstallerIpc() {
@@ -2569,6 +2583,29 @@ app.whenReady().then(async () => {
   } catch (e) {
     console.error('Browser guard start error:', e.message);
   }
+
+  // 8. Auto check for GitHub releases in background
+  setTimeout(async () => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed() && !isSetupMode) {
+        const res = await updaterEngine.checkForUpdates();
+        if (res && res.updateAvailable && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('updater:update-available', res);
+        }
+      }
+    } catch (_) {}
+  }, 8000);
+
+  setInterval(async () => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed() && !isSetupMode) {
+        const res = await updaterEngine.checkForUpdates();
+        if (res && res.updateAvailable && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('updater:update-available', res);
+        }
+      }
+    } catch (_) {}
+  }, 30 * 60 * 1000);
 });
 
 app.on('activate', () => {
