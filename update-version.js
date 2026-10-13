@@ -100,12 +100,9 @@ readmeContent = readmeContent.replace(/\*\*v\d+\.\d+\.\d+\*\*/, `**v${targetVers
 if (!readmeContent.includes(`## ✨ What's new in ${targetVersion}`)) {
   const newSection = `## ✨ What's new in ${targetVersion}
 
-* **Comprehensive Workspace Deep Clean & Storage Optimization (تنظيف شامل ومتقن للمشروع وحفظ مساحة القرص)** — Deep cleaning of workspace directories, removal of temporary scratch artifacts, and automated purging of transient build metadata to maintain an immaculate, high-performance repository.
-* **Release Pipeline Hardening & Auto-Purging (تدعيم نظام الرفع التلقائي ومسح الملفات المؤقتة)** — Enhanced release publishing scripts with automatic scratch notes cleanup and empty directory pruning, permanently protecting local SSD space by safely hosting all binaries on GitHub Releases.
-* **Instant Browser Lock on Blur & Active Session Flow (قفل فوري للمتصفح عند التبديل وعدم المقاطعة أثناء العمل)** — Browsing session remains uninterrupted during active use, while switching to any external application immediately locks protected browsers (0ms) requiring PIN upon return.
-* **High-Speed Mass-Folder Synchronization & Bulk Transactions (تسريع رفع وفحص آلاف الملفات بقواعد البيانات المجمعة)** — Full SQLite batch transactions via \`upsertFilesBatch\` and in-memory Google Drive folder caching to sustain peak upload throughput without quota limits.
-* **Silky Smooth Windowed File Explorer (تصفح فائق الخفة والسرعة زي جوجل درايف)** — Instantaneous, 60 FPS windowed browsing in \`FilesPage.jsx\` handling thousands of files without DOM latency.
-* **100% Test Suite & Architecture Verification** — Full regression suite validation across all 287 integration tests with zero errors.
+* **Full Project & Binaries Synchronization (تحديث ومزامنة شاملة لكافة مكونات المشروع والحزم التنفيذية)** — Comprehensive update across all project modules, frontend UI components, Electron backend engines, and production installers.
+* **1-Click GitHub Auto-Updater & Speed Slider Polishing (تحسين محرك التحديث التلقائي وشريط التوربو)** — Fine-tuned the in-app 1-click update flow from GitHub Releases and the compact interactive speed slider for maximum responsiveness.
+* **100% Test Suite & Release Automation** — Full regression suite validation across all 300+ integration tests with zero errors.
 
 `;
   readmeContent = readmeContent.replace(/(## ✨ What's new in .*?\n)/, `${newSection}$1`);
@@ -117,6 +114,7 @@ console.log('Updated README.md');
 const testPath = path.join(rootDir, 'scripts', 'test-suite.js');
 let testContent = fs.readFileSync(testPath, 'utf8');
 testContent = testContent.replace(/assert\(pkg\.version === '.*?', 'package\.json version is .*?',/g, `assert(pkg.version === '${targetVersion}', 'package.json version is ${targetVersion}',`);
+testContent = testContent.replace(/assert\(pkg\.version === '.*?', 'package\.json version matches .*?'\);/g, `assert(pkg.version === '${targetVersion}', 'package.json version matches ${targetVersion}');`);
 testContent = testContent.replace(/Full Browser Lock Engine.*?\(v.*?\)/g, `Full Browser Lock Engine & Clean Vault UI (v${targetVersion})`);
 fs.writeFileSync(testPath, testContent, 'utf8');
 console.log('Updated scripts/test-suite.js');

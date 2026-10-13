@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.77', 'package.json version is 1.7.77', pkg.version);
+  assert(pkg.version === '1.7.78', 'package.json version is 1.7.78', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1527,8 +1527,8 @@ async function runTests() {
     'Settings page exposes exactCopyMode and archiveInstallerVersions UI switches'
   );
 
-  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.77) ---
-  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.77) ---');
+  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.78) ---
+  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.78) ---');
   browserGuardMod.setGuardMode('full');
   assert(browserGuardMod.getGuardMode() === 'full', 'BrowserGuard defaults strictly to Full Browser Lock mode');
   assert(browserGuardMod.setGuardMode('full').mode === 'full', 'BrowserGuard enforces full mode');
@@ -1624,7 +1624,7 @@ async function runTests() {
     updateModalSrc.includes('transferredMB'),
     'UpdateModal provides 1-click update trigger and live progress display'
   );
-  assert(pkg.version === '1.7.77', 'package.json version matches 1.7.77');
+  assert(pkg.version === '1.7.78', 'package.json version matches 1.7.78');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);
