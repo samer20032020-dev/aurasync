@@ -199,6 +199,7 @@ async function publishVersion(version, isHistorical = false) {
 
   // Cleanup scratch notes
   try { if (fs.existsSync(notesFile)) fs.unlinkSync(notesFile); } catch (_) {}
+  try { fs.rmdirSync(path.join(ROOT, 'scratch')); } catch (_) {}
   return true;
 }
 

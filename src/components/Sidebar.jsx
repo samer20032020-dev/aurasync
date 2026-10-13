@@ -23,7 +23,7 @@ export default function Sidebar({
   providers = [],
   stats,
   isSyncing,
-  version = '1.7.75'
+  version = '1.7.76'
 }) {
   const { t, lang } = useI18n();
   const isRtl = lang === 'ar';

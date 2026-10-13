@@ -658,7 +658,8 @@ function upsertFilesBatch(items) {
     runSql('BEGIN TRANSACTION;');
     for (const item of items) {
       const norm = path.normalize(item.localPath);
-      if (item.isExisting) {
+      const isExisting = item.isExisting !== undefined ? item.isExisting : (getFileByPath(norm) !== null);
+      if (isExisting) {
         runSql(`
           UPDATE files 
           SET 
