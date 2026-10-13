@@ -196,7 +196,7 @@ export default function SettingsPage({
   providers = [],
   folders = [],
   showToast,
-  appVersion = '1.7.74'
+  appVersion = '1.7.75'
 }) {
   const { t } = useI18n();
   const [excludeDraft, setExcludeDraft] = useState('');

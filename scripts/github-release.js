@@ -1,117 +1,56 @@
-﻿/**
- * AuraSync — GitHub Release Publisher
- * ====================================
- * Automatically creates a GitHub Release and uploads the built executables
- * after every `npm run dist`. Requires a GitHub Personal Access Token
- * stored in the environment variable GITHUB_TOKEN (or a local .env.release file).
+/**
+ * AuraSync — GitHub Release Publisher & Cloud Space Optimizer
+ * ============================================================
+ * Automatically creates GitHub Releases with release notes from README.md
+ * and uploads Setup & Portable executables to GitHub Releases.
+ * Cleans up local disk space by archiving binaries on GitHub.
  *
  * Usage:
- *   node scripts/github-release.js                  # publishes current version
- *   node scripts/github-release.js --dry-run        # validates without uploading
- *   node scripts/github-release.js --notes "..."    # custom release notes
+ *   node scripts/github-release.js             # publishes current version
+ *   node scripts/github-release.js --all       # publishes all historical versions in releases-archive/
+ *   node scripts/github-release.js 1.7.68      # publishes specific version
  */
 
 'use strict';
 
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
-const https = require('https');
+const { execFileSync, execSync } = require('child_process');
 
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
-const ROOT        = path.resolve(__dirname, '..');
-const PKG         = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-const VERSION     = PKG.version;
-const TAG         = `v${VERSION}`;
+const ROOT = path.resolve(__dirname, '..');
+const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const CURRENT_VERSION = PKG.version;
 const RELEASE_DIR = path.join(ROOT, 'release');
+const ARCHIVE_DIR = path.join(ROOT, 'releases-archive');
 
-// Load .env.release if it exists (key=value pairs)
-const envFile = path.join(ROOT, '.env.release');
-if (fs.existsSync(envFile)) {
-  fs.readFileSync(envFile, 'utf8').split(/\r?\n/).forEach((line) => {
-    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*"?([^"]*)"?\s*$/);
-    if (m) process.env[m[1]] = m[2];
-  });
+// 1. Locate GitHub CLI (gh.exe)
+function getGhPath() {
+  const customCandidates = [
+    'C:\\Users\\samer\\Desktop\\SDN Program\\tools\\gh\\gh.exe',
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'GitHub CLI', 'gh.exe'),
+    path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'GitHub CLI', 'gh.exe')
+  ];
+  for (const c of customCandidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return 'gh';
 }
 
-const TOKEN       = process.env.GITHUB_TOKEN || '';
-const REPO_OWNER  = process.env.GITHUB_OWNER || '';
-const REPO_NAME   = process.env.GITHUB_REPO  || '';
-const DRY_RUN     = process.argv.includes('--dry-run');
+const GH_BIN = getGhPath();
 
-// Parse --notes "..." from CLI
-let cliNotes = '';
-const notesIdx = process.argv.indexOf('--notes');
-if (notesIdx !== -1 && process.argv[notesIdx + 1]) {
-  cliNotes = process.argv[notesIdx + 1];
+// Check if GH is logged in
+function checkGhAuth() {
+  try {
+    const out = execFileSync(GH_BIN, ['auth', 'status'], { encoding: 'utf8', windowsHide: true });
+    return true;
+  } catch (err) {
+    // If exit code is 0 with stderr output or status
+    const combined = (err.stdout || '') + (err.stderr || '');
+    return combined.includes('Logged in to github.com');
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function fail(msg) {
-  console.error(`\n❌ ${msg}\n`);
-  process.exit(1);
-}
-
-function httpsRequest(options, body = null) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      const chunks = [];
-      res.on('data', (c) => chunks.push(c));
-      res.on('end', () => {
-        const raw = Buffer.concat(chunks).toString('utf8');
-        let json = null;
-        try { json = JSON.parse(raw); } catch (_) {}
-        resolve({ status: res.statusCode, headers: res.headers, body: json || raw });
-      });
-    });
-    req.on('error', reject);
-    if (body) req.write(body);
-    req.end();
-  });
-}
-
-function uploadAsset(uploadUrl, filePath, token) {
-  const fileName = path.basename(filePath);
-  const fileSize = fs.statSync(filePath).size;
-  const fileData = fs.readFileSync(filePath);
-
-  // Strip template from upload_url:  ...{?name,label}  ->  ...
-  const baseUrl = uploadUrl.replace(/\{[^}]+\}/, '');
-  const urlObj  = new URL(`${baseUrl}?name=${encodeURIComponent(fileName)}`);
-
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: urlObj.hostname,
-      path:     urlObj.pathname + urlObj.search,
-      method:   'POST',
-      headers: {
-        Authorization:   `Bearer ${token}`,
-        'Content-Type':  'application/octet-stream',
-        'Content-Length': fileSize,
-        'User-Agent':    'AuraSync-Release-Script/1.0',
-        Accept:          'application/vnd.github+json'
-      }
-    }, (res) => {
-      const chunks = [];
-      res.on('data', (c) => chunks.push(c));
-      res.on('end', () => {
-        let json = null;
-        try { json = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (_) {}
-        resolve({ status: res.statusCode, body: json });
-      });
-    });
-    req.on('error', reject);
-    req.write(fileData);
-    req.end();
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Extract "What's new" section from README.md for this version
-// ---------------------------------------------------------------------------
+// 2. Extract Release Notes from README.md
 function extractReleaseNotes(version) {
   try {
     const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
@@ -122,120 +61,211 @@ function extractReleaseNotes(version) {
     const m = readme.match(rx);
     if (m && m[1]) return m[1].trim();
   } catch (_) {}
-  return null;
+  return `### AuraSync v${version}\n\n* تحديثات أمنية وتحسينات للأداء واستقرار المزامنة والسحابة.\n* Automatic multi-cloud desktop backup with zero-deletion policy.`;
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-async function main() {
-  console.log(`\n🚀 AuraSync GitHub Release Publisher`);
-  console.log(`   Version : ${VERSION}`);
-  console.log(`   Tag     : ${TAG}`);
-  console.log(`   Dry-run : ${DRY_RUN}\n`);
+// 3. Publish a specific release version
+async function publishVersion(version, isHistorical = false) {
+  const tag = `v${version}`;
+  console.log(`\n========================================`);
+  console.log(`📦 Processing Release: ${tag}`);
+  console.log(`========================================`);
 
-  // ── Validate prerequisites ──────────────────────────────────────────────
-  if (!TOKEN)      fail('GITHUB_TOKEN is not set.\n   Add it to .env.release or set it as an environment variable.');
-  if (!REPO_OWNER) fail('GITHUB_OWNER is not set (e.g. your GitHub username).');
-  if (!REPO_NAME)  fail('GITHUB_REPO is not set (e.g. aurasync).');
+  const notes = extractReleaseNotes(version);
+  const notesFile = path.join(ROOT, `scratch`, `release_notes_${version}.md`);
+  try {
+    fs.mkdirSync(path.join(ROOT, 'scratch'), { recursive: true });
+    fs.writeFileSync(notesFile, notes, 'utf8');
+  } catch (_) {}
 
-  // ── Find executables ─────────────────────────────────────────────────────
-  const assets = [];
-  const candidates = [
-    { file: path.join(RELEASE_DIR, 'AuraSync-Setup.exe'),    label: `AuraSync-Setup-${TAG}.exe` },
-    { file: path.join(RELEASE_DIR, 'AuraSync-Portable.exe'), label: `AuraSync-Portable-${TAG}.exe` }
+  // Find binaries for this version
+  const assetsToUpload = [];
+  const candidateFiles = [
+    // release folder files
+    path.join(RELEASE_DIR, `AuraSync-Setup-v${version}.exe`),
+    path.join(RELEASE_DIR, `AuraSync-Portable-v${version}.exe`),
+    // releases-archive files
+    path.join(ARCHIVE_DIR, `AuraSync-Setup-v${version}.exe`),
+    path.join(ARCHIVE_DIR, `AuraSync-Portable-v${version}.exe`),
+    // root files
+    path.join(ROOT, `AuraSync-Setup-v${version}.exe`),
+    path.join(ROOT, `AuraSync-Portable-v${version}.exe`)
   ];
-  for (const c of candidates) {
-    if (fs.existsSync(c.file)) {
-      const sizeMB = (fs.statSync(c.file).size / 1024 / 1024).toFixed(1);
-      console.log(`  ✔ Found ${path.basename(c.file)} (${sizeMB} MB) → will upload as ${c.label}`);
-      assets.push(c);
-    } else {
-      console.warn(`  ⚠ Not found: ${c.file} (skipped)`);
-    }
-  }
-  if (assets.length === 0) fail('No executables found in release/. Run `npm run dist` first.');
 
-  if (DRY_RUN) {
-    console.log('\n✅ Dry-run complete — no files were uploaded.');
-    return;
+  // If this is current version, also check unversioned files in release/
+  if (version === CURRENT_VERSION) {
+    candidateFiles.unshift(
+      path.join(RELEASE_DIR, 'AuraSync-Setup.exe'),
+      path.join(RELEASE_DIR, 'AuraSync-Portable.exe'),
+      path.join(ROOT, 'AuraSync-Setup.exe'),
+      path.join(ROOT, 'AuraSync-Portable.exe')
+    );
   }
 
-  // ── Build release notes ──────────────────────────────────────────────────
-  const notes = cliNotes || extractReleaseNotes(VERSION) || `AuraSync ${TAG} — automated release.`;
+  const seenNames = new Set();
+  for (const f of candidateFiles) {
+    if (fs.existsSync(f)) {
+      const stat = fs.statSync(f);
+      if (stat.size > 50 * 1024 * 1024) { // Only valid electron bundles (> 50MB)
+        let uploadName = path.basename(f);
+        if (uploadName === 'AuraSync-Setup.exe') uploadName = `AuraSync-Setup-v${version}.exe`;
+        if (uploadName === 'AuraSync-Portable.exe') uploadName = `AuraSync-Portable-v${version}.exe`;
 
-  // ── Create the GitHub Release ────────────────────────────────────────────
-  console.log(`\n📝 Creating GitHub Release ${TAG}...`);
-  const createRes = await httpsRequest({
-    hostname: 'api.github.com',
-    path: `/repos/${REPO_OWNER}/${REPO_NAME}/releases`,
-    method: 'POST',
-    headers: {
-      Authorization:  `Bearer ${TOKEN}`,
-      'Content-Type': 'application/json',
-      'User-Agent':   'AuraSync-Release-Script/1.0',
-      Accept:         'application/vnd.github+json'
-    }
-  }, JSON.stringify({
-    tag_name:         TAG,
-    target_commitish: 'main',
-    name:             `AuraSync ${TAG}`,
-    body:             notes,
-    draft:            false,
-    prerelease:       false
-  }));
-
-  if (createRes.status === 422 && createRes.body && createRes.body.errors) {
-    // Release already exists — fetch it
-    console.log(`  ℹ Release ${TAG} already exists, fetching upload URL...`);
-    const getRes = await httpsRequest({
-      hostname: 'api.github.com',
-      path: `/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${TAG}`,
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        'User-Agent':  'AuraSync-Release-Script/1.0',
-        Accept:        'application/vnd.github+json'
+        if (!seenNames.has(uploadName)) {
+          seenNames.add(uploadName);
+          // If the file is not named uploadName, copy it to a temp path
+          let actualUploadPath = f;
+          if (path.basename(f) !== uploadName) {
+            const staged = path.join(RELEASE_DIR, uploadName);
+            try {
+              fs.copyFileSync(f, staged);
+              actualUploadPath = staged;
+            } catch (_) {}
+          }
+          assetsToUpload.push({ path: actualUploadPath, name: uploadName, originalPath: f, sizeMB: (stat.size / 1024 / 1024).toFixed(1) });
+        }
       }
-    });
-    if (getRes.status !== 200) fail(`Could not fetch existing release: ${JSON.stringify(getRes.body)}`);
-    createRes.body = getRes.body;
-  } else if (createRes.status !== 201) {
-    fail(`Failed to create release (HTTP ${createRes.status}): ${JSON.stringify(createRes.body)}`);
+    }
   }
 
-  const uploadUrl = createRes.body.upload_url;
-  const releaseUrl = createRes.body.html_url;
-  console.log(`  ✔ Release created: ${releaseUrl}`);
+  if (assetsToUpload.length === 0) {
+    console.warn(`⚠️ No executable assets found for ${tag}. Skipping binary upload.`);
+    return false;
+  }
 
-  // ── Upload assets ────────────────────────────────────────────────────────
-  for (const asset of assets) {
-    // Temporarily rename file to versioned name for the upload
-    const tmpPath = path.join(path.dirname(asset.file), asset.label);
-    let useTmp = false;
-    if (!fs.existsSync(tmpPath)) {
-      fs.copyFileSync(asset.file, tmpPath);
-      useTmp = true;
+  console.log(`Found ${assetsToUpload.length} executable asset(s) for ${tag}:`);
+  assetsToUpload.forEach((a) => console.log(`  - ${a.name} (${a.sizeMB} MB)`));
+
+  // Check if release already exists on GitHub
+  let releaseExists = false;
+  try {
+    execFileSync(GH_BIN, ['release', 'view', tag], { encoding: 'utf8', windowsHide: true });
+    releaseExists = true;
+    console.log(`Release ${tag} already exists on GitHub. Uploading/updating assets...`);
+  } catch (_) {
+    releaseExists = false;
+  }
+
+  if (!releaseExists) {
+    console.log(`Creating new GitHub Release ${tag}...`);
+    const args = [
+      'release',
+      'create',
+      tag,
+      '--title', `AuraSync ${tag}`,
+      '--notes-file', notesFile
+    ];
+    for (const a of assetsToUpload) {
+      args.push(a.path);
     }
     try {
-      console.log(`\n📤 Uploading ${asset.label}...`);
-      const res = await uploadAsset(uploadUrl, tmpPath, TOKEN);
-      if (res.status === 201) {
-        console.log(`  ✔ Uploaded: ${res.body.browser_download_url}`);
-      } else {
-        console.warn(`  ⚠ Upload returned HTTP ${res.status}: ${JSON.stringify(res.body)}`);
-      }
-    } finally {
-      if (useTmp) {
-        try { fs.unlinkSync(tmpPath); } catch (_) {}
+      execFileSync(GH_BIN, args, { stdio: 'inherit', windowsHide: true });
+      console.log(`✅ Successfully published release ${tag} to GitHub!`);
+    } catch (err) {
+      console.error(`❌ Failed to create release ${tag}:`, err.message);
+      return false;
+    }
+  } else {
+    // Upload/clobber assets into existing release
+    for (const a of assetsToUpload) {
+      console.log(`Uploading asset ${a.name} to ${tag}...`);
+      try {
+        execFileSync(GH_BIN, ['release', 'upload', tag, a.path, '--clobber'], { stdio: 'inherit', windowsHide: true });
+        console.log(`✅ Uploaded ${a.name}`);
+      } catch (err) {
+        console.error(`⚠️ Failed to upload ${a.name}:`, err.message);
       }
     }
   }
 
-  console.log(`\n🎉 Release published: ${releaseUrl}\n`);
+  // 4. Local Disk Cleanup:
+  // If the assets have been successfully pushed to GitHub Releases,
+  // clean up bulky local archived versions to prevent filling up the user's hard drive!
+  if (isHistorical || version !== CURRENT_VERSION) {
+    console.log(`\n🧹 Cleaning local archived files for ${version} to save disk space...`);
+    for (const a of assetsToUpload) {
+      if (a.originalPath.includes('releases-archive') || a.originalPath.includes(ROOT)) {
+        try {
+          if (fs.existsSync(a.originalPath) && a.originalPath !== path.join(ROOT, 'AuraSync-Setup.exe') && a.originalPath !== path.join(ROOT, 'AuraSync-Portable.exe')) {
+            fs.unlinkSync(a.originalPath);
+            console.log(`  ✔ Removed local archived file: ${path.basename(a.originalPath)} (saved ${a.sizeMB} MB)`);
+          }
+        } catch (e) {
+          console.warn(`  Could not remove ${a.originalPath}:`, e.message);
+        }
+      }
+    }
+  }
+
+  // Cleanup scratch notes
+  try { if (fs.existsSync(notesFile)) fs.unlinkSync(notesFile); } catch (_) {}
+  return true;
+}
+
+// 5. Discover all historical versions in releases-archive/ and workspace
+function discoverVersions() {
+  const versions = new Set();
+  const checkDir = (dir) => {
+    if (!fs.existsSync(dir)) return;
+    try {
+      const files = fs.readdirSync(dir);
+      for (const f of files) {
+        const m = f.match(/v?(\d+\.\d+\.\d+)/);
+        if (m && /\.exe$/i.test(f)) {
+          versions.add(m[1]);
+        }
+      }
+    } catch (_) {}
+  };
+
+  checkDir(ARCHIVE_DIR);
+  checkDir(ROOT);
+  checkDir(RELEASE_DIR);
+  return Array.from(versions).sort((a, b) => {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      if (pa[i] !== pb[i]) return (pa[i] || 0) - (pb[i] || 0);
+    }
+    return 0;
+  });
+}
+
+async function main() {
+  console.log(`\n======================================================`);
+  console.log(`🚀 AuraSync — GitHub Release & Storage Optimization Engine`);
+  console.log(`======================================================\n`);
+
+  if (!checkGhAuth()) {
+    console.error('❌ GitHub CLI is not authenticated. Please log in with `gh auth login`.');
+    process.exit(1);
+  }
+
+  const arg = process.argv[2];
+
+  if (arg === '--all' || arg === '--archive') {
+    const allVersions = discoverVersions();
+    console.log(`Discovered ${allVersions.length} versions to publish: ${allVersions.join(', ')}`);
+    for (const v of allVersions) {
+      await publishVersion(v, true);
+    }
+    console.log('\n🎉 All versions processed and archived on GitHub Releases!');
+  } else if (arg && /^\d+\.\d+\.\d+$/.test(arg)) {
+    await publishVersion(arg, arg !== CURRENT_VERSION);
+  } else {
+    // Publish current version + any pending historical versions
+    const allVersions = discoverVersions();
+    for (const v of allVersions) {
+      if (v !== CURRENT_VERSION) {
+        await publishVersion(v, true);
+      }
+    }
+    // Publish current version
+    await publishVersion(CURRENT_VERSION, false);
+  }
 }
 
 main().catch((err) => {
-  console.error('Unexpected error:', err);
+  console.error('Fatal error in github-release:', err);
   process.exit(1);
 });

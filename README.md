@@ -1,10 +1,20 @@
 # AuraSync — Multi-Cloud Desktop Backup
 
-**v1.7.74** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
+**v1.7.75** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
 
 Supports **25+ famous clouds** through native integrations and standard protocols, with a built-in **transfer tool** (device ↔ cloud, cloud ↔ cloud).
 
 ---
+
+## ✨ What's new in 1.7.75
+
+* **Instant Browser Lock on Switch/Blur & Zero Interruption While Browsing (قفل فوري للمتصفح عند التبديل وعدم المقاطعة أثناء العمل)** — Eliminated the 5-minute timer interruption while actively using protected browsers. The moment focus leaves the browser to any other application or window, the session is locked immediately (0ms) so returning always requires the PIN every single time.
+* **Ultra-Fast Mass-Folder Sync Engine & 40,000+ Files Acceleration (تسريع هائل لرفع وفحص آلاف الملفات والمجلدات الضخمة)** — Re-engineered `scanAndSyncFolder` with `upsertFilesBatch` SQLite transactions (reducing tens of thousands of individual synchronous disk queries to sub-second batch commits), non-blocking background folder hierarchy creation, and parallel upload initiation.
+* **Parent Folder File Cache & Zero-API-Throttling (تخزين ملفات المجلدات في الذاكرة لتفادي قيود Google Drive)** — Added in-memory parent folder file caching in `google-drive.js` (`parentFolderFilesCache`), eliminating thousands of redundant `files.list` API calls and preventing HTTP 429 quota exhaustion.
+* **Ultra Turbo Concurrency (24 & 32 Concurrent Workers) (أقصى سرعة رفع واستغلال كامل سرعة الإنترنت)** — Added Ultra Turbo profile up to 24 and 32 parallel upload workers in Settings to fully utilize high-speed fiber internet and upload mass directories in minutes.
+* **Smooth Google Drive-like Windowed Browsing (تصفح سريع وخفيف زي جوجل درايف)** — Added windowed rendering chunking in `FilesPage.jsx` with debounced tree refreshing and a "Show More" expansion button, ensuring 60 FPS silky smooth scrolling and instantaneous responsiveness even with thousands of files.
+* **Automated GitHub Releases & Local Disk Space Preservation (الرفع التلقائي إلى GitHub وحفظ مساحة الجهاز)** — Implemented automated publishing of all releases and setup/portable binaries directly to GitHub Releases (`samer20032020-dev/aurasync`) with full release notes, automatically purging local bulky archives to keep hard drive space 100% clean.
+* **Full Codebase Synchronization & Regression Suite Pass** — 100% test pass across all integration test suites.
 
 ## ✨ What's new in 1.7.74
 

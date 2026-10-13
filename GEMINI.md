@@ -24,14 +24,16 @@ Update the version number across EVERY component and folder:
 - Run `npm run check` (all Electron & backend files must pass `node --check`).
 - Run `npm test` (all tests must pass 100%).
 
-### 4. Build Production Executables
+### 4. Build Production Executables & Auto-Publish to GitHub Releases
 - Run `npm run dist` to bundle Vite and package with electron-builder.
 - Ensure `AuraSync-Setup.exe` and `AuraSync-Portable.exe` in both `release/` and the workspace root are updated with the latest build.
-- Run `node scripts/clean-release.js` to ensure the release folder is pristine.
+- Run `node scripts/clean-release.js` which automatically executes `node scripts/github-release.js`.
+- Automatically publishes every new version to GitHub Releases (`samer20032020-dev/aurasync`) with full release notes ("What's new / Bug fixes") and uploads `AuraSync-Setup-vX.Y.Z.exe` and `AuraSync-Portable-vX.Y.Z.exe`.
+- Automatically purges older local installer archives from `releases-archive/` once safely hosted on GitHub Releases, ensuring the user's computer disk space is never filled up or wasted.
 
 ### 5. Strict Enforcement
 - NEVER end a turn or declare a modification complete without executing this full synchronization workflow.
-- Always report the new version number and executable file status in the final response.
+- Always report the new version number, executable file status, and GitHub release URL in the final response.
 
 ---
 

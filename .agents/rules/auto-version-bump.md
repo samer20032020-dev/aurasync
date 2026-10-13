@@ -21,4 +21,4 @@ Whenever ANY modification is made in this project:
    - `scripts/test-suite.js`
 3. Run `npm run check` and `npm test` (100% pass required).
 4. Run `npm run dist` to produce updated `AuraSync-Setup.exe` and `AuraSync-Portable.exe` in root and `release/`.
-5. Run `node scripts/clean-release.js` which automatically archives `AuraSync-Setup-vX.Y.Z.exe` and `AuraSync-Portable-vX.Y.Z.exe` permanently into `releases-archive/`.
+5. Run `node scripts/clean-release.js` which automatically invokes `node scripts/github-release.js`, publishing the new release and binaries with full release notes to GitHub Releases (`samer20032020-dev/aurasync`), and purging older local installer archives to permanently keep computer disk space 100% free.

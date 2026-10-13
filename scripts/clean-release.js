@@ -181,3 +181,15 @@ try {
 } catch {}
 
 console.log('Release directory cleaning complete.');
+
+// 5. Automatically publish build to GitHub Releases and optimize local disk space
+try {
+  console.log('\n🚀 Automatically syncing build with GitHub Releases...');
+  const { execFileSync } = require('child_process');
+  const ghScript = path.join(__dirname, 'github-release.js');
+  if (fs.existsSync(ghScript)) {
+    execFileSync(process.execPath, [ghScript], { stdio: 'inherit', windowsHide: true });
+  }
+} catch (ghErr) {
+  console.warn('GitHub release sync notice (non-fatal):', ghErr.message);
+}

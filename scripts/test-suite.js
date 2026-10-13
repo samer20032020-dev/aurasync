@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.74', 'package.json version is 1.7.74', pkg.version);
+  assert(pkg.version === '1.7.75', 'package.json version is 1.7.75', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1527,8 +1527,8 @@ async function runTests() {
     'Settings page exposes exactCopyMode and archiveInstallerVersions UI switches'
   );
 
-  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.74) ---
-  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.74) ---');
+  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.75) ---
+  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.75) ---');
   browserGuardMod.setGuardMode('full');
   assert(browserGuardMod.getGuardMode() === 'full', 'BrowserGuard defaults strictly to Full Browser Lock mode');
   assert(browserGuardMod.setGuardMode('full').mode === 'full', 'BrowserGuard enforces full mode');
@@ -1554,6 +1554,30 @@ async function runTests() {
     vaultUiSection25Src.includes('handleToggleBrowser'),
     'VaultPage provides clean dedicated Full Browser Lock interface'
   );
+
+  // --- 26. Instant Lock on Blur, Ultra-Fast Batch Scan, & GitHub Release Sync (v1.7.75) ---
+  console.log('\n--- 26. Instant Lock on Blur, Ultra-Fast Batch Scan, & GitHub Release Sync (v1.7.75) ---');
+  assert(typeof db.upsertFilesBatch === 'function', 'Database exposes upsertFilesBatch for bulk transactions');
+
+  db.upsertFilesBatch([
+    { localPath: path.join(testFolderPath, 'batch1.txt'), relativePath: 'batch1.txt', folderId: folder.id, lastModified: Date.now(), fileSize: 10, status: 'pending' },
+    { localPath: path.join(testFolderPath, 'batch2.txt'), relativePath: 'batch2.txt', folderId: folder.id, lastModified: Date.now(), fileSize: 20, status: 'pending' }
+  ]);
+  const b1 = db.getFileByPath(path.join(testFolderPath, 'batch1.txt'));
+  const b2 = db.getFileByPath(path.join(testFolderPath, 'batch2.txt'));
+  assert(b1 && b1.file_size === 10, 'upsertFilesBatch correctly inserts batch1');
+  assert(b2 && b2.file_size === 20, 'upsertFilesBatch correctly inserts batch2');
+
+  const syncEngSrc = fs.readFileSync(path.join(rootDir, 'electron', 'sync-engine.js'), 'utf8');
+  assert(syncEngSrc.includes('if (n > 32) n = 32;'), 'SyncEngine supports up to 32 parallel uploads');
+
+  const gdSection26Src = fs.readFileSync(path.join(rootDir, 'electron', 'google-drive.js'), 'utf8');
+  assert(gdSection26Src.includes('parentFolderFilesCache'), 'GoogleDrive implements parentFolderFilesCache to prevent 429 quota errors');
+
+  assert(fs.existsSync(path.join(rootDir, 'scripts', 'github-release.js')), 'scripts/github-release.js exists');
+
+  const cleanReleaseSrc = fs.readFileSync(path.join(rootDir, 'scripts', 'clean-release.js'), 'utf8');
+  assert(cleanReleaseSrc.includes('github-release.js'), 'clean-release.js triggers automated GitHub release sync');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);
