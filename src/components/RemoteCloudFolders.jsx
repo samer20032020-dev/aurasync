@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowDownToLine,
-  FolderSync
+  FolderSync,
+  RotateCcw
 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { formatBytes } from '../format';
@@ -33,6 +34,7 @@ export default function RemoteCloudFolders({
   onRefresh,
   onLinkFolder,
   onTrashFolder,
+  onOpenDisasterRecovery,
   showToast
 }) {
   const { t, lang } = useI18n();
@@ -185,6 +187,17 @@ export default function RemoteCloudFolders({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+          {onOpenDisasterRecovery && (
+            <button
+              onClick={onOpenDisasterRecovery}
+              className="btn btn-primary h-8 px-3 text-[11px] flex items-center gap-1.5 shadow-sm"
+              title={t('recovery.title')}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>{t('recovery.btnLaunch')}</span>
+            </button>
+          )}
+
           {remoteFolders.length > 0 && (
             <button
               onClick={handleLinkAll}

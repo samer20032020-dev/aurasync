@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.78', 'package.json version is 1.7.78', pkg.version);
+  assert(pkg.version === '1.7.79', 'package.json version is 1.7.79', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1527,8 +1527,8 @@ async function runTests() {
     'Settings page exposes exactCopyMode and archiveInstallerVersions UI switches'
   );
 
-  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.78) ---
-  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.78) ---');
+  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.79) ---
+  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.79) ---');
   browserGuardMod.setGuardMode('full');
   assert(browserGuardMod.getGuardMode() === 'full', 'BrowserGuard defaults strictly to Full Browser Lock mode');
   assert(browserGuardMod.setGuardMode('full').mode === 'full', 'BrowserGuard enforces full mode');
@@ -1624,7 +1624,56 @@ async function runTests() {
     updateModalSrc.includes('transferredMB'),
     'UpdateModal provides 1-click update trigger and live progress display'
   );
-  assert(pkg.version === '1.7.78', 'package.json version matches 1.7.78');
+
+  // --- 29. 1-Click Disaster Recovery & PC Migration (v1.7.79) ---
+  console.log('\n--- 29. 1-Click Disaster Recovery & PC Migration (v1.7.79) ---');
+  const disasterRecovery = require('../electron/disaster-recovery');
+  assert(typeof disasterRecovery.scanBackups === 'function', 'disasterRecovery exports scanBackups');
+  assert(typeof disasterRecovery.startRecovery === 'function', 'disasterRecovery exports startRecovery');
+  assert(typeof disasterRecovery.cancelRecovery === 'function', 'disasterRecovery exports cancelRecovery');
+  assert(typeof disasterRecovery.getSmartLocalPath === 'function', 'disasterRecovery exports getSmartLocalPath');
+  assert(typeof disasterRecovery.saveMachineManifest === 'function', 'disasterRecovery exports saveMachineManifest');
+
+  const smartDesktop = disasterRecovery.getSmartLocalPath('Desktop');
+  const smartDocs = disasterRecovery.getSmartLocalPath('Documents');
+  assert(smartDesktop && smartDesktop.toLowerCase().includes('desktop'), 'getSmartLocalPath correctly maps Desktop folder');
+  assert(smartDocs && smartDocs.toLowerCase().includes('documents'), 'getSmartLocalPath correctly maps Documents folder');
+
+  const preloadSrc29 = fs.readFileSync(path.join(rootDir, 'electron', 'preload.js'), 'utf8');
+  assert(
+    preloadSrc29.includes('disasterRecoveryScan') &&
+    preloadSrc29.includes('disasterRecoveryStart') &&
+    preloadSrc29.includes('disasterRecoveryCancel') &&
+    preloadSrc29.includes('disasterRecoverySelectPath') &&
+    preloadSrc29.includes('onDisasterRecoveryProgress'),
+    'preload.js exposes comprehensive disaster recovery APIs to renderer'
+  );
+
+  const mainSrc29 = fs.readFileSync(path.join(rootDir, 'electron', 'main.js'), 'utf8');
+  assert(
+    mainSrc29.includes('disaster-recovery:scan') &&
+    mainSrc29.includes('disaster-recovery:start') &&
+    mainSrc29.includes('disaster-recovery:cancel') &&
+    mainSrc29.includes('disaster-recovery:select-path'),
+    'main.js registers disaster recovery IPC handlers'
+  );
+
+  const disasterModalSrc = fs.readFileSync(path.join(rootDir, 'src', 'components', 'DisasterRecoveryModal.jsx'), 'utf8');
+  assert(
+    disasterModalSrc.includes('recovery.title') &&
+    disasterModalSrc.includes('recovery.modeSmart') &&
+    disasterModalSrc.includes('recovery.modeConsolidated') &&
+    disasterModalSrc.includes('recovery.modeCustom'),
+    'DisasterRecoveryModal provides 1-click PC migration with smart native, consolidated, and custom modes'
+  );
+
+  const dashSrc29 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'DashboardPage.jsx'), 'utf8');
+  assert(
+    dashSrc29.includes('onOpenDisasterRecovery') && dashSrc29.includes('recovery.heroCardTitle'),
+    'DashboardPage integrates Disaster Recovery Hero Card and triggers recovery modal'
+  );
+
+  assert(pkg.version === '1.7.79', 'package.json version matches 1.7.79');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);

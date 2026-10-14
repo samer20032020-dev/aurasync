@@ -32,7 +32,8 @@ import {
   Leaf,
   ExternalLink,
   CheckCircle2,
-  MousePointerClick
+  MousePointerClick,
+  RotateCcw
 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import BrandLogo from './BrandLogo';
@@ -216,12 +217,13 @@ export default function SettingsPage({
   providers = [],
   folders = [],
   showToast,
-  appVersion = '1.7.78',
+  appVersion = '1.7.79',
   updateInfo = null,
   isDownloadingUpdate = false,
   updateProgress = null,
   onCheckUpdates = null,
-  onStartUpdate = null
+  onStartUpdate = null,
+  onOpenDisasterRecovery = null
 }) {
   const { t } = useI18n();
   const [excludeDraft, setExcludeDraft] = useState('');
@@ -1093,6 +1095,37 @@ export default function SettingsPage({
         {/* ============================================================ */}
         {tab === 'advanced' && (
           <div className="flex flex-col gap-5">
+            <Section icon={RotateCcw} title={t('recovery.title')} tone="accent" desc={t('recovery.subtitle')}>
+              <div
+                className="p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%)',
+                  borderColor: 'rgba(6, 182, 212, 0.35)'
+                }}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-extrabold text-white block">
+                      {t('recovery.heroCardTitle')}
+                    </span>
+                    <span className="badge badge-accent text-[9.5px]">1-Click</span>
+                  </div>
+                  <span className="text-[11px] dim block mt-0.5 leading-relaxed">
+                    {t('recovery.heroCardDesc')}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenDisasterRecovery}
+                  disabled={!hasConnectedCloud}
+                  className="btn btn-primary font-bold text-[11.5px] shrink-0 flex items-center gap-2 shadow-md shadow-cyan-500/20"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>{t('recovery.btnLaunch')}</span>
+                </button>
+              </div>
+            </Section>
+
             <Section icon={Power} title={t('settings.dangerZone')} tone="danger" desc="عمليات الصيانة المتقدمة ومسح السحابة">
               <div className="flex flex-col gap-3">
                 {/* Wipe Cloud */}

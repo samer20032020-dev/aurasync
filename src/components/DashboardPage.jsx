@@ -7,7 +7,8 @@ import {
   RefreshCw,
   Cloud,
   Plus,
-  ArrowUpRight
+  ArrowUpRight,
+  RotateCcw
 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { formatBytes } from '../format';
@@ -40,6 +41,7 @@ export default function DashboardPage({
   onRefreshRemote,
   onLinkRemoteFolder,
   onTrashRemoteFolder,
+  onOpenDisasterRecovery,
   showToast
 }) {
   const { t } = useI18n();
@@ -152,6 +154,53 @@ export default function DashboardPage({
         </div>
       </section>
 
+      {/* 1-Click Disaster Recovery & PC Migration Hero Banner */}
+      {hasAccounts && onOpenDisasterRecovery && (
+        <section
+          className="p-4.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all relative overflow-hidden group shadow-lg"
+          style={{
+            background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.12) 0%, rgba(59, 130, 246, 0.10) 100%)',
+            borderColor: 'rgba(6, 182, 212, 0.35)',
+            boxShadow: '0 8px 24px rgba(6, 182, 212, 0.08)'
+          }}
+        >
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border"
+              style={{
+                background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(59, 130, 246, 0.2) 100%)',
+                borderColor: 'rgba(6, 182, 212, 0.5)',
+                color: '#38bdf8'
+              }}
+            >
+              <RotateCcw className="w-5 h-5 group-hover:rotate-[-45deg] transition-transform duration-500" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-[13.5px] font-extrabold text-slate-100 tracking-tight">
+                  {t('recovery.heroCardTitle')}
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[9.5px] font-extrabold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  New • 1-Click
+                </span>
+              </div>
+              <p className="text-[11px] dim mt-0.5 leading-relaxed">
+                {t('recovery.heroCardDesc')}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenDisasterRecovery}
+            className="btn btn-primary h-9 px-4 text-[11.5px] font-extrabold shrink-0 shadow-md shadow-cyan-500/20 flex items-center gap-2 group-hover:scale-[1.02] transition-transform"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>{t('recovery.heroCardBtn')}</span>
+          </button>
+        </section>
+      )}
+
       {/* Folders */}
       <section className="surface overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-5 py-3.5">
@@ -232,6 +281,7 @@ export default function DashboardPage({
           onRefresh={onRefreshRemote}
           onLinkFolder={onLinkRemoteFolder}
           onTrashFolder={onTrashRemoteFolder}
+          onOpenDisasterRecovery={onOpenDisasterRecovery}
           showToast={showToast}
         />
       )}

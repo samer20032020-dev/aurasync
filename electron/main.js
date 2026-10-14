@@ -20,6 +20,7 @@ const vaultManager = require('./vault-manager');
 const contextMenu = require('./context-menu');
 const browserGuard = require('./browser-guard');
 const updaterEngine = require('./updater-engine');
+const disasterRecovery = require('./disaster-recovery');
 const { buildUninstallerScript } = require('./uninstaller-script');
 const { initTray } = require('./tray');
 
@@ -829,7 +830,7 @@ function setupIpcHandlers() {
     try {
       return app.getVersion();
     } catch (_) {
-      return '1.7.78';
+      return '1.7.79';
     }
   });
 
@@ -1913,6 +1914,39 @@ function setupIpcHandlers() {
         mainWindow.webContents.send('updater:progress', progress);
       }
     });
+  });
+
+  // 1-Click Disaster Recovery & PC Migration Handlers
+  disasterRecovery.setSyncEngine(syncEngine);
+
+  ipcMain.handle('disaster-recovery:scan', async (event, providerId = null) => {
+    return await disasterRecovery.scanBackups(providerId);
+  });
+
+  ipcMain.handle('disaster-recovery:start', async (event, plan, options = {}) => {
+    return await disasterRecovery.startRecovery(plan, options, (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('disaster-recovery:progress', progress);
+      }
+    });
+  });
+
+  ipcMain.handle('disaster-recovery:cancel', async () => {
+    disasterRecovery.cancelRecovery();
+    return { success: true };
+  });
+
+  ipcMain.handle('disaster-recovery:select-path', async (event, folderName, currentPath) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: `Select Local Location for "${folderName || 'Restored Folder'}"`,
+      defaultPath: currentPath || undefined,
+      properties: ['openDirectory', 'createDirectory']
+    });
+    if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0];
   });
 }
 

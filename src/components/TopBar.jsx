@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, ArrowUp, Search, Sparkles } from 'lucide-react';
+import { RefreshCw, ArrowUp, Search, Sparkles, RotateCcw } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { formatBytes } from '../format';
 
@@ -28,7 +28,8 @@ export default function TopBar({
   uploadSpeed = 0,
   onOpenSearch,
   updateInfo = null,
-  onOpenUpdate = null
+  onOpenUpdate = null,
+  onOpenDisasterRecovery = null
 }) {
   const { t } = useI18n();
   const keys = PAGE_KEYS[page] || PAGE_KEYS.dashboard;
@@ -86,6 +87,21 @@ export default function TopBar({
           >
             <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
             <span>تحديث متوفر (v{updateInfo.latestVersion})</span>
+          </button>
+        )}
+
+        {hasAccounts && onOpenDisasterRecovery && (
+          <button
+            onClick={onOpenDisasterRecovery}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10.5px] font-bold border transition-all hover:border-cyan-400 hover:text-cyan-300 bg-surface-flat"
+            style={{
+              borderColor: 'var(--border-color)',
+              color: 'var(--text-muted)'
+            }}
+            title={t('recovery.title')}
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden xl:inline">{t('recovery.btnLaunch')}</span>
           </button>
         )}
 

@@ -1,10 +1,17 @@
 # AuraSync — Multi-Cloud Desktop Backup
 
-**v1.7.78** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
+**v1.7.79** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
 
 Supports **25+ famous clouds** through native integrations and standard protocols, with a built-in **transfer tool** (device ↔ cloud, cloud ↔ cloud).
 
 ---
+
+## ✨ What's new in 1.7.79
+
+* **1-Click Disaster Recovery & PC Migration Wizard (معالج استعادة الجهاز بعد الفورمات أو الهجرة لكمبيوتر جديد)** — Instant zero-touch recovery wizard allowing users to restore their entire computer file hierarchy (Desktop, Documents, Pictures, Videos, and custom project folders) from any cloud account back to their native Windows directories with one click.
+* **Smart Native Path Mapping & Machine Manifest Detection (التعرف الذكي على مسارات النظام وبصمة الجهاز السابق)** — Automatically recognizes legacy computer fingerprints (`aurasync-machine-manifest.json`) and maps standard Windows folders (`Desktop` -> `%USERPROFILE%\Desktop`, `Documents` -> `%USERPROFILE%\Documents`, etc.) with flexible consolidated and custom mapping modes.
+* **High-Throughput Parallel Restore Engine (محرك تنزيل متزامن فائق السرعة مع تخطي الملفات المتطابقة)** — Integrated concurrent download worker pool with real-time speed calculation, live file/folder progress meters, and seamless post-restore auto-watching and folder decoration.
+* **100% Test Suite & Release Automation** — Comprehensive verification across 310+ full-system integration tests with zero errors.
 
 ## ✨ What's new in 1.7.78
 

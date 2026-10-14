@@ -13,6 +13,7 @@ import CloudTitleBar from './components/CloudTitleBar';
 const CloudInstaller = lazy(() => import('./components/CloudInstaller'));
 const VaultPage = lazy(() => import('./components/VaultPage'));
 import UpdateModal from './components/UpdateModal';
+import DisasterRecoveryModal from './components/DisasterRecoveryModal';
 import { I18nProvider, translate } from './i18n';
 import { Info, CheckCircle2, AlertCircle, ShieldCheck, ArrowLeftRight, X, Trash2, Cloud, CloudCog, CloudOff, Loader2, Check, FolderCog, Flame } from 'lucide-react';
 
@@ -82,7 +83,7 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [folderDeleteModal, setFolderDeleteModal] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState('1.7.78');
+  const [appVersion, setAppVersion] = useState('1.7.79');
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState([]);
@@ -91,6 +92,7 @@ export default function App() {
   const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
   const [updateProgress, setUpdateProgress] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showDisasterRecoveryModal, setShowDisasterRecoveryModal] = useState(false);
 
   // Ctrl+K global quick search
   useEffect(() => {
@@ -874,6 +876,7 @@ export default function App() {
                 onOpenSearch={() => setSearchOpen(true)}
                 updateInfo={updateInfo}
                 onOpenUpdate={() => setShowUpdateModal(true)}
+                onOpenDisasterRecovery={() => setShowDisasterRecoveryModal(true)}
               />
 
           <main
@@ -898,6 +901,7 @@ export default function App() {
                 onRefreshRemote={() => fetchRemoteFolders(false)}
                 onLinkRemoteFolder={refreshAllData}
                 onTrashRemoteFolder={refreshAllData}
+                onOpenDisasterRecovery={() => setShowDisasterRecoveryModal(true)}
                 showToast={showToast}
               />
             )}
@@ -991,6 +995,7 @@ export default function App() {
                 updateProgress={updateProgress}
                 onCheckUpdates={handleCheckForUpdates}
                 onStartUpdate={handleStartUpdate}
+                onOpenDisasterRecovery={() => setShowDisasterRecoveryModal(true)}
               />
             )}
             </Suspense>
@@ -1659,6 +1664,15 @@ export default function App() {
             onClose={() => setShowUpdateModal(false)}
           />
         )}
+
+        {/* 1-Click Disaster Recovery & PC Migration Modal */}
+        <DisasterRecoveryModal
+          isOpen={showDisasterRecoveryModal}
+          onClose={() => setShowDisasterRecoveryModal(false)}
+          providers={providers}
+          onRestoredSuccess={refreshAllData}
+          showToast={showToast}
+        />
 
         </div>
       </div>

@@ -262,5 +262,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (event, data) => callback(data);
     ipcRenderer.on('updater:update-available', subscription);
     return () => ipcRenderer.removeListener('updater:update-available', subscription);
+  },
+
+  // 1-Click Disaster Recovery & PC Migration APIs
+  disasterRecoveryScan: (providerId) => ipcRenderer.invoke('disaster-recovery:scan', providerId),
+  disasterRecoveryStart: (plan, options) => ipcRenderer.invoke('disaster-recovery:start', plan, options),
+  disasterRecoveryCancel: () => ipcRenderer.invoke('disaster-recovery:cancel'),
+  disasterRecoverySelectPath: (folderName, currentPath) => ipcRenderer.invoke('disaster-recovery:select-path', folderName, currentPath),
+  onDisasterRecoveryProgress: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('disaster-recovery:progress', subscription);
+    return () => ipcRenderer.removeListener('disaster-recovery:progress', subscription);
   }
 });
