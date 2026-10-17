@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.80', 'package.json version is 1.7.80', pkg.version);
+  assert(pkg.version === '1.7.81', 'package.json version is 1.7.81', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1527,8 +1527,8 @@ async function runTests() {
     'Settings page exposes exactCopyMode and archiveInstallerVersions UI switches'
   );
 
-  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.80) ---
-  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.80) ---');
+  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.81) ---
+  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.81) ---');
   browserGuardMod.setGuardMode('full');
   assert(browserGuardMod.getGuardMode() === 'full', 'BrowserGuard defaults strictly to Full Browser Lock mode');
   assert(browserGuardMod.setGuardMode('full').mode === 'full', 'BrowserGuard enforces full mode');
@@ -1667,6 +1667,18 @@ async function runTests() {
     'DisasterRecoveryModal provides 1-click PC migration with smart native, consolidated, and custom modes'
   );
 
+  const settingsDisasterSrc = fs.readFileSync(path.join(rootDir, 'src', 'components', 'SettingsPage.jsx'), 'utf8');
+  assert(
+    settingsDisasterSrc.includes('onOpenDisasterRecovery') && settingsDisasterSrc.includes("title={t('recovery.title')}"),
+    'SettingsPage houses Disaster Recovery exclusively in Settings'
+  );
+
+  const dashSrcClean = fs.readFileSync(path.join(rootDir, 'src', 'components', 'DashboardPage.jsx'), 'utf8');
+  assert(!dashSrcClean.includes('onOpenDisasterRecovery'), 'DashboardPage is completely free of disaster recovery triggers');
+
+  const topBarClean = fs.readFileSync(path.join(rootDir, 'src', 'components', 'TopBar.jsx'), 'utf8');
+  assert(!topBarClean.includes('onOpenDisasterRecovery'), 'TopBar is completely free of disaster recovery triggers');
+
   // Test: GitHub Auto-Updater & In-Settings 1-Click Update System
   console.log('\n--- 30. In-App 1-Click GitHub Auto-Updater System ---');
   assert(typeof updaterEngine.checkForUpdates === 'function', 'updaterEngine.checkForUpdates is a function');
@@ -1696,7 +1708,7 @@ async function runTests() {
     'CloudInstaller supports zero-click automatic update mode'
   );
 
-  assert(pkg.version === '1.7.80', 'package.json version matches 1.7.80');
+  assert(pkg.version === '1.7.81', 'package.json version matches 1.7.81');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);

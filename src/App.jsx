@@ -83,7 +83,7 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [folderDeleteModal, setFolderDeleteModal] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState('1.7.80');
+  const [appVersion, setAppVersion] = useState('1.7.81');
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState([]);
@@ -876,7 +876,6 @@ export default function App() {
                 onOpenSearch={() => setSearchOpen(true)}
                 updateInfo={updateInfo}
                 onOpenUpdate={() => setShowUpdateModal(true)}
-                onOpenDisasterRecovery={() => setShowDisasterRecoveryModal(true)}
               />
 
           <main
@@ -901,7 +900,6 @@ export default function App() {
                 onRefreshRemote={() => fetchRemoteFolders(false)}
                 onLinkRemoteFolder={refreshAllData}
                 onTrashRemoteFolder={refreshAllData}
-                onOpenDisasterRecovery={() => setShowDisasterRecoveryModal(true)}
                 showToast={showToast}
               />
             )}

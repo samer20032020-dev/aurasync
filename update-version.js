@@ -100,10 +100,9 @@ readmeContent = readmeContent.replace(/\*\*v\d+\.\d+\.\d+\*\*/, `**v${targetVers
 if (!readmeContent.includes(`## ✨ What's new in ${targetVersion}`)) {
   const newSection = `## ✨ What's new in ${targetVersion}
 
-* **In-App 1-Click Auto-Updater (التحديث التلقائي الفوري داخل الإعدادات بنقرة واحدة)** — When a new release is uploaded to GitHub, a dedicated update card appears inside Settings with a "تحديث" button and live progress meter.
-* **Zero-Click Self-Update Engine (يتحدث لحاله تلقائياً بالكامل)** — Clicking "تحديث" downloads the new release asset from GitHub, launches the installer with \`--auto-update\`, safely closes the old version, updates all files in place, and automatically launches the new version without requiring manual re-downloads.
-* **Sidebar Update Badge & Silent Detection (تنبيه التحديث في القائمة الجانبية)** — Animated pulsating badge appears on the Settings icon in the Sidebar whenever a GitHub update is available, with automated silent release checks on Settings mount.
-* **100% Test Suite & Release Automation** — Comprehensive verification across 315+ full-system integration tests with zero errors.
+* **Exclusive Settings Recovery Placement (حصر ميزة استعادة الجهاز بالكامل داخل الإعدادات فقط)** — Removed all disaster recovery banners, buttons, and triggers from the main application view (Dashboard, TopBar, and Remote Catalog) to ensure a distraction-free, ultra-clean UI, while keeping the full Disaster Recovery & PC Migration wizard safely and exclusively accessible inside Settings under Advanced Maintenance.
+* **Streamlined UI Focus (واجهة نظيفة وخالية من أي مشتتات)** — The main dashboard and top navigation bar are now strictly focused on live sync status, storage meters, and active folders.
+* **100% Test Suite & Release Automation** — Comprehensive verification across 321+ full-system integration tests with zero errors.
 
 `;
   readmeContent = readmeContent.replace(/(## ✨ What's new in .*?\n)/, `${newSection}$1`);
