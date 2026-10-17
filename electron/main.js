@@ -830,7 +830,7 @@ function setupIpcHandlers() {
     try {
       return app.getVersion();
     } catch (_) {
-      return '1.7.81';
+      return '1.7.82';
     }
   });
 
@@ -2619,8 +2619,12 @@ app.whenReady().then(async () => {
     console.error('Browser guard start error:', e.message);
   }
 
-  // 8. Auto check for GitHub releases in background
-  setTimeout(async () => {
+  // 8. Auto check for GitHub releases in background & on window focus
+  let lastUpdateCheckTime = 0;
+  const triggerBackgroundUpdateCheck = async () => {
+    const now = Date.now();
+    if (now - lastUpdateCheckTime < 25000) return; // Debounce 25s
+    lastUpdateCheckTime = now;
     try {
       if (mainWindow && !mainWindow.isDestroyed() && !isSetupMode) {
         const res = await updaterEngine.checkForUpdates();
@@ -2629,18 +2633,16 @@ app.whenReady().then(async () => {
         }
       }
     } catch (_) {}
-  }, 8000);
+  };
 
-  setInterval(async () => {
-    try {
-      if (mainWindow && !mainWindow.isDestroyed() && !isSetupMode) {
-        const res = await updaterEngine.checkForUpdates();
-        if (res && res.updateAvailable && mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('updater:update-available', res);
-        }
-      }
-    } catch (_) {}
-  }, 30 * 60 * 1000);
+  setTimeout(triggerBackgroundUpdateCheck, 3000);
+
+  if (mainWindow) {
+    mainWindow.on('focus', triggerBackgroundUpdateCheck);
+  }
+
+  // Periodic background check every 3 minutes (instead of 30 minutes)
+  setInterval(triggerBackgroundUpdateCheck, 3 * 60 * 1000);
 });
 
 app.on('activate', () => {

@@ -44,7 +44,9 @@ class UpdaterEngine {
       const options = {
         headers: {
           'User-Agent': 'AuraSync-Desktop-App',
-          'Accept': 'application/vnd.github.v3+json'
+          'Accept': 'application/vnd.github.v3+json',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         }
       };
       https.get(url, options, (res) => {
@@ -94,11 +96,12 @@ class UpdaterEngine {
       const cleanLatest = latestTag.replace(/^v/i, '').trim();
       const current = (app ? app.getVersion() : this.currentVersion || '1.7.79').replace(/^v/i, '').trim();
 
-      // Find installer executable asset
+      // Find installer executable asset (prioritize Setup installer for seamless in-place upgrade)
       const assets = Array.isArray(release.assets) ? release.assets : [];
-      let installerAsset = assets.find((a) =>
-        /setup.*\.exe$/i.test(a.name) || /AuraSync.*\.exe$/i.test(a.name)
-      );
+      let installerAsset = assets.find((a) => /setup.*\.exe$/i.test(a.name));
+      if (!installerAsset) {
+        installerAsset = assets.find((a) => /portable.*\.exe$/i.test(a.name));
+      }
       if (!installerAsset && assets.length > 0) {
         installerAsset = assets.find((a) => /\.exe$/i.test(a.name));
       }

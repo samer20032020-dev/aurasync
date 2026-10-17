@@ -1,10 +1,17 @@
 # AuraSync — Multi-Cloud Desktop Backup
 
-**v1.7.81** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
+**v1.7.82** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
 
 Supports **25+ famous clouds** through native integrations and standard protocols, with a built-in **transfer tool** (device ↔ cloud, cloud ↔ cloud).
 
 ---
+
+## ✨ What's new in 1.7.82
+
+* **Real-Time Instant Update Detection (اكتشاف فوري للتحديثات بمجرد فتح التطبيق أو نافذة الإعدادات)** — Optimized GitHub update polling from 30 minutes down to 3 minutes, added real-time auto-checking whenever the app window gains focus, and implemented a 30-second live check interval while inside Settings.
+* **Prioritized Setup Installer Selection (أولوية حزمة التثبيت التلقائي الصامت)** — Refined the updater asset matcher to automatically prioritize `AuraSync-Setup.exe` over portable binaries for zero-click in-place application replacement.
+* **No-Cache GitHub API Headers (تجاوز كاش الخوادم للتحقق اللحظي)** — Added `Cache-Control: no-cache` headers to ensure instant discovery of brand-new releases without proxy caching latency.
+* **100% Test Suite & Release Automation** — Full regression check with all 321 tests passing.
 
 ## ✨ What's new in 1.7.81
 

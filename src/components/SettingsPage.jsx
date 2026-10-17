@@ -217,7 +217,7 @@ export default function SettingsPage({
   providers = [],
   folders = [],
   showToast,
-  appVersion = '1.7.81',
+  appVersion = '1.7.82',
   updateInfo = null,
   isDownloadingUpdate = false,
   updateProgress = null,
@@ -403,10 +403,16 @@ export default function SettingsPage({
   };
 
   useEffect(() => {
-    // Silently check for GitHub updates whenever Settings is opened
+    // Check for GitHub updates on mount and keep checking periodically while in Settings
     if (typeof onCheckUpdates === 'function') {
       onCheckUpdates(false);
     }
+    const updateTimer = setInterval(() => {
+      if (typeof onCheckUpdates === 'function') {
+        onCheckUpdates(false);
+      }
+    }, 30000);
+    return () => clearInterval(updateTimer);
   }, []);
 
   const isMirror = settings.syncMode === 'mirror';
