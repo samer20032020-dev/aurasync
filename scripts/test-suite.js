@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.85', 'package.json version is 1.7.85', pkg.version);
+  assert(pkg.version === '1.7.86', 'package.json version is 1.7.86', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1527,8 +1527,8 @@ async function runTests() {
     'Settings page exposes exactCopyMode and archiveInstallerVersions UI switches'
   );
 
-  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.85) ---
-  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.85) ---');
+  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.86) ---
+  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.86) ---');
   browserGuardMod.setGuardMode('full');
   assert(browserGuardMod.getGuardMode() === 'full', 'BrowserGuard defaults strictly to Full Browser Lock mode');
   assert(browserGuardMod.setGuardMode('full').mode === 'full', 'BrowserGuard enforces full mode');
@@ -1708,7 +1708,41 @@ async function runTests() {
     'CloudInstaller supports zero-click automatic update mode'
   );
 
-  assert(pkg.version === '1.7.85', 'package.json version matches 1.7.85');
+  // Test: Bulk Preserved File Operations & 1-Click Cloud Purge
+  console.log('\n--- 31. Bulk Preserved File Operations & 1-Click Cloud Purge (v1.7.86) ---');
+  const filesPageSrc31 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'FilesPage.jsx'), 'utf8');
+  assert(
+    filesPageSrc31.includes('handleRestoreAllPreserved') && filesPageSrc31.includes('handlePurgeAllPreserved'),
+    'FilesPage defines bulk restore and bulk purge handlers'
+  );
+  assert(
+    filesPageSrc31.includes('files.restoreAll') && filesPageSrc31.includes('files.purgeAll'),
+    'FilesPage renders bulk action buttons with i18n support'
+  );
+  assert(
+    filesPageSrc31.includes('bulkBusy') && filesPageSrc31.includes('bulkProgress'),
+    'FilesPage provides live progress bar indicator for bulk operations'
+  );
+
+  const preloadSrc31 = fs.readFileSync(path.join(rootDir, 'electron', 'preload.js'), 'utf8');
+  assert(
+    preloadSrc31.includes('restoreAllPreserved') && preloadSrc31.includes('onRestoreProgress'),
+    'preload.js exposes restoreAllPreserved and onRestoreProgress'
+  );
+
+  const mainSrc31 = fs.readFileSync(path.join(rootDir, 'electron', 'main.js'), 'utf8');
+  assert(
+    mainSrc31.includes('files:restore-all-preserved') && mainSrc31.includes('files:purge-all'),
+    'electron/main.js registers files:restore-all-preserved and files:purge-all IPC handlers'
+  );
+
+  const i18nSrc31 = fs.readFileSync(path.join(rootDir, 'src', 'i18n.jsx'), 'utf8');
+  assert(
+    i18nSrc31.includes('files.restoreAll') && i18nSrc31.includes('تنزيل الكل') && i18nSrc31.includes('files.purgeAll') && i18nSrc31.includes('مسح الكل'),
+    'i18n.jsx contains full Arabic & English localizations for bulk preserved actions'
+  );
+
+  assert(pkg.version === '1.7.86', 'package.json version matches 1.7.86');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);

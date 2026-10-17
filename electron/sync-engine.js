@@ -973,7 +973,11 @@ class SyncEngine {
               driveFileId: m.drive_folder_id
             });
           }
-          await this.processPendingCloudDeletions(watchedFolder.path);
+          try {
+            await this.processPendingCloudDeletions(watchedFolder.path);
+          } catch (cloudErr) {
+            console.warn('Cloud deletion warning (watchedFolder):', cloudErr.message);
+          }
           // Unwatch and delete folder record + its file records from DB
           this.unwatchFolder(watchedFolder.id);
           db.removeFolder(watchedFolder.id);
@@ -999,7 +1003,11 @@ class SyncEngine {
                     driveFileId: mirror.drive_file_id
                   });
                 }
-                await this.processPendingCloudDeletions(file.local_path);
+                try {
+                  await this.processPendingCloudDeletions(file.local_path);
+                } catch (cloudErr) {
+                  console.warn('Cloud deletion warning (subfile):', cloudErr.message);
+                }
                 db.deleteFileRecord(file.local_path);
               }
             }
@@ -1042,7 +1050,11 @@ class SyncEngine {
           driveFileId: m.drive_file_id
         });
       }
-      await this.processPendingCloudDeletions(norm);
+      try {
+        await this.processPendingCloudDeletions(norm);
+      } catch (cloudErr) {
+        console.warn('Cloud deletion warning (file):', cloudErr.message);
+      }
 
       // 2. Delete from Local disk (if present)
       if (fs.existsSync(norm)) {

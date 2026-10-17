@@ -83,7 +83,7 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [folderDeleteModal, setFolderDeleteModal] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState('1.7.85');
+  const [appVersion, setAppVersion] = useState('1.7.86');
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState([]);
@@ -922,6 +922,8 @@ export default function App() {
                 onRetryAll={handleRetryAllFailed}
                 syncingFolderId={syncingFolderId}
                 failedCount={stats.failedFiles || 0}
+                preservedCount={stats.preservedFiles || 0}
+                stats={stats}
                 showToast={showToast}
               />
             )}

@@ -62,10 +62,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteFileBoth: (filePath) => ipcRenderer.invoke('files:delete-both', filePath),
   purgeFile: (filePath) => ipcRenderer.invoke('files:purge', filePath),
   purgeAllPreserved: () => ipcRenderer.invoke('files:purge-all'),
+  restoreAllPreserved: (options) => ipcRenderer.invoke('files:restore-all-preserved', options),
   onPurgeProgress: (callback) => {
     const subscription = (event, data) => callback(data);
     ipcRenderer.on('files:purge-progress', subscription);
     return () => ipcRenderer.removeListener('files:purge-progress', subscription);
+  },
+  onRestoreProgress: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('files:restore-progress', subscription);
+    return () => ipcRenderer.removeListener('files:restore-progress', subscription);
   },
 
   // Storage

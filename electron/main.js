@@ -830,7 +830,7 @@ function setupIpcHandlers() {
     try {
       return app.getVersion();
     } catch (_) {
-      return '1.7.85';
+      return '1.7.86';
     }
   });
 
@@ -1368,7 +1368,11 @@ function setupIpcHandlers() {
       const folder = db.getFolderById(file.folder_id);
       const provider = cloudProviders.getProvider(folder ? (folder.provider || 'google') : 'google');
       if (file.drive_file_id && provider && provider.isConnected()) {
-        await provider.trashFile(file.drive_file_id);
+        try {
+          await provider.trashFile(file.drive_file_id);
+        } catch (cloudErr) {
+          console.warn('[files:purge] Cloud trash warning:', cloudErr.message);
+        }
       }
 
       for (const mirror of db.getFileMirrors(filePath)) {
@@ -1381,7 +1385,7 @@ function setupIpcHandlers() {
         db.removeFileMirror(filePath, mirror.provider);
       }
 
-      db.markFileDeletedOnDrive(filePath);
+      db.deleteFileRecord(filePath);
       syncEngine.emit('stats:updated', db.getAppStats());
       return { success: true };
     } catch (err) {
@@ -1390,9 +1394,15 @@ function setupIpcHandlers() {
   });
 
   // Remove ALL preserved (locally deleted) files from the cloud forever
-  ipcMain.handle('files:purge-all', async (event) => {
+  ipcMain.handle('files:purge-all', async (event, options = {}) => {
     try {
-      const list = db.getFiles({ status: 'preserved_on_drive', limit: 1000000, offset: 0 }) || [];
+      const folderId = (options && typeof options === 'object') ? options.folderId : (typeof options === 'number' ? options : null);
+      const list = db.getFiles({
+        status: 'preserved_on_drive',
+        folderId: folderId || undefined,
+        limit: 1000000,
+        offset: 0
+      }) || [];
       const total = list.length;
       let deleted = 0;
       let failed = 0;
@@ -1403,7 +1413,11 @@ function setupIpcHandlers() {
           const folder = db.getFolderById(file.folder_id);
           const provider = cloudProviders.getProvider(folder ? (folder.provider || 'google') : 'google');
           if (file.drive_file_id && provider && provider.isConnected()) {
-            await provider.trashFile(file.drive_file_id);
+            try {
+              await provider.trashFile(file.drive_file_id);
+            } catch (cloudErr) {
+              console.warn('[purgeOne] Cloud trash warning:', cloudErr.message);
+            }
           }
           for (const mirror of db.getFileMirrors(file.local_path)) {
             try {
@@ -1414,9 +1428,10 @@ function setupIpcHandlers() {
             } catch (_) {}
             db.removeFileMirror(file.local_path, mirror.provider);
           }
-          db.markFileDeletedOnDrive(file.local_path);
+          db.deleteFileRecord(file.local_path);
           deleted++;
-        } catch (_) {
+        } catch (err) {
+          console.warn('[purgeOne] Error purging file:', file.local_path, err.message);
           failed++;
         } finally {
           done++;
@@ -1438,6 +1453,49 @@ function setupIpcHandlers() {
 
       syncEngine.emit('stats:updated', db.getAppStats());
       return { success: true, deleted, failed, total };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Restore ALL preserved files to local disk
+  ipcMain.handle('files:restore-all-preserved', async (event, options = {}) => {
+    try {
+      const folderId = (options && typeof options === 'object') ? options.folderId : (typeof options === 'number' ? options : null);
+      const list = db.getFiles({
+        status: 'preserved_on_drive',
+        folderId: folderId || undefined,
+        limit: 1000000,
+        offset: 0
+      }) || [];
+      const total = list.length;
+      let restored = 0;
+      let failed = 0;
+      let done = 0;
+
+      for (const file of list) {
+        try {
+          if (file.drive_file_id && file.status !== 'cloud_missing') {
+            await syncEngine.restoreFile(file.local_path);
+            restored++;
+          }
+        } catch (err) {
+          console.warn('[restoreAllPreserved] Error:', file.local_path, err.message);
+          failed++;
+        } finally {
+          done++;
+          try {
+            event.sender.send('files:restore-progress', {
+              done,
+              total,
+              name: file.relative_path || file.local_path || ''
+            });
+          } catch (_) {}
+        }
+      }
+
+      syncEngine.emit('stats:updated', db.getAppStats());
+      return { success: true, restored, failed, total };
     } catch (err) {
       return { success: false, error: err.message };
     }

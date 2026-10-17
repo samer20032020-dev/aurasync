@@ -47,6 +47,8 @@ export default function FilesPage({
   onRetryAll,
   syncingFolderId,
   failedCount = 0,
+  preservedCount = 0,
+  stats,
   showToast
 }) {
   const { t, lang } = useI18n();
@@ -65,6 +67,9 @@ export default function FilesPage({
   const [busyPath, setBusyPath] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [displayedLimits, setDisplayedLimits] = useState({});
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkAction, setBulkAction] = useState(null);
+  const [bulkProgress, setBulkProgress] = useState(null);
 
   const isFlat = Boolean(search) || Boolean(statusFilter);
   const folderIds = folders.map((f) => f.id).join(',');
@@ -177,6 +182,21 @@ export default function FilesPage({
     });
   }, []);
 
+  // Bulk operation progress listener (purge & restore)
+  useEffect(() => {
+    if (!window.electronAPI) return undefined;
+    const unsubPurge = window.electronAPI.onPurgeProgress?.((data) => {
+      setBulkProgress(data);
+    });
+    const unsubRestore = window.electronAPI.onRestoreProgress?.((data) => {
+      setBulkProgress(data);
+    });
+    return () => {
+      if (unsubPurge) unsubPurge();
+      if (unsubRestore) unsubRestore();
+    };
+  }, []);
+
   // ---------- Action Handlers ----------
 
   const handleRestore = async (filePath) => {
@@ -209,6 +229,90 @@ export default function FilesPage({
     } finally {
       setBusyPath(null);
       setTimeout(refreshVisible, 800);
+    }
+  };
+
+  const handleRestoreAllPreserved = async () => {
+    if (bulkBusy) return;
+    const countToRestore = (statusFilter === 'preserved_on_drive' && flatFiles.length > 0)
+      ? flatFiles.length
+      : (preservedCount || 0);
+
+    const confirmed = window.confirm(
+      t('files.confirmRestoreAll', { count: countToRestore > 0 ? countToRestore : '' })
+    );
+    if (!confirmed) return;
+
+    setBulkBusy(true);
+    setBulkAction('restoring');
+    setBulkProgress({ done: 0, total: countToRestore || 1 });
+
+    try {
+      if (window.electronAPI?.restoreAllPreserved) {
+        const res = await window.electronAPI.restoreAllPreserved();
+        if (res && res.success) {
+          if (showToast) {
+            showToast(t('files.restoreAllSuccess', { count: res.restored ?? countToRestore }), 'success');
+          }
+        } else {
+          const errMsg = res?.error || 'Unknown';
+          if (showToast) showToast(t('files.restoreAllFailed', { error: errMsg }), 'error');
+        }
+      } else {
+        const targetList = flatFiles.filter((f) => f.status === 'preserved_on_drive' && f.drive_file_id);
+        let count = 0;
+        for (const f of targetList) {
+          try {
+            await handleRestore(f.local_path);
+            count++;
+          } catch (_) {}
+        }
+        if (showToast) showToast(t('files.restoreAllSuccess', { count }), 'success');
+      }
+    } catch (err) {
+      if (showToast) showToast(t('files.restoreAllFailed', { error: err.message }), 'error');
+    } finally {
+      setBulkBusy(false);
+      setBulkAction(null);
+      setBulkProgress(null);
+      setTimeout(refreshVisible, 600);
+    }
+  };
+
+  const handlePurgeAllPreserved = async () => {
+    if (bulkBusy) return;
+    const countToPurge = (statusFilter === 'preserved_on_drive' && flatFiles.length > 0)
+      ? flatFiles.length
+      : (preservedCount || 0);
+
+    const confirmed = window.confirm(
+      t('files.confirmPurgeAll', { count: countToPurge > 0 ? countToPurge : '' })
+    );
+    if (!confirmed) return;
+
+    setBulkBusy(true);
+    setBulkAction('purging');
+    setBulkProgress({ done: 0, total: countToPurge || 1 });
+
+    try {
+      if (window.electronAPI?.purgeAllPreserved) {
+        const res = await window.electronAPI.purgeAllPreserved();
+        if (res && res.success) {
+          if (showToast) {
+            showToast(t('files.purgeAllSuccess', { count: res.deleted ?? countToPurge }), 'success');
+          }
+        } else {
+          const errMsg = res?.error || 'Unknown';
+          if (showToast) showToast(t('files.purgeAllFailed', { error: errMsg }), 'error');
+        }
+      }
+    } catch (err) {
+      if (showToast) showToast(t('files.purgeAllFailed', { error: err.message }), 'error');
+    } finally {
+      setBulkBusy(false);
+      setBulkAction(null);
+      setBulkProgress(null);
+      setTimeout(refreshVisible, 600);
     }
   };
 
@@ -607,6 +711,43 @@ export default function FilesPage({
             <RefreshCw className={`w-4 h-4 ${flatLoading || treeLoading ? 'animate-spin' : ''}`} />
           </button>
 
+          {/* Preserved bulk operations: Download All & Purge All */}
+          {(statusFilter === 'preserved_on_drive' || preservedCount > 0) && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleRestoreAllPreserved}
+                disabled={bulkBusy}
+                className="btn border transition-all text-xs font-bold gap-1.5 px-3 py-1.5 rounded-xl shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.22) 100%)',
+                  borderColor: 'rgba(16, 185, 129, 0.45)',
+                  color: '#34d399'
+                }}
+                title={t('files.restoreAllTip')}
+              >
+                <DownloadCloud className={`w-4 h-4 ${bulkAction === 'restoring' ? 'animate-bounce' : ''}`} />
+                <span>{bulkAction === 'restoring' ? t('files.restoringAll') : t('files.restoreAll')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePurgeAllPreserved}
+                disabled={bulkBusy}
+                className="btn border transition-all text-xs font-bold gap-1.5 px-3 py-1.5 rounded-xl shadow-sm hover:scale-[1.02] active:scale-[0.98] hover:bg-rose-500/20"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.22) 100%)',
+                  borderColor: 'rgba(239, 68, 68, 0.45)',
+                  color: '#f87171'
+                }}
+                title={t('files.purgeAllTip')}
+              >
+                <Trash2 className={`w-4 h-4 ${bulkAction === 'purging' ? 'animate-spin' : ''}`} />
+                <span>{bulkAction === 'purging' ? t('files.purgingAll') : t('files.purgeAll')}</span>
+              </button>
+            </div>
+          )}
+
           {failedCount > 0 && (
             <button
               onClick={() => handleRetryAll(null)}
@@ -619,6 +760,34 @@ export default function FilesPage({
           )}
         </div>
       </div>
+
+      {/* Bulk Operation Live Progress Indicator */}
+      {bulkBusy && bulkProgress && (
+        <div className="surface p-3.5 rounded-2xl border border-cyan-500/35 bg-cyan-950/20 shadow-lg flex flex-col gap-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-cyan-200 flex items-center gap-2">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+              {bulkAction === 'restoring' ? t('files.restoringProgress') : t('files.purgingProgress')}
+            </span>
+            <span className="font-mono text-cyan-300 font-bold">
+              {bulkProgress.done} / {bulkProgress.total}
+            </span>
+          </div>
+          <div className="w-full h-2 bg-cyan-950/60 rounded-full overflow-hidden border border-cyan-500/20">
+            <div
+              className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-300"
+              style={{
+                width: `${bulkProgress.total > 0 ? Math.min(100, Math.round((bulkProgress.done / bulkProgress.total) * 100)) : 0}%`
+              }}
+            />
+          </div>
+          {bulkProgress.name && (
+            <div className="text-[11px] font-mono text-cyan-300/80 truncate" dir="ltr">
+              {bulkProgress.name}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Summary line */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] dim px-1">

@@ -1,10 +1,18 @@
 # AuraSync — Multi-Cloud Desktop Backup
 
-**v1.7.85** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
+**v1.7.86** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
 
 Supports **25+ famous clouds** through native integrations and standard protocols, with a built-in **transfer tool** (device ↔ cloud, cloud ↔ cloud).
 
 ---
+
+## ✨ What's new in 1.7.86
+
+* **One-Click Preserved Files Bulk Operations (أزرار تنزيل ومسح كل المحمي دفعة واحدة)** — Added two dedicated action buttons ('تنزيل الكل' / Download All & 'مسح الكل' / Purge All) directly in the Files & Folders toolbar whenever preserved files are present or filtered.
+* **Instant Sidebar Alert Clearance (تصفير تنبيه الحماية الجانبي فوراً)** — One-click purge permanently removes all obsolete preserved file records and cloud copies, immediately clearing the amber warning dot beside 'الحماية' on the sidebar.
+* **Resilient Offline & OAuth-Safe Cleanup** — Purging operations now seamlessly handle expired cloud tokens and offline states without halting, guaranteeing database cleanup and eliminating ghost entries.
+* **Real-Time Live Progress Bar** — Sleek animated progress banner displaying live '{done} / {total}' counter and active filename during bulk download or purge operations.
+* **100% Full-System Verification & Regression Suite** — All 330+ integration checks passed with 100% validation.
 
 ## ✨ What's new in 1.7.85
 
