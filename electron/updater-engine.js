@@ -73,22 +73,38 @@ class UpdaterEngine {
     if (this.isChecking) return this.lastCheckResult;
     this.isChecking = true;
     try {
-      const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
-      const release = await this.fetchJson(url);
+      let release = null;
+      try {
+        const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest?t=${Date.now()}`;
+        release = await this.fetchJson(url);
+      } catch (latestErr) {
+        // Fallback to releases list if latest returns 404 or fails
+        const releasesListUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=1&t=${Date.now()}`;
+        const list = await this.fetchJson(releasesListUrl);
+        if (Array.isArray(list) && list.length > 0) {
+          release = list[0];
+        } else {
+          throw latestErr;
+        }
+      }
+
+      if (!release) throw new Error('No release data found on GitHub');
+
       const latestTag = release.tag_name || release.name || '';
       const cleanLatest = latestTag.replace(/^v/i, '').trim();
-      const current = (this.currentVersion || (app ? app.getVersion() : '1.7.77')).replace(/^v/i, '').trim();
-
-      const updateAvailable = this.compareVersions(cleanLatest, current) > 0;
+      const current = (app ? app.getVersion() : this.currentVersion || '1.7.79').replace(/^v/i, '').trim();
 
       // Find installer executable asset
-      const assets = release.assets || [];
+      const assets = Array.isArray(release.assets) ? release.assets : [];
       let installerAsset = assets.find((a) =>
         /setup.*\.exe$/i.test(a.name) || /AuraSync.*\.exe$/i.test(a.name)
       );
       if (!installerAsset && assets.length > 0) {
         installerAsset = assets.find((a) => /\.exe$/i.test(a.name));
       }
+
+      const isHigher = this.compareVersions(cleanLatest, current) > 0;
+      const updateAvailable = isHigher && !!installerAsset;
 
       this.lastCheckResult = {
         success: true,
@@ -98,7 +114,7 @@ class UpdaterEngine {
         releaseName: release.name || latestTag,
         releaseNotes: release.body || '',
         publishedAt: release.published_at || '',
-        htmlUrl: release.html_url || '',
+        htmlUrl: release.html_url || `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/tag/${latestTag}`,
         downloadUrl: installerAsset ? installerAsset.browser_download_url : null,
         assetName: installerAsset ? installerAsset.name : null,
         assetSizeMB: installerAsset ? (installerAsset.size / 1024 / 1024).toFixed(1) : null
@@ -109,7 +125,7 @@ class UpdaterEngine {
       this.lastCheckResult = {
         success: false,
         updateAvailable: false,
-        currentVersion: this.currentVersion,
+        currentVersion: (app ? app.getVersion() : this.currentVersion || '1.7.79').replace(/^v/i, '').trim(),
         error: err.message
       };
       return this.lastCheckResult;
@@ -129,15 +145,24 @@ class UpdaterEngine {
       const tempDir = app.getPath('temp');
       const targetPath = path.join(tempDir, `AuraSync-Update-Setup-${Date.now()}.exe`);
       const fileStream = fs.createWriteStream(targetPath);
+      let redirectCount = 0;
 
       const downloadFile = (fileUrl) => {
         const client = fileUrl.startsWith('https') ? https : http;
         client.get(fileUrl, {
           headers: {
-            'User-Agent': 'AuraSync-Desktop-App'
+            'User-Agent': 'AuraSync-Desktop-App',
+            'Accept': 'application/octet-stream'
           }
         }, (res) => {
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            redirectCount++;
+            if (redirectCount > 8) {
+              fileStream.close();
+              try { fs.unlinkSync(targetPath); } catch (_) {}
+              this.isDownloading = false;
+              return reject(new Error('Too many redirects while downloading update'));
+            }
             return downloadFile(res.headers.location);
           }
           if (res.statusCode !== 200) {
@@ -172,8 +197,8 @@ class UpdaterEngine {
               this.isDownloading = false;
               console.log(`[UpdaterEngine] Update downloaded to: ${targetPath}`);
               try {
-                // Launch installer with --setup
-                const child = spawn(targetPath, ['--setup'], {
+                // Launch installer with --setup and --auto-update for zero-click automatic completion
+                const child = spawn(targetPath, ['--setup', '--auto-update'], {
                   detached: true,
                   stdio: 'ignore'
                 });
@@ -181,6 +206,7 @@ class UpdaterEngine {
 
                 // Cleanly quit app after 600ms
                 setTimeout(() => {
+                  try { app.isQuitting = true; } catch (_) {}
                   app.quit();
                 }, 600);
                 resolve({ success: true, targetPath });

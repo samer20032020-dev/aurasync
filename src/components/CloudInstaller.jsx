@@ -15,9 +15,11 @@ export default function CloudInstaller() {
   const [statusText, setStatusText] = useState('جاهز للبدء');
   const [installPath, setInstallPath] = useState('C:\\Users\\samer\\AppData\\Local\\Programs\\AuraSync');
   const [errorText, setErrorText] = useState(null);
-  const [version, setVersion] = useState('1.7.79');
+  const [version, setVersion] = useState('1.7.80');
+  const [isAutoUpdate, setIsAutoUpdate] = useState(false);
   const unsubscribeRef = useRef(null);
   const intervalRef = useRef(null);
+  const autoStartedRef = useRef(false);
 
   useEffect(() => {
     if (window.electronAPI?.getInstallerInfo) {
@@ -27,6 +29,13 @@ export default function CloudInstaller() {
         }
         if (info?.appVersion) {
           setVersion(info.appVersion);
+        }
+        if (info?.isAutoUpdate && !autoStartedRef.current) {
+          autoStartedRef.current = true;
+          setIsAutoUpdate(true);
+          setTimeout(() => {
+            startInstallation(info.defaultInstallDir || installPath, true);
+          }, 350);
         }
       }).catch(() => {});
     } else if (window.electronAPI?.getAppVersion) {
@@ -65,11 +74,13 @@ export default function CloudInstaller() {
     } catch (_) {}
   };
 
-  const startInstallation = async () => {
+  const startInstallation = async (overridePath = null, isAuto = false) => {
     setErrorText(null);
     setStep(2);
     setProgress(4);
-    setStatusText('جاري التحضير...');
+    setStatusText(isAuto || isAutoUpdate ? 'جاري تحديث ملفات البرنامج تلقائياً...' : 'جاري التحضير...');
+
+    const targetDirectory = overridePath || installPath;
 
     try {
       if (window.electronAPI?.runInstall) {
@@ -82,7 +93,7 @@ export default function CloudInstaller() {
         }
 
         const res = await window.electronAPI.runInstall({
-          installDir: installPath,
+          installDir: targetDirectory,
           createDesktopShortcut: true,
           createStartMenuShortcut: true,
           autoStart: true
@@ -90,8 +101,18 @@ export default function CloudInstaller() {
 
         if (res?.success) {
           setProgress(100);
-          setStatusText('تم التثبيت');
-          setTimeout(() => setStep(3), 600);
+          setStatusText(isAuto || isAutoUpdate ? 'تم التحديث بنجاح! جاري تشغيل AuraSync...' : 'تم التثبيت');
+          setTimeout(() => {
+            setStep(3);
+            if (isAuto || isAutoUpdate) {
+              setTimeout(() => {
+                if (window.electronAPI?.launchInstalledApp) {
+                  window.electronAPI.launchInstalledApp(targetDirectory);
+                }
+                handleClose();
+              }, 800);
+            }
+          }, 600);
         } else {
           setErrorText(`تعذّر إكمال التثبيت: ${res?.error || 'سبب غير معروف'}`);
           setStep(1);
@@ -134,14 +155,16 @@ export default function CloudInstaller() {
     handleClose();
   };
 
-  const title =
-    step === 1 ? 'جاهز لتثبيت AuraSync' : step === 2 ? 'جاري تثبيت AuraSync' : 'تم التثبيت بنجاح';
-  const subtitle =
-    step === 1
+  const title = isAutoUpdate
+    ? (step === 3 ? 'تم تحديث AuraSync بنجاح!' : 'تحديث AuraSync التلقائي')
+    : (step === 1 ? 'جاهز لتثبيت AuraSync' : step === 2 ? 'جاري تثبيت AuraSync' : 'تم التثبيت بنجاح');
+  const subtitle = isAutoUpdate
+    ? (step === 3 ? 'جاري إعادة تشغيل النسخة الجديدة تلقائياً...' : 'جاري تثبيت التحديث الأخير دون أي تدخل...')
+    : (step === 1
       ? 'اختر مسار التثبيت على جهازك للمتابعة.'
       : step === 2
       ? 'جاري نسخ ملفات البرنامج وإعداد التشغيل...'
-      : 'أصبح AuraSync جاهزاً لحماية ملفاتك فوراً.';
+      : 'أصبح AuraSync جاهزاً لحماية ملفاتك فوراً.');
 
   const progressWidth = step === 1 ? 0 : step === 3 ? 100 : Math.max(progress, 3);
 

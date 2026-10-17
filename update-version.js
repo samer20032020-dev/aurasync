@@ -100,10 +100,10 @@ readmeContent = readmeContent.replace(/\*\*v\d+\.\d+\.\d+\*\*/, `**v${targetVers
 if (!readmeContent.includes(`## ✨ What's new in ${targetVersion}`)) {
   const newSection = `## ✨ What's new in ${targetVersion}
 
-* **1-Click Disaster Recovery & PC Migration Wizard (معالج استعادة الجهاز بعد الفورمات أو الهجرة لكمبيوتر جديد)** — Instant zero-touch recovery wizard allowing users to restore their entire computer file hierarchy (Desktop, Documents, Pictures, Videos, and custom project folders) from any cloud account back to their native Windows directories with one click.
-* **Smart Native Path Mapping & Machine Manifest Detection (التعرف الذكي على مسارات النظام وبصمة الجهاز السابق)** — Automatically recognizes legacy computer fingerprints (\`aurasync-machine-manifest.json\`) and maps standard Windows folders (\`Desktop\` -> \`%USERPROFILE%\\Desktop\`, \`Documents\` -> \`%USERPROFILE%\\Documents\`, etc.) with flexible consolidated and custom mapping modes.
-* **High-Throughput Parallel Restore Engine (محرك تنزيل متزامن فائق السرعة مع تخطي الملفات المتطابقة)** — Integrated concurrent download worker pool with real-time speed calculation, live file/folder progress meters, and seamless post-restore auto-watching and folder decoration.
-* **100% Test Suite & Release Automation** — Comprehensive verification across 310+ full-system integration tests with zero errors.
+* **In-App 1-Click Auto-Updater (التحديث التلقائي الفوري داخل الإعدادات بنقرة واحدة)** — When a new release is uploaded to GitHub, a dedicated update card appears inside Settings with a "تحديث" button and live progress meter.
+* **Zero-Click Self-Update Engine (يتحدث لحاله تلقائياً بالكامل)** — Clicking "تحديث" downloads the new release asset from GitHub, launches the installer with \`--auto-update\`, safely closes the old version, updates all files in place, and automatically launches the new version without requiring manual re-downloads.
+* **Sidebar Update Badge & Silent Detection (تنبيه التحديث في القائمة الجانبية)** — Animated pulsating badge appears on the Settings icon in the Sidebar whenever a GitHub update is available, with automated silent release checks on Settings mount.
+* **100% Test Suite & Release Automation** — Comprehensive verification across 315+ full-system integration tests with zero errors.
 
 `;
   readmeContent = readmeContent.replace(/(## ✨ What's new in .*?\n)/, `${newSection}$1`);

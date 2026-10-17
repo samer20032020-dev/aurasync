@@ -830,7 +830,7 @@ function setupIpcHandlers() {
     try {
       return app.getVersion();
     } catch (_) {
-      return '1.7.79';
+      return '1.7.80';
     }
   });
 
@@ -1986,7 +1986,8 @@ function registerInstallerIpc() {
 
     return {
       defaultInstallDir: installDir,
-      appVersion: app.getVersion()
+      appVersion: app.getVersion(),
+      isAutoUpdate: process.argv.includes('--auto-update')
     };
   });
 

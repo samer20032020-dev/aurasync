@@ -24,7 +24,7 @@ export default function Sidebar({
   providers = [],
   stats,
   isSyncing,
-  version = '1.7.79',
+  version = '1.7.80',
   updateInfo = null,
   onOpenUpdate = null
 }) {
@@ -240,6 +240,19 @@ export default function Sidebar({
         >
           <Settings className="w-[17px] h-[17px] shrink-0" strokeWidth={2} />
           <span className="flex-1 truncate text-start">{t('nav.settings')}</span>
+          {updateInfo?.updateAvailable && (
+            <span
+              className="badge text-[9.5px] px-2 py-0.5 font-black animate-pulse shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: '#fff',
+                border: 'none',
+                boxShadow: '0 0 10px rgba(245, 158, 11, 0.4)'
+              }}
+            >
+              تحديث
+            </span>
+          )}
         </button>
       </div>
     </aside>

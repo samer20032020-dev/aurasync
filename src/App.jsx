@@ -83,7 +83,7 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [folderDeleteModal, setFolderDeleteModal] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState('1.7.79');
+  const [appVersion, setAppVersion] = useState('1.7.80');
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState([]);
@@ -163,39 +163,39 @@ export default function App() {
     };
   }, []);
 
-  const handleCheckForUpdates = async () => {
+  const handleCheckForUpdates = async (interactive = false) => {
     if (!window.electronAPI?.checkForUpdates) {
-      showToast('خدمة التحديث غير متاحة خارج تطبيق سطح المكتب', 'warning');
+      if (interactive) showToast('خدمة التحديث غير متاحة خارج تطبيق سطح المكتب', 'warning');
       return null;
     }
     try {
-      showToast('جارٍ فحص التحديثات من GitHub...', 'info');
+      if (interactive) showToast('جارٍ فحص التحديثات من GitHub...', 'info');
       const res = await window.electronAPI.checkForUpdates();
       if (res && res.updateAvailable) {
         setUpdateInfo(res);
-        setShowUpdateModal(true);
+        if (interactive) setShowUpdateModal(true);
         showToast(`يتوفر تحديث جديد: v${res.latestVersion}`, 'success');
       } else {
         setUpdateInfo(res);
-        showToast('أنت تستخدم أحدث إصدار بالفعل!', 'success');
+        if (interactive) showToast('أنت تستخدم أحدث إصدار بالفعل!', 'success');
       }
       return res;
     } catch (err) {
-      showToast(`فشل فحص التحديثات: ${err.message}`, 'error');
+      if (interactive) showToast(`فشل فحص التحديثات: ${err.message}`, 'error');
       return null;
     }
   };
 
-  const handleStartUpdate = async () => {
-    if (!updateInfo?.downloadUrl || !window.electronAPI?.startUpdateDownload) {
+  const handleStartUpdate = async (downloadUrlOverride = null) => {
+    const targetUrl = downloadUrlOverride || updateInfo?.downloadUrl;
+    if (!targetUrl || !window.electronAPI?.startUpdateDownload) {
       showToast('رابط ملف التحديث غير متوفر', 'error');
       return;
     }
     try {
       setIsDownloadingUpdate(true);
-      setShowUpdateModal(true);
       showToast('بدأ تحميل التحديث وتثبيته تلقائياً...', 'info');
-      const res = await window.electronAPI.startUpdateDownload(updateInfo.downloadUrl);
+      const res = await window.electronAPI.startUpdateDownload(targetUrl);
       if (!res || !res.success) {
         setIsDownloadingUpdate(false);
         showToast(`فشل تثبيت التحديث: ${res?.error || 'خطأ غير معروف'}`, 'error');

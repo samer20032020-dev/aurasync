@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.79', 'package.json version is 1.7.79', pkg.version);
+  assert(pkg.version === '1.7.80', 'package.json version is 1.7.80', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1527,8 +1527,8 @@ async function runTests() {
     'Settings page exposes exactCopyMode and archiveInstallerVersions UI switches'
   );
 
-  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.79) ---
-  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.79) ---');
+  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.80) ---
+  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.80) ---');
   browserGuardMod.setGuardMode('full');
   assert(browserGuardMod.getGuardMode() === 'full', 'BrowserGuard defaults strictly to Full Browser Lock mode');
   assert(browserGuardMod.setGuardMode('full').mode === 'full', 'BrowserGuard enforces full mode');
@@ -1667,13 +1667,36 @@ async function runTests() {
     'DisasterRecoveryModal provides 1-click PC migration with smart native, consolidated, and custom modes'
   );
 
-  const dashSrc29 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'DashboardPage.jsx'), 'utf8');
+  // Test: GitHub Auto-Updater & In-Settings 1-Click Update System
+  console.log('\n--- 30. In-App 1-Click GitHub Auto-Updater System ---');
+  assert(typeof updaterEngine.checkForUpdates === 'function', 'updaterEngine.checkForUpdates is a function');
+  assert(typeof updaterEngine.downloadAndInstall === 'function', 'updaterEngine.downloadAndInstall is a function');
+  assert(updaterEngine.compareVersions('1.7.80', '1.7.79') === 1, 'compareVersions identifies newer version');
+  assert(updaterEngine.compareVersions('1.7.79', '1.7.79') === 0, 'compareVersions identifies identical version');
+  assert(updaterEngine.compareVersions('1.7.78', '1.7.79') === -1, 'compareVersions identifies older version');
+
+  const settingsSrc30 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'SettingsPage.jsx'), 'utf8');
   assert(
-    dashSrc29.includes('onOpenDisasterRecovery') && dashSrc29.includes('recovery.heroCardTitle'),
-    'DashboardPage integrates Disaster Recovery Hero Card and triggers recovery modal'
+    settingsSrc30.includes('تحديث جديد متاح للبرنامج') &&
+    settingsSrc30.includes('onStartUpdate') &&
+    settingsSrc30.includes('isDownloadingUpdate') &&
+    settingsSrc30.includes('updateProgress'),
+    'SettingsPage renders 1-Click Update card with live progress bar and direct update button'
   );
 
-  assert(pkg.version === '1.7.79', 'package.json version matches 1.7.79');
+  const sidebarSrc30 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'Sidebar.jsx'), 'utf8');
+  assert(
+    sidebarSrc30.includes('updateInfo?.updateAvailable') && sidebarSrc30.includes('تحديث'),
+    'Sidebar renders animated update badge on Settings navigation item'
+  );
+
+  const installerSrc30 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'CloudInstaller.jsx'), 'utf8');
+  assert(
+    installerSrc30.includes('isAutoUpdate') && installerSrc30.includes('startInstallation'),
+    'CloudInstaller supports zero-click automatic update mode'
+  );
+
+  assert(pkg.version === '1.7.80', 'package.json version matches 1.7.80');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);

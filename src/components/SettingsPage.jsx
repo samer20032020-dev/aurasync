@@ -217,7 +217,7 @@ export default function SettingsPage({
   providers = [],
   folders = [],
   showToast,
-  appVersion = '1.7.79',
+  appVersion = '1.7.80',
   updateInfo = null,
   isDownloadingUpdate = false,
   updateProgress = null,
@@ -402,6 +402,13 @@ export default function SettingsPage({
     }
   };
 
+  useEffect(() => {
+    // Silently check for GitHub updates whenever Settings is opened
+    if (typeof onCheckUpdates === 'function') {
+      onCheckUpdates(false);
+    }
+  }, []);
+
   const isMirror = settings.syncMode === 'mirror';
   const isExactCopy = String(settings.exactCopyMode || 'false') === 'true';
   const isArchiveVersions = String(settings.archiveInstallerVersions ?? 'true') !== 'false';
@@ -494,6 +501,93 @@ export default function SettingsPage({
           </div>
         </div>
       </section>
+
+      {/* 1-CLICK GITHUB AUTO-UPDATE CARD (مربع صغير داخل الإعدادات مكتوب عليه تحديث) */}
+      {updateInfo?.updateAvailable && (
+        <div
+          className="p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl relative overflow-hidden transition-all animate-fade-in"
+          style={{
+            background: 'linear-gradient(135deg, color-mix(in srgb, var(--warning) 16%, transparent) 0%, color-mix(in srgb, var(--accent) 12%, transparent) 100%)',
+            border: '1.5px solid var(--warning)',
+            boxShadow: '0 8px 24px -6px rgba(245, 158, 11, 0.25)'
+          }}
+        >
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div
+              className="w-11 h-11 rounded-2xl grid place-items-center shrink-0 shadow-md"
+              style={{
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: '#fff'
+              }}
+            >
+              <Rocket className="w-5 h-5 animate-bounce" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[13.5px] font-black text-white">
+                  تحديث جديد متاح للبرنامج: v{updateInfo.latestVersion}
+                </span>
+                <span className="badge badge-warning text-[10px] font-extrabold px-2 py-0.5 animate-pulse">
+                  جديد على GitHub
+                </span>
+                {updateInfo.assetSizeMB && (
+                  <span className="text-[10.5px] font-mono font-bold text-amber-300 opacity-90">
+                    ({updateInfo.assetSizeMB} MB)
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] dim mt-0.5 leading-relaxed text-slate-300">
+                تم نشر إصدار جديد على GitHub يتضمن تحسينات فورية وميزات متطورة. اضغط على زر تحديث ليتم التحديث والتثبيت تلقائياً بالكامل.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            {isDownloadingUpdate ? (
+              <div className="flex flex-col gap-1.5 min-w-[210px]">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    جاري التحديث تلقائياً...
+                  </span>
+                  <span className="font-mono font-black text-amber-300">
+                    {updateProgress?.percent || 0}%
+                  </span>
+                </div>
+                <div className="h-2.5 w-full rounded-full overflow-hidden bg-slate-800 border border-amber-500/30 p-[1px]">
+                  <div
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.max(updateProgress?.percent || 3, 3)}%`,
+                      background: 'linear-gradient(90deg, #f59e0b 0%, #10b981 100%)'
+                    }}
+                  />
+                </div>
+                {updateProgress?.speedMBs && (
+                  <span className="text-[10px] font-mono dim text-end">
+                    {updateProgress.transferredMB || '0'} / {updateProgress.totalMB || updateInfo.assetSizeMB || '0'} MB • {updateProgress.speedMBs} MB/s
+                  </span>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onStartUpdate && onStartUpdate(updateInfo.downloadUrl)}
+                className="btn font-black text-[12.5px] py-2.5 px-6 shadow-lg cursor-pointer flex items-center gap-2 hover:scale-[1.03] active:scale-[0.97] transition-all"
+                style={{
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  boxShadow: '0 4px 15px rgba(245, 158, 11, 0.4)'
+                }}
+              >
+                <Download className="w-4 h-4" />
+                <span>تحديث</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 2. Navigation Tabs */}
       <div className="page-tabs">
