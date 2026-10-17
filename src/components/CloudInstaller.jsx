@@ -15,7 +15,7 @@ export default function CloudInstaller() {
   const [statusText, setStatusText] = useState('جاهز للبدء');
   const [installPath, setInstallPath] = useState('C:\\Users\\samer\\AppData\\Local\\Programs\\AuraSync');
   const [errorText, setErrorText] = useState(null);
-  const [version, setVersion] = useState('1.7.82');
+  const [version, setVersion] = useState('1.7.83');
   const [isAutoUpdate, setIsAutoUpdate] = useState(false);
   const unsubscribeRef = useRef(null);
   const intervalRef = useRef(null);

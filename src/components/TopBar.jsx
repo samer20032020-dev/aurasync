@@ -47,7 +47,7 @@ export default function TopBar({
         {onOpenSearch && (
           <button
             onClick={onOpenSearch}
-            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full text-[10.5px] font-bold border transition-colors"
+            className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[11px] font-bold border transition-all duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] cursor-pointer"
             style={{
               borderColor: 'var(--border-color)',
               color: 'var(--text-muted)'
@@ -56,7 +56,7 @@ export default function TopBar({
           >
             <Search className="w-3.5 h-3.5" />
             {t('search.hint')}
-            <span className="font-mono opacity-60">Ctrl K</span>
+            <span className="font-mono text-[9.5px] px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08]">Ctrl K</span>
           </button>
         )}
 

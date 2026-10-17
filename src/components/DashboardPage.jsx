@@ -75,20 +75,32 @@ export default function DashboardPage({
   }
 
   return (
-    <div className="fade-in flex flex-col gap-4 max-w-5xl pb-12">
+    <div className="fade-in flex flex-col gap-5 max-w-5xl pb-12">
       {/* Hero status */}
-      <section className="surface p-6">
+      <section
+        className="surface p-6 overflow-hidden relative"
+        style={{
+          borderRadius: '22px',
+          border: `1px solid color-mix(in srgb, ${heroColor} 22%, var(--border-color))`,
+          background: `radial-gradient(ellipse at top right, color-mix(in srgb, ${heroColor} 8%, transparent) 0%, var(--bg-surface) 72%)`,
+          boxShadow: `0 8px 32px -10px color-mix(in srgb, ${heroColor} 14%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.05)`
+        }}
+      >
         <div className="flex flex-col md:flex-row md:items-center gap-5">
           <div
-            className="w-12 h-12 rounded-xl grid place-items-center shrink-0"
-            style={{ background: `color-mix(in srgb, ${heroColor} 12%, transparent)`, color: heroColor }}
+            className="w-13 h-13 rounded-2xl grid place-items-center shrink-0 shadow-sm transition-transform duration-300 hover:scale-105"
+            style={{
+              background: `linear-gradient(135deg, color-mix(in srgb, ${heroColor} 22%, transparent) 0%, color-mix(in srgb, ${heroColor} 8%, transparent) 100%)`,
+              border: `1px solid color-mix(in srgb, ${heroColor} 30%, transparent)`,
+              color: heroColor
+            }}
           >
-            <HeroIcon className={`w-5 h-5 ${heroSpin ? 'animate-spin' : ''}`} strokeWidth={2.2} />
+            <HeroIcon className={`w-6 h-6 ${heroSpin ? 'animate-spin' : ''}`} strokeWidth={2.2} />
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-[16px] font-extrabold tracking-tight">{heroTitle}</h2>
+              <h2 className="text-[17px] font-black tracking-tight">{heroTitle}</h2>
               {hasAccounts && (
                 <span className={`badge ${isMirror ? 'badge-warning' : 'badge-success'}`}>
                   {isMirror ? t('settings.modeMirrorTitle') : t('settings.modeSafeTitle')}
@@ -96,54 +108,49 @@ export default function DashboardPage({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-2.5 text-[11.5px] muted">
-              <span>
-                {t('stats.shortFolders')} <Num value={stats.totalFolders || 0} />
-              </span>
-              <Sep />
-              <span>
-                {t('stats.shortFiles')} <Num value={stats.syncedFiles || 0} />
-              </span>
-              <Sep />
-              <span>
-                {t('stats.shortSize')} <Num value={formatBytes(stats.totalBytes)} />
-              </span>
+            <div className="flex flex-wrap items-center gap-2 mt-3 text-[11.5px]">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] font-medium">
+                <span className="dim">{t('stats.shortFolders')}</span>
+                <Num value={stats.totalFolders || 0} />
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] font-medium">
+                <span className="dim">{t('stats.shortFiles')}</span>
+                <Num value={stats.syncedFiles || 0} />
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] font-medium">
+                <span className="dim">{t('stats.shortSize')}</span>
+                <Num value={formatBytes(stats.totalBytes)} />
+              </div>
               {!isMirror && (stats.preservedFiles || 0) > 0 && (
-                <>
-                  <Sep />
-                  <span style={{ color: 'var(--warning)' }}>
-                    {t('stats.shortPreserved')} <Num value={stats.preservedFiles} />
-                  </span>
-                </>
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 font-medium">
+                  <span>{t('stats.shortPreserved')}</span>
+                  <Num value={stats.preservedFiles} />
+                </div>
               )}
               {isMirror && (stats.deletedFiles || 0) > 0 && (
-                <>
-                  <Sep />
-                  <span style={{ color: 'var(--danger)' }}>
-                    {t('stats.shortDeleted')} <Num value={stats.deletedFiles} />
-                  </span>
-                </>
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-300 font-medium">
+                  <span>{t('stats.shortDeleted')}</span>
+                  <Num value={stats.deletedFiles} />
+                </div>
               )}
               {lastScan && (
-                <>
-                  <Sep />
-                  <span className="dim">
-                    {t('folders.lastScanLabel')} <span dir="ltr">{lastScan}</span>
-                  </span>
-                </>
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.02] border border-white/[0.05] text-[11px] dim font-medium">
+                  <span>{t('folders.lastScanLabel')}</span>
+                  <span dir="ltr">{lastScan}</span>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
             {!hasAccounts ? (
-              <button onClick={() => onNavigate('accounts')} className="btn btn-primary">
+              <button onClick={() => onNavigate('accounts')} className="btn btn-primary shadow-md">
                 <Cloud className="w-4 h-4" />
                 {t('dash.connectCloud')}
                 <ArrowUpRight className="w-3.5 h-3.5 rtl:-scale-x-100" />
               </button>
             ) : folders.length > 0 ? (
-              <button onClick={onAddFolder} className="btn btn-outline">
+              <button onClick={onAddFolder} className="btn btn-outline hover:scale-[1.02] transition-transform">
                 <Plus className="w-4 h-4" />
                 {t('dash.addFolder')}
               </button>
@@ -153,12 +160,15 @@ export default function DashboardPage({
       </section>
 
       {/* Folders */}
-      <section className="surface overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-5 py-3.5">
-          <h2 className="text-[13px] font-extrabold">{t('dash.foldersTitle')}</h2>
+      <section className="surface overflow-hidden flex flex-col" style={{ borderRadius: '22px' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-[14px] font-extrabold tracking-tight">{t('dash.foldersTitle')}</h2>
+            <span className="badge badge-accent font-mono text-[10px]">{folders.length}</span>
+          </div>
           <button
             onClick={() => onNavigate('files')}
-            className="btn btn-ghost h-7 px-2 text-[11px] accent-text"
+            className="btn btn-ghost h-7 px-2.5 text-[11.5px] accent-text hover:bg-[var(--accent-soft)] transition-colors rounded-lg"
           >
             {t('dash.viewAll')}
             <ArrowUpRight className="w-3.5 h-3.5 rtl:-scale-x-100" />
@@ -166,7 +176,7 @@ export default function DashboardPage({
         </div>
 
         {folders.length === 0 ? (
-          <div className="px-5 pb-7 pt-1 text-center flex flex-col items-center justify-center gap-3">
+          <div className="px-6 py-10 text-center flex flex-col items-center justify-center gap-3.5">
             <span className="text-xs dim">{t('dash.noFolders')}</span>
             <button onClick={onAddFolder} className="btn btn-primary h-8 text-[11.5px]">
               <Plus className="w-3.5 h-3.5" />
@@ -174,23 +184,29 @@ export default function DashboardPage({
             </button>
           </div>
         ) : (
-          <div className="px-5 pb-2">
-            {folders.map((folder, i) => {
+          <div className="p-3 flex flex-col gap-1">
+            {folders.map((folder) => {
               const isPaused = folder.is_paused === 1;
               const isBusy = syncingFolderId === folder.id;
               return (
                 <div
                   key={folder.id}
-                  className="flex items-center gap-3 py-3"
-                  style={{ borderTop: i > 0 ? '1px solid var(--border-color)' : 'none' }}
+                  className="flex items-center gap-3.5 py-3 px-3.5 rounded-xl transition-all duration-200 hover:bg-white/[0.028] group"
                 >
-                  <Folder
-                    className="w-[16px] h-[16px] shrink-0"
-                    style={{ color: isPaused ? 'var(--text-dim)' : 'var(--accent)' }}
-                  />
+                  <div
+                    className="w-8 h-8 rounded-xl grid place-items-center shrink-0 transition-colors"
+                    style={{
+                      background: isPaused ? 'rgba(148, 163, 184, 0.08)' : 'var(--accent-soft)',
+                      color: isPaused ? 'var(--text-dim)' : 'var(--accent)'
+                    }}
+                  >
+                    <Folder className="w-4 h-4" />
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2.5">
-                      <span className="text-[12.5px] font-bold truncate">{folder.name}</span>
+                      <span className="text-[13px] font-bold truncate group-hover:text-[var(--accent-hover)] transition-colors">
+                        {folder.name}
+                      </span>
                       <span
                         className="text-[10.5px] font-semibold shrink-0"
                         style={{ color: isPaused ? 'var(--warning)' : 'var(--success)' }}
@@ -199,20 +215,20 @@ export default function DashboardPage({
                       </span>
                     </div>
                     <div
-                      className="text-[10.5px] dim font-mono truncate mt-0.5"
+                      className="text-[11px] dim font-mono truncate mt-0.5"
                       dir="ltr"
                       style={{ textAlign: 'start', unicodeBidi: 'plaintext' }}
                     >
                       {folder.path}
                     </div>
                   </div>
-                  <span className="text-[10.5px] dim shrink-0 hidden sm:block font-mono" dir="ltr">
+                  <span className="text-[11px] dim shrink-0 hidden sm:block font-mono" dir="ltr">
                     {folder.synced_files || 0} / {folder.total_files || 0}
                   </span>
                   <button
                     onClick={() => onSyncFolder && onSyncFolder(folder.id)}
                     disabled={isPaused || isBusy || !hasAccounts}
-                    className="btn btn-ghost btn-icon shrink-0"
+                    className="btn btn-ghost btn-icon shrink-0 rounded-lg hover:bg-[var(--accent-soft)]"
                     title={t('folders.syncTip')}
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isBusy ? 'animate-spin' : ''}`} />
