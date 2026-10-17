@@ -293,27 +293,75 @@ class UpdaterEngine {
           });
 
           res.on('end', () => {
-            fileStream.end(async () => {
+            fileStream.on('close', async () => {
               this.isDownloading = false;
-              console.log(`[UpdaterEngine] Update downloaded to: ${targetPath}`);
-              try {
-                // Launch installer with --setup and --auto-update for zero-click automatic completion
-                const child = spawn(targetPath, ['--setup', '--auto-update'], {
-                  detached: true,
-                  stdio: 'ignore'
-                });
-                child.unref();
+              console.log(`[UpdaterEngine] Update downloaded and file descriptor fully closed at: ${targetPath}`);
 
-                // Cleanly quit app after 600ms
+              // Safety check: verify file size
+              try {
+                const stat = fs.statSync(targetPath);
+                if (stat.size < 1024 * 1024) {
+                  throw new Error(`Downloaded installer size too small (${stat.size} bytes)`);
+                }
+              } catch (statErr) {
+                try { fs.unlinkSync(targetPath); } catch (_) {}
+                return reject(statErr);
+              }
+
+              // Resilient launcher: retries gracefully while antivirus scanner releases its lock
+              const launchInstaller = async () => {
+                let lastError = null;
+                for (let attempt = 1; attempt <= 6; attempt++) {
+                  try {
+                    // Initial delay of 450ms allows Windows Defender to finish its signature scan on the newly closed .exe
+                    await new Promise((r) => setTimeout(r, attempt === 1 ? 450 : 600));
+
+                    // Use Windows Shell via cmd.exe start to handle elevation and sharing locks smoothly
+                    const child = spawn('cmd.exe', ['/c', 'start', '""', targetPath, '--setup', '--auto-update'], {
+                      detached: true,
+                      stdio: 'ignore',
+                      windowsHide: true
+                    });
+                    child.unref();
+
+                    console.log(`[UpdaterEngine] Installer process spawned successfully via Shell on attempt ${attempt}`);
+                    return true;
+                  } catch (err) {
+                    lastError = err;
+                    console.warn(`[UpdaterEngine] Launch attempt ${attempt} returned: ${err.message}`);
+                  }
+                }
+
+                // If cmd.exe start had an issue, fallback to direct spawn
+                try {
+                  const directChild = spawn(targetPath, ['--setup', '--auto-update'], {
+                    detached: true,
+                    stdio: 'ignore'
+                  });
+                  directChild.unref();
+                  return true;
+                } catch (directErr) {
+                  throw lastError || directErr;
+                }
+              };
+
+              try {
+                await launchInstaller();
+
+                // Cleanly quit app after 800ms so the setup installer can update files in place
                 setTimeout(() => {
                   try { app.isQuitting = true; } catch (_) {}
                   app.quit();
-                }, 600);
+                }, 800);
+
                 resolve({ success: true, targetPath });
               } catch (launchErr) {
+                console.error('[UpdaterEngine] Fatal installer launch error:', launchErr.message);
                 reject(launchErr);
               }
             });
+
+            fileStream.end();
           });
         }).on('error', (err) => {
           fileStream.close();
