@@ -1,6 +1,6 @@
 {
   "name": "cloudvault-backup",
-  "version": "1.7.83",
+  "version": "1.7.84",
   "description": "AuraSync — Secure Multi-Cloud Desktop Backup with Zero-Deletion Policy",
   "author": "AuraSync",
   "main": "electron/main.js",

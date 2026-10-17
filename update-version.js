@@ -119,4 +119,16 @@ testContent = testContent.replace(/Full Browser Lock Engine.*?\(v.*?\)/g, `Full 
 fs.writeFileSync(testPath, testContent, 'utf8');
 console.log('Updated scripts/test-suite.js');
 
+// 11. version.json (Fast CDN release manifest for zero-rate-limit client updates)
+const versionJsonPath = path.join(rootDir, 'version.json');
+const versionJsonContent = {
+  version: targetVersion,
+  name: `AuraSync v${targetVersion}`,
+  updated_at: new Date().toISOString(),
+  downloadUrl: `https://github.com/samer20032020-dev/aurasync/releases/download/v${targetVersion}/AuraSync-Setup-v${targetVersion}.exe`,
+  portableUrl: `https://github.com/samer20032020-dev/aurasync/releases/download/v${targetVersion}/AuraSync-Portable-v${targetVersion}.exe`
+};
+fs.writeFileSync(versionJsonPath, JSON.stringify(versionJsonContent, null, 2) + '\n', 'utf8');
+console.log('Updated version.json');
+
 console.log(`\nSuccessfully synchronized all files to version ${targetVersion}!`);

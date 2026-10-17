@@ -83,7 +83,7 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [folderDeleteModal, setFolderDeleteModal] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState('1.7.83');
+  const [appVersion, setAppVersion] = useState('1.7.84');
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState([]);
@@ -175,6 +175,9 @@ export default function App() {
         setUpdateInfo(res);
         if (interactive) setShowUpdateModal(true);
         showToast(`يتوفر تحديث جديد: v${res.latestVersion}`, 'success');
+      } else if (res && res.success === false) {
+        setUpdateInfo(res);
+        if (interactive) showToast(`تعذر فحص التحديثات من الخادم: ${res.error || 'خطأ في الشبكة'}`, 'error');
       } else {
         setUpdateInfo(res);
         if (interactive) showToast('أنت تستخدم أحدث إصدار بالفعل!', 'success');
