@@ -1,10 +1,16 @@
 # AuraSync — Multi-Cloud Desktop Backup
 
-**v1.7.86** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
+**v1.7.87** — A lightweight, modern Desktop Backup application built with **Electron**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
 
 Supports **25+ famous clouds** through native integrations and standard protocols, with a built-in **transfer tool** (device ↔ cloud, cloud ↔ cloud).
 
 ---
+
+## ✨ What's new in 1.7.87
+
+* **Streamlined Single Update Indicator (توحيد إشعار التحديث في مكان واحد فقط)** — Removed duplicate and redundant update banners from the TopBar and top of the Sidebar. Kept strictly the clean, elegant amber badge on the Settings (الإعدادات) navigation item at the bottom of the sidebar.
+* **Ultra-Clean Distraction-Free UI (واجهة فائقة النقاء)** — The main dashboard, top bar, and primary navigation remain completely focused on files and sync activity without repetitive update notifications.
+* **100% Full-System Verification & Regression Suite** — All 327+ automated checks passed with zero errors.
 
 ## ✨ What's new in 1.7.86
 

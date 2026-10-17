@@ -11,8 +11,7 @@ import {
   HardDrive,
   ChevronLeft,
   ChevronRight,
-  Globe,
-  Sparkles
+  Globe
 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { formatBytes, formatPercent } from '../format';
@@ -24,7 +23,7 @@ export default function Sidebar({
   providers = [],
   stats,
   isSyncing,
-  version = '1.7.86',
+  version = '1.7.87',
   updateInfo = null,
   onOpenUpdate = null
 }) {
@@ -80,35 +79,6 @@ export default function Sidebar({
           </div>
         </div>
       </div>
-
-      {/* GitHub Update Notification Banner */}
-      {updateInfo?.updateAvailable && (
-        <div className="px-3 pb-3">
-          <button
-            type="button"
-            onClick={onOpenUpdate}
-            className="w-full p-2.5 rounded-xl flex items-center gap-2.5 text-start transition-all duration-300 relative overflow-hidden group border"
-            style={{
-              background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.18) 0%, rgba(59, 130, 246, 0.15) 100%)',
-              borderColor: 'rgba(6, 182, 212, 0.45)',
-              boxShadow: '0 4px 16px rgba(6, 182, 212, 0.2)'
-            }}
-          >
-            <div className="w-7 h-7 rounded-lg bg-cyan-500/25 text-cyan-400 flex items-center justify-center shrink-0">
-              <Sparkles className="w-4 h-4 text-cyan-300 animate-pulse" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[11.5px] font-black text-cyan-200 leading-tight flex items-center gap-1">
-                <span>تحديث متوفر!</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
-              </div>
-              <div className="text-[10px] text-cyan-400/80 font-mono truncate mt-0.5">
-                v{updateInfo.latestVersion} • اضغط هنا
-              </div>
-            </div>
-          </button>
-        </div>
-      )}
 
       {/* Primary Navigation */}
       <nav className="px-3 flex flex-col gap-1">

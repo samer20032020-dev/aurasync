@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.86', 'package.json version is 1.7.86', pkg.version);
+  assert(pkg.version === '1.7.87', 'package.json version is 1.7.87', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1527,8 +1527,8 @@ async function runTests() {
     'Settings page exposes exactCopyMode and archiveInstallerVersions UI switches'
   );
 
-  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.86) ---
-  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.86) ---');
+  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.87) ---
+  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.87) ---');
   browserGuardMod.setGuardMode('full');
   assert(browserGuardMod.getGuardMode() === 'full', 'BrowserGuard defaults strictly to Full Browser Lock mode');
   assert(browserGuardMod.setGuardMode('full').mode === 'full', 'BrowserGuard enforces full mode');
@@ -1701,6 +1701,9 @@ async function runTests() {
     sidebarSrc30.includes('updateInfo?.updateAvailable') && sidebarSrc30.includes('تحديث'),
     'Sidebar renders animated update badge on Settings navigation item'
   );
+  const topBarSrc30 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'TopBar.jsx'), 'utf8');
+  assert(!topBarSrc30.includes('updateInfo?.updateAvailable'), 'TopBar has no redundant update button');
+  assert(!sidebarSrc30.includes('تحديث متوفر!'), 'Sidebar has no duplicate top banner, keeping exclusively the clean badge next to Settings');
 
   const installerSrc30 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'CloudInstaller.jsx'), 'utf8');
   assert(
@@ -1742,7 +1745,7 @@ async function runTests() {
     'i18n.jsx contains full Arabic & English localizations for bulk preserved actions'
   );
 
-  assert(pkg.version === '1.7.86', 'package.json version matches 1.7.86');
+  assert(pkg.version === '1.7.87', 'package.json version matches 1.7.87');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);
