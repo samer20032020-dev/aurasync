@@ -5,130 +5,194 @@ const rootDir = __dirname;
 const pkgPath = path.join(rootDir, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 
-// Determine new version
-let currentVersion = pkg.version;
-let targetVersion = process.argv[2];
-
-if (!targetVersion) {
-  const parts = currentVersion.split('.').map(Number);
+function bumpPatch(ver) {
+  const parts = String(ver || '1.0.0').split('.').map(Number);
   parts[2] = (parts[2] || 0) + 1;
-  targetVersion = parts.join('.');
+  return parts.join('.');
 }
 
-console.log(`Bumping version: ${currentVersion} -> ${targetVersion}`);
+const args = process.argv.slice(2);
+const isMobileOnly = args.includes('--mobile') || args.includes('-m');
+const isDesktopOnly = args.includes('--desktop') || args.includes('-d');
+const explicitVersion = args.find((a) => /^\d+\.\d+\.\d+$/.test(a));
+
+let targetDesktop = pkg.version;
+let targetMobile = pkg.mobileVersion || '1.0.8';
+
+if (isMobileOnly) {
+  targetMobile = explicitVersion || bumpPatch(targetMobile);
+} else if (isDesktopOnly) {
+  targetDesktop = explicitVersion || bumpPatch(targetDesktop);
+} else if (args[0] && /^\d+\.\d+\.\d+$/.test(args[0])) {
+  targetDesktop = args[0];
+  if (args[1] && /^\d+\.\d+\.\d+$/.test(args[1])) {
+    targetMobile = args[1];
+  }
+} else {
+  targetDesktop = bumpPatch(targetDesktop);
+  targetMobile = bumpPatch(targetMobile);
+}
+
+const updateDesktop = !isMobileOnly;
+const updateMobile = !isDesktopOnly;
+
+console.log(`\n======================================================`);
+console.log(`🔄 AuraSync Independent Platform Version Manager`);
+console.log(`======================================================`);
+console.log(`Mode: ${isMobileOnly ? '📱 MOBILE ONLY' : isDesktopOnly ? '💻 DESKTOP ONLY' : '🌐 FULL CODEBASE'}`);
+console.log(`Target Desktop : ${targetDesktop} (${updateDesktop ? 'UPDATING' : 'UNCHANGED'})`);
+console.log(`Target Mobile  : ${targetMobile} (${updateMobile ? 'UPDATING' : 'UNCHANGED'})`);
+console.log(`======================================================\n`);
 
 // 1. package.json
-pkg.version = targetVersion;
+if (updateDesktop) pkg.version = targetDesktop;
+if (updateMobile) pkg.mobileVersion = targetMobile;
 fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
 console.log('Updated package.json');
 
 // 2. package-lock.json
-const lockPath = path.join(rootDir, 'package-lock.json');
-if (fs.existsSync(lockPath)) {
-  const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
-  lock.version = targetVersion;
-  if (lock.packages && lock.packages['']) {
-    lock.packages[''].version = targetVersion;
+if (updateDesktop) {
+  const lockPath = path.join(rootDir, 'package-lock.json');
+  if (fs.existsSync(lockPath)) {
+    const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    lock.version = targetDesktop;
+    if (lock.packages && lock.packages['']) {
+      lock.packages[''].version = targetDesktop;
+    }
+    fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n', 'utf8');
+    console.log('Updated package-lock.json');
   }
-  fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n', 'utf8');
-  console.log('Updated package-lock.json');
 }
 
 // 3. electron/main.js
-const mainPath = path.join(rootDir, 'electron', 'main.js');
-let mainContent = fs.readFileSync(mainPath, 'utf8');
-mainContent = mainContent.replace(
-  /ipcMain\.handle\('app:get-version',.*?return ['"](.*?)['"];/s,
-  (match) => match.replace(/return ['"].*?['"];/, `return '${targetVersion}';`)
-);
-fs.writeFileSync(mainPath, mainContent, 'utf8');
-console.log('Updated electron/main.js');
+if (updateDesktop) {
+  const mainPath = path.join(rootDir, 'electron', 'main.js');
+  let mainContent = fs.readFileSync(mainPath, 'utf8');
+  mainContent = mainContent.replace(
+    /ipcMain\.handle\('app:get-version',.*?return ['"](.*?)['"];/s,
+    (match) => match.replace(/return ['"].*?['"];/, `return '${targetDesktop}';`)
+  );
+  fs.writeFileSync(mainPath, mainContent, 'utf8');
+  console.log('Updated electron/main.js');
+}
 
 // 4. src/App.jsx
 const appPath = path.join(rootDir, 'src', 'App.jsx');
 let appContent = fs.readFileSync(appPath, 'utf8');
-appContent = appContent.replace(
-  /const \[appVersion, setAppVersion\] = useState\(['"].*?['"]\);/,
-  `const [appVersion, setAppVersion] = useState('${targetVersion}');`
-);
+if (updateDesktop) {
+  appContent = appContent.replace(
+    /const \[appVersion, setAppVersion\] = useState\(['"].*?['"]\);/,
+    `const [appVersion, setAppVersion] = useState('${targetDesktop}');`
+  );
+}
+if (updateMobile) {
+  appContent = appContent.replace(
+    /<MobileApp\s+version=['"].*?['"]/,
+    `<MobileApp\n            version="${targetMobile}"`
+  );
+}
 fs.writeFileSync(appPath, appContent, 'utf8');
 console.log('Updated src/App.jsx');
 
-// 5. src/components/Sidebar.jsx
-const sidebarPath = path.join(rootDir, 'src', 'components', 'Sidebar.jsx');
-let sidebarContent = fs.readFileSync(sidebarPath, 'utf8');
-sidebarContent = sidebarContent.replace(
-  /version = ['"].*?['"]/,
-  `version = '${targetVersion}'`
-);
-fs.writeFileSync(sidebarPath, sidebarContent, 'utf8');
-console.log('Updated src/components/Sidebar.jsx');
+// 5. Desktop components
+if (updateDesktop) {
+  const sidebarPath = path.join(rootDir, 'src', 'components', 'Sidebar.jsx');
+  let sidebarContent = fs.readFileSync(sidebarPath, 'utf8');
+  sidebarContent = sidebarContent.replace(/version = ['"].*?['"]/, `version = '${targetDesktop}'`);
+  fs.writeFileSync(sidebarPath, sidebarContent, 'utf8');
+  console.log('Updated src/components/Sidebar.jsx');
 
-// 6. src/components/SettingsPage.jsx
-const settingsPath = path.join(rootDir, 'src', 'components', 'SettingsPage.jsx');
-let settingsContent = fs.readFileSync(settingsPath, 'utf8');
-settingsContent = settingsContent.replace(
-  /appVersion = ['"].*?['"]/,
-  `appVersion = '${targetVersion}'`
-);
-fs.writeFileSync(settingsPath, settingsContent, 'utf8');
-console.log('Updated src/components/SettingsPage.jsx');
+  const settingsPath = path.join(rootDir, 'src', 'components', 'SettingsPage.jsx');
+  let settingsContent = fs.readFileSync(settingsPath, 'utf8');
+  settingsContent = settingsContent.replace(/appVersion = ['"].*?['"]/, `appVersion = '${targetDesktop}'`);
+  fs.writeFileSync(settingsPath, settingsContent, 'utf8');
+  console.log('Updated src/components/SettingsPage.jsx');
 
-// 7. src/components/CloudInstaller.jsx
-const installerPath = path.join(rootDir, 'src', 'components', 'CloudInstaller.jsx');
-let installerContent = fs.readFileSync(installerPath, 'utf8');
-installerContent = installerContent.replace(
-  /const \[version, setVersion\] = useState\(['"].*?['"]\);/,
-  `const [version, setVersion] = useState('${targetVersion}');`
-);
-fs.writeFileSync(installerPath, installerContent, 'utf8');
-console.log('Updated src/components/CloudInstaller.jsx');
+  const installerPath = path.join(rootDir, 'src', 'components', 'CloudInstaller.jsx');
+  let installerContent = fs.readFileSync(installerPath, 'utf8');
+  installerContent = installerContent.replace(
+    /const \[version, setVersion\] = useState\(['"].*?['"]\);/,
+    `const [version, setVersion] = useState('${targetDesktop}');`
+  );
+  fs.writeFileSync(installerPath, installerContent, 'utf8');
+  console.log('Updated src/components/CloudInstaller.jsx');
+}
 
-// 8. website/index.html
+// 6. Mobile Components
+if (updateMobile) {
+  const mobileAppPath = path.join(rootDir, 'src', 'components', 'mobile', 'MobileApp.jsx');
+  if (fs.existsSync(mobileAppPath)) {
+    let mobileAppContent = fs.readFileSync(mobileAppPath, 'utf8');
+    mobileAppContent = mobileAppContent.replace(/version = ['"].*?['"]/, `version = '${targetMobile}'`);
+    fs.writeFileSync(mobileAppPath, mobileAppContent, 'utf8');
+    console.log('Updated src/components/mobile/MobileApp.jsx');
+  }
+
+  const mobileSettingsPath = path.join(rootDir, 'src', 'components', 'mobile', 'MobileSettings.jsx');
+  if (fs.existsSync(mobileSettingsPath)) {
+    let mobileSettingsContent = fs.readFileSync(mobileSettingsPath, 'utf8');
+    mobileSettingsContent = mobileSettingsContent.replace(/version = ['"].*?['"]/, `version = '${targetMobile}'`);
+    fs.writeFileSync(mobileSettingsPath, mobileSettingsContent, 'utf8');
+    console.log('Updated src/components/mobile/MobileSettings.jsx');
+  }
+
+  const mobileHomePath = path.join(rootDir, 'src', 'components', 'mobile', 'MobileHome.jsx');
+  if (fs.existsSync(mobileHomePath)) {
+    let mobileHomeContent = fs.readFileSync(mobileHomePath, 'utf8');
+    mobileHomeContent = mobileHomeContent.replace(/version = ['"].*?['"]/, `version = '${targetMobile}'`);
+    fs.writeFileSync(mobileHomePath, mobileHomeContent, 'utf8');
+    console.log('Updated src/components/mobile/MobileHome.jsx');
+  }
+}
+
+// 7. website/index.html
 const webPath = path.join(rootDir, 'website', 'index.html');
 let webContent = fs.readFileSync(webPath, 'utf8');
-webContent = webContent.replace(/AuraSync <span class="v">v.*?<\/span>/g, `AuraSync <span class="v">v${targetVersion}</span>`);
-webContent = webContent.replace(/v1\.\d+\.\d+/g, `v${targetVersion}`);
-webContent = webContent.replace(/الإصدار 1\.\d+\.\d+/g, `الإصدار ${targetVersion}`);
+if (updateDesktop) {
+  webContent = webContent.replace(/id="navVersionBadge">v.*?<\/span>/g, `id="navVersionBadge">v${targetDesktop}</span>`);
+  webContent = webContent.replace(/AuraSync <span class="v">v.*?<\/span>/g, `AuraSync <span class="v">v${targetDesktop}</span>`);
+  webContent = webContent.replace(/v1\.7\.\d+/g, `v${targetDesktop}`);
+  webContent = webContent.replace(/الإصدار 1\.7\.\d+/g, `الإصدار ${targetDesktop}`);
+}
+if (updateMobile) {
+  webContent = webContent.replace(/AuraSync\.apk \(v.*?\)/g, `AuraSync.apk (v${targetMobile})`);
+}
 fs.writeFileSync(webPath, webContent, 'utf8');
 console.log('Updated website/index.html');
 
-// 9. README.md
-const readmePath = path.join(rootDir, 'README.md');
-let readmeContent = fs.readFileSync(readmePath, 'utf8');
-readmeContent = readmeContent.replace(/\*\*v\d+\.\d+\.\d+\*\*/, `**v${targetVersion}**`);
-if (!readmeContent.includes(`## ✨ What's new in ${targetVersion}`)) {
-  const newSection = `## ✨ What's new in ${targetVersion}
-
-* **Streamlined Single Update Indicator (توحيد إشعار التحديث في مكان واحد فقط)** — Removed duplicate and redundant update banners from the TopBar and top of the Sidebar. Kept strictly the clean, elegant amber badge on the Settings (الإعدادات) navigation item at the bottom of the sidebar.
-* **Ultra-Clean Distraction-Free UI (واجهة فائقة النقاء)** — The main dashboard, top bar, and primary navigation remain completely focused on files and sync activity without repetitive update notifications.
-* **100% Full-System Verification & Regression Suite** — All 327+ automated checks passed with zero errors.
-
-`;
-  readmeContent = readmeContent.replace(/(## ✨ What's new in .*?\n)/, `${newSection}$1`);
+// 8. README.md (Desktop)
+if (updateDesktop) {
+  const readmePath = path.join(rootDir, 'README.md');
+  let readmeContent = fs.readFileSync(readmePath, 'utf8');
+  readmeContent = readmeContent.replace(/\*\*v\d+\.\d+\.\d+\*\*/, `**v${targetDesktop}**`);
+  fs.writeFileSync(readmePath, readmeContent, 'utf8');
+  console.log('Updated README.md');
 }
-fs.writeFileSync(readmePath, readmeContent, 'utf8');
-console.log('Updated README.md');
 
-// 10. scripts/test-suite.js
-const testPath = path.join(rootDir, 'scripts', 'test-suite.js');
-let testContent = fs.readFileSync(testPath, 'utf8');
-testContent = testContent.replace(/assert\(pkg\.version === '.*?', 'package\.json version is .*?',/g, `assert(pkg.version === '${targetVersion}', 'package.json version is ${targetVersion}',`);
-testContent = testContent.replace(/assert\(pkg\.version === '.*?', 'package\.json version matches .*?'\);/g, `assert(pkg.version === '${targetVersion}', 'package.json version matches ${targetVersion}');`);
-testContent = testContent.replace(/Full Browser Lock Engine.*?\(v.*?\)/g, `Full Browser Lock Engine & Clean Vault UI (v${targetVersion})`);
-fs.writeFileSync(testPath, testContent, 'utf8');
-console.log('Updated scripts/test-suite.js');
+// 9. scripts/test-suite.js (Desktop)
+if (updateDesktop) {
+  const testPath = path.join(rootDir, 'scripts', 'test-suite.js');
+  let testContent = fs.readFileSync(testPath, 'utf8');
+  testContent = testContent.replace(/assert\(pkg\.version === '.*?', 'package\.json version is .*?',/g, `assert(pkg.version === '${targetDesktop}', 'package.json version is ${targetDesktop}',`);
+  testContent = testContent.replace(/assert\(pkgJsonRaw\.version === '.*?', 'package\.json version matches .*?'\);/g, `assert(pkgJsonRaw.version === '${targetDesktop}', 'package.json version matches ${targetDesktop}');`);
+  fs.writeFileSync(testPath, testContent, 'utf8');
+  console.log('Updated scripts/test-suite.js');
+}
 
-// 11. version.json (Fast CDN release manifest for zero-rate-limit client updates)
+// 10. version.json (Fast CDN release manifest)
 const versionJsonPath = path.join(rootDir, 'version.json');
 const versionJsonContent = {
-  version: targetVersion,
-  name: `AuraSync v${targetVersion}`,
+  version: targetDesktop,
+  desktopVersion: targetDesktop,
+  mobileVersion: targetMobile,
+  independentPlatforms: true,
+  name: `AuraSync Desktop v${targetDesktop} / Mobile v${targetMobile}`,
   updated_at: new Date().toISOString(),
-  downloadUrl: `https://github.com/samer20032020-dev/aurasync/releases/download/v${targetVersion}/AuraSync-Setup-v${targetVersion}.exe`,
-  portableUrl: `https://github.com/samer20032020-dev/aurasync/releases/download/v${targetVersion}/AuraSync-Portable-v${targetVersion}.exe`
+  downloadUrl: `https://github.com/samer20032020-dev/aurasync/releases/download/v${targetDesktop}/AuraSync-Setup-v${targetDesktop}.exe`,
+  portableUrl: `https://github.com/samer20032020-dev/aurasync/releases/download/v${targetDesktop}/AuraSync-Portable-v${targetDesktop}.exe`,
+  apkUrl: `https://github.com/samer20032020-dev/aurasync/releases/download/v${targetMobile}/AuraSync-v${targetMobile}.apk`
 };
 fs.writeFileSync(versionJsonPath, JSON.stringify(versionJsonContent, null, 2) + '\n', 'utf8');
 console.log('Updated version.json');
 
-console.log(`\nSuccessfully synchronized all files to version ${targetVersion}!`);
+console.log(`\n🎉 Platform sync complete: Desktop = ${targetDesktop}, Mobile = ${targetMobile}!`);

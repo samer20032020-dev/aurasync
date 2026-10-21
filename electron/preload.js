@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   disconnectProvider: (providerId) => ipcRenderer.invoke('providers:disconnect', providerId),
   listProviderFolder: (providerId, folderId) => ipcRenderer.invoke('providers:list-folder', providerId, folderId),
   getProviderRoot: (providerId) => ipcRenderer.invoke('providers:get-root', providerId),
+  ensureMobileFolder: (providerId) => ipcRenderer.invoke('cloud:ensure-mobile-folder', providerId),
 
   // Transfers
   startTransfer: (payload) => ipcRenderer.invoke('transfers:start', payload),
@@ -62,12 +63,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteFileBoth: (filePath) => ipcRenderer.invoke('files:delete-both', filePath),
   purgeFile: (filePath) => ipcRenderer.invoke('files:purge', filePath),
   purgeAllPreserved: () => ipcRenderer.invoke('files:purge-all'),
-  restoreAllPreserved: (options) => ipcRenderer.invoke('files:restore-all-preserved', options),
   onPurgeProgress: (callback) => {
     const subscription = (event, data) => callback(data);
     ipcRenderer.on('files:purge-progress', subscription);
     return () => ipcRenderer.removeListener('files:purge-progress', subscription);
   },
+  restoreAllPreserved: (folderId) => ipcRenderer.invoke('files:restore-all-preserved', folderId),
   onRestoreProgress: (callback) => {
     const subscription = (event, data) => callback(data);
     ipcRenderer.on('files:restore-progress', subscription);

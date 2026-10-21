@@ -830,7 +830,7 @@ function setupIpcHandlers() {
     try {
       return app.getVersion();
     } catch (_) {
-      return '1.7.87';
+      return '1.7.96';
     }
   });
 
@@ -1225,9 +1225,25 @@ function setupIpcHandlers() {
         return { success: false, error: 'This account type does not require a browser login' };
       }
       const result = await provider.startOAuthFlow();
+      if (result && result.success && typeof provider.ensureMobileFolder === 'function') {
+        provider.ensureMobileFolder().catch(() => {});
+      }
       syncEngine.processQueue();
       syncEngine.scanAllFolders().catch(() => {});
       return result;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('cloud:ensure-mobile-folder', async (event, providerId = 'google') => {
+    try {
+      const provider = cloudProviders.getProvider(providerId);
+      if (!provider || typeof provider.ensureMobileFolder !== 'function') {
+        return { success: false, error: 'Provider does not support mobile folders' };
+      }
+      const folderId = await provider.ensureMobileFolder();
+      return { success: true, folderId };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -2653,6 +2669,7 @@ app.whenReady().then(async () => {
 
   // Deactivate and clean up Windows Explorer vault context menu
   try {
+    contextMenu.cleanLegacyVaultKeys();
     contextMenu.unregister().catch(() => {});
     db.setSetting('context_menu_enabled', 'false');
   } catch (_) {}
@@ -2681,26 +2698,21 @@ app.whenReady().then(async () => {
   let lastUpdateCheckTime = 0;
   const triggerBackgroundUpdateCheck = async () => {
     const now = Date.now();
-    if (now - lastUpdateCheckTime < 25000) return; // Debounce 25s
+    if (now - lastUpdateCheckTime < 60000) return; // Debounce 60s
     lastUpdateCheckTime = now;
     try {
       if (mainWindow && !mainWindow.isDestroyed() && !isSetupMode) {
         const res = await updaterEngine.checkForUpdates();
-        if (res && res.updateAvailable && mainWindow && !mainWindow.isDestroyed()) {
+        // Only send if it's an actual desktop update and not mobile-only
+        if (res && res.updateAvailable && !res.isMobileRelease && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('updater:update-available', res);
         }
       }
     } catch (_) {}
   };
 
-  setTimeout(triggerBackgroundUpdateCheck, 3000);
-
-  if (mainWindow) {
-    mainWindow.on('focus', triggerBackgroundUpdateCheck);
-  }
-
-  // Periodic background check every 3 minutes (instead of 30 minutes)
-  setInterval(triggerBackgroundUpdateCheck, 3 * 60 * 1000);
+  // Check quietly once in background 20 seconds after launch (never on window focus)
+  setTimeout(triggerBackgroundUpdateCheck, 20000);
 });
 
 app.on('activate', () => {

@@ -55,6 +55,10 @@ export const translations = {
     'header.syncNow': 'مزامنة الآن',
     'header.syncing': 'جاري المزامنة...',
     'header.syncTitle': 'مزامنة وفحص جميع المجلدات المراقبة الآن',
+    'topbar.syncNow': 'مزامنة الآن',
+    'topbar.syncing': 'جاري المزامنة...',
+    'topbar.speedTip': 'سرعة الرفع الحالية',
+    'topbar.mobileView': '📱 نسخة الهاتف',
     'header.settingsTitle': 'الإعدادات وتغيير الثيم والسلوك',
     'header.logoutTitle': 'تسجيل الخروج من Google Drive',
     'header.connectDrive': 'ربط حساب Google Drive',
@@ -743,6 +747,10 @@ export const translations = {
     'header.syncNow': 'Sync now',
     'header.syncing': 'Syncing...',
     'header.syncTitle': 'Sync and scan all watched folders now',
+    'topbar.syncNow': 'Sync now',
+    'topbar.syncing': 'Syncing...',
+    'topbar.speedTip': 'Current upload speed',
+    'topbar.mobileView': '📱 Mobile App',
     'header.settingsTitle': 'Settings, theme and behavior',
     'header.logoutTitle': 'Log out from Google Drive',
     'header.connectDrive': 'Connect Google Drive',
@@ -1407,4 +1415,9 @@ export function I18nProvider({ lang = 'ar', children }) {
 
 export function useI18n() {
   return useContext(I18nContext);
+}
+
+export function useTranslation() {
+  const { lang, t } = useContext(I18nContext);
+  return { t, language: lang };
 }

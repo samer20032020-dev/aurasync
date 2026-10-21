@@ -28,7 +28,8 @@ export default function TopBar({
   uploadSpeed = 0,
   onOpenSearch,
   updateInfo = null,
-  onOpenUpdate = null
+  onOpenUpdate = null,
+  onToggleMobileMode = null
 }) {
   const { t } = useI18n();
   const keys = PAGE_KEYS[page] || PAGE_KEYS.dashboard;
@@ -57,6 +58,21 @@ export default function TopBar({
             <Search className="w-3.5 h-3.5" />
             {t('search.hint')}
             <span className="font-mono text-[9.5px] px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08]">Ctrl K</span>
+          </button>
+        )}
+
+        {onToggleMobileMode && (
+          <button
+            onClick={onToggleMobileMode}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all duration-200 hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400 cursor-pointer shadow-sm"
+            style={{
+              borderColor: 'var(--border-color)',
+              color: 'var(--text-muted)'
+            }}
+            title="AuraSync Mobile Edition"
+          >
+            <span>📱</span>
+            <span>{t('topbar.mobileView')}</span>
           </button>
         )}
 

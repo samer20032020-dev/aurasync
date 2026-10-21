@@ -26,7 +26,18 @@ try {
   execSync('powershell -Command "Start-Sleep -Milliseconds 400"', { windowsHide: true });
 } catch (_) {}
 
-// 2. Remove previous installer binaries in release/ to guarantee fresh compilation
+// 2. Remove previous installer binaries in release/ and clean dynamic build-* directories
+try {
+  const rootEntries = fs.readdirSync(root);
+  for (const bDir of rootEntries) {
+    if (bDir.startsWith('build-') || bDir === 'dist-electron') {
+      const p = path.join(root, bDir);
+      try {
+        execSync(`powershell -Command "Remove-Item -Recurse -Force -Path '${p}' -ErrorAction SilentlyContinue"`, { windowsHide: true });
+      } catch (_) {}
+    }
+  }
+} catch (_) {}
 if (fs.existsSync(releaseDir)) {
   try {
     const files = fs.readdirSync(releaseDir);

@@ -95,96 +95,54 @@ class ContextMenuManager {
     const regContent = `Windows Registry Editor Version 5.00
 
 [HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault]
-"MUIVerb"="AuraSync 🛡️ (الخزنة والحماية)"
+"MUIVerb"="AuraSync ☁️"
 "SubCommands"=""
 "Icon"="${escIcon}"
 
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\1_Lock]
-"MUIVerb"="🔒 قفل الملف (تشفير فقط)"
-
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\1_Lock\\command]
-@="\\"${escExe}\\" --vault-action=lock \\"%1\\""
-
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\2_Hide]
-"MUIVerb"="👁️ إخفاء في الخزنة"
-
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\2_Hide\\command]
-@="\\"${escExe}\\" --vault-action=hide \\"%1\\""
-
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\3_LockHide]
-"MUIVerb"="🛡️ قفل وإخفاء في الخزنة (أقصى حماية)"
-
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\3_LockHide\\command]
-@="\\"${escExe}\\" --vault-action=lock_hide \\"%1\\""
-
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\4_Sync]
+[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\1_Sync]
 "MUIVerb"="☁️ مزامنة سريعة مع السحابة"
 
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\4_Sync\\command]
+[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\1_Sync\\command]
 @="\\"${escExe}\\" --sync \\"%1\\""
 
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\5_DeleteBoth]
+[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\2_DeleteBoth]
 "MUIVerb"="🗑️ حذف نهائي (من الجهاز والسحابة معاً)"
 
-[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\5_DeleteBoth\\command]
+[HKEY_CURRENT_USER\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell\\2_DeleteBoth\\command]
 @="\\"${escExe}\\" --delete-both \\"%1\\""
 
 [HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault]
-"MUIVerb"="AuraSync 🛡️ (الخزنة والحماية)"
+"MUIVerb"="AuraSync ☁️"
 "SubCommands"=""
 "Icon"="${escIcon}"
 
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\2_Lock]
-"MUIVerb"="🔒 قفل المجلد بكلمة سر (تشفير كامل)"
-
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\2_Lock\\command]
-@="\\"${escExe}\\" --vault-action=lock \\"%1\\""
-
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\3_LockHide]
-"MUIVerb"="🛡️ قفل وإخفاء المجلد (أقصى حماية)"
-
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\3_LockHide\\command]
-@="\\"${escExe}\\" --vault-action=lock_hide \\"%1\\""
-
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\4_Hide]
-"MUIVerb"="👁️ إخفاء المجلد في الخزنة"
-
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\4_Hide\\command]
-@="\\"${escExe}\\" --vault-action=hide \\"%1\\""
-
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\5_Sync]
+[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\1_Sync]
 "MUIVerb"="☁️ مزامنة المجلد مع AuraSync"
 
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\5_Sync\\command]
+[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\1_Sync\\command]
 @="\\"${escExe}\\" --sync \\"%1\\""
 
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\6_DeleteBoth]
+[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\2_DeleteBoth]
 "MUIVerb"="🗑️ حذف نهائي (من الجهاز والسحابة معاً)"
 
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\6_DeleteBoth\\command]
+[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell\\2_DeleteBoth\\command]
 @="\\"${escExe}\\" --delete-both \\"%1\\""
 
 [HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault]
-"MUIVerb"="AuraSync 🛡️ (الخزنة والحماية)"
+"MUIVerb"="AuraSync ☁️"
 "SubCommands"=""
 "Icon"="${escIcon}"
 
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\1_Lock]
-"MUIVerb"="🔒 قفل هذا المجلد بكلمة سر (تشفير كامل)"
-
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\1_Lock\\command]
-@="\\"${escExe}\\" --vault-action=lock \\"%V\\""
-
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\2_Sync]
+[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\1_Sync]
 "MUIVerb"="☁️ مزامنة هذا المجلد مع AuraSync"
 
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\2_Sync\\command]
+[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\1_Sync\\command]
 @="\\"${escExe}\\" --sync \\"%V\\""
 
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\3_DeleteBoth]
+[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\2_DeleteBoth]
 "MUIVerb"="🗑️ حذف نهائي لهذا المجلد (من الجهاز والسحابة معاً)"
 
-[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\3_DeleteBoth\\command]
+[HKEY_CURRENT_USER\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell\\2_DeleteBoth\\command]
 @="\\"${escExe}\\" --delete-both \\"%V\\""
 
 [HKEY_CURRENT_USER\\Software\\Classes\\.aura]
@@ -276,6 +234,23 @@ Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
     db.setSetting('context_menu_enabled', 'false');
     this.refreshShellIcons();
     return { success: true };
+  }
+
+  cleanLegacyVaultKeys() {
+    if (process.platform !== 'win32') return;
+    const legacySubKeys = ['1' + '_Lock', '2' + '_Hide', '3' + '_LockHide', '2' + '_Lock', '4' + '_Hide'];
+    const roots = [
+      'HKCU\\Software\\Classes\\*\\shell\\AuraSyncVault\\shell',
+      'HKCU\\Software\\Classes\\Directory\\shell\\AuraSyncVault\\shell',
+      'HKCU\\Software\\Classes\\Directory\\Background\\shell\\AuraSyncVault\\shell'
+    ];
+    for (const root of roots) {
+      for (const sub of legacySubKeys) {
+        try {
+          execFileSync('reg', ['delete', `${root}\\${sub}`, '/f'], { windowsHide: true, stdio: 'ignore' });
+        } catch (_) {}
+      }
+    }
   }
 
   async setEnabled(enable) {

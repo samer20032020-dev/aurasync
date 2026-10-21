@@ -217,7 +217,7 @@ export default function SettingsPage({
   providers = [],
   folders = [],
   showToast,
-  appVersion = '1.7.87',
+  appVersion = '1.7.96',
   updateInfo = null,
   isDownloadingUpdate = false,
   updateProgress = null,
@@ -234,7 +234,7 @@ export default function SettingsPage({
   const connectedClouds = providers.filter((p) => p.connected);
   const hasConnectedCloud = connectedClouds.length > 0;
 
-  const [contextMenuEnabled, setContextMenuEnabled] = useState(true);
+  const [contextMenuEnabled, setContextMenuEnabled] = useState(false);
   const [showExtremeFormat, setShowExtremeFormat] = useState(false);
   const [showCustomPatterns, setShowCustomPatterns] = useState(false);
   const [showAdvancedFolders, setShowAdvancedFolders] = useState(false);
@@ -425,11 +425,11 @@ export default function SettingsPage({
       label: t('settings.themeDark'),
       sub: t('settings.themeDarkSub'),
       preview: {
-        base: '#12161f',
-        side: '#0c0f16',
-        line: 'rgba(233,237,244,0.4)',
-        soft: 'rgba(233,237,244,0.14)',
-        accentColor: '#5b8cff'
+        base: '#0a0a0a',
+        side: '#000000',
+        line: 'rgba(244,244,245,0.4)',
+        soft: 'rgba(244,244,245,0.12)',
+        accentColor: '#2563eb'
       }
     },
     {
@@ -437,11 +437,11 @@ export default function SettingsPage({
       label: t('settings.themeMidnight'),
       sub: t('settings.themeMidnightSub'),
       preview: {
-        base: '#0f131c',
-        side: '#080a10',
-        line: 'rgba(147,197,253,0.45)',
-        soft: 'rgba(147,197,253,0.16)',
-        accentColor: '#5ca8f5'
+        base: '#0d1b3f',
+        side: '#060c20',
+        line: 'rgba(147,197,253,0.5)',
+        soft: 'rgba(147,197,253,0.2)',
+        accentColor: '#3b82f6'
       }
     },
     {
@@ -509,7 +509,7 @@ export default function SettingsPage({
       </section>
 
       {/* 1-CLICK GITHUB AUTO-UPDATE CARD (مربع صغير داخل الإعدادات مكتوب عليه تحديث) */}
-      {updateInfo?.updateAvailable && (
+      {updateInfo?.updateAvailable && !updateInfo?.isMobileRelease && (
         <div
           className="p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl relative overflow-hidden transition-all animate-fade-in"
           style={{
@@ -935,22 +935,24 @@ export default function SettingsPage({
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-[13.5px] font-black text-white">
-                          {updateInfo?.updateAvailable ? `إصدار جديد متاح: v${updateInfo.latestVersion}` : 'أنت تستخدم أحدث إصدار رسمي'}
+                          {updateInfo?.updateAvailable && !updateInfo?.isMobileRelease ? `إصدار جديد متاح للكمبيوتر: v${updateInfo.latestVersion}` : 'أنت تستخدم أحدث إصدار رسمي للكمبيوتر'}
                         </span>
                         <span className="badge badge-accent font-mono text-[10px]">
                           v{appVersion}
                         </span>
                       </div>
                       <p className="text-[11px] dim mt-0.5 leading-relaxed">
-                        {updateInfo?.updateAvailable
+                        {updateInfo?.updateAvailable && !updateInfo?.isMobileRelease
                           ? 'يتضمن هذا الإصدار تحسينات للسرعة وقفل المتصفح الفوري وميزات متطورة.'
-                          : 'تطبيقك محصن ومحدث بأحدث قواعد الحماية والمزامنة السحابية.'}
+                          : updateInfo?.isMobileRelease
+                            ? 'نسخة الكمبيوتر محدثة بالكامل — التحديث الأخير مخصص لتطبيق الهاتف (Android APK).'
+                            : 'تطبيقك محصن ومحدث بأحدث قواعد الحماية والمزامنة السحابية.'}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {updateInfo?.updateAvailable ? (
+                    {updateInfo?.updateAvailable && !updateInfo?.isMobileRelease ? (
                       <button
                         type="button"
                         onClick={() => onStartUpdate && onStartUpdate(updateInfo.downloadUrl)}
@@ -1218,7 +1220,7 @@ export default function SettingsPage({
                   type="button"
                   onClick={onOpenDisasterRecovery}
                   disabled={!hasConnectedCloud}
-                  className="btn btn-primary font-bold text-[11.5px] shrink-0 flex items-center gap-2 shadow-md shadow-cyan-500/20"
+                  className="btn btn-primary font-bold text-[11.5px] shrink-0 flex items-center gap-2"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>{t('recovery.btnLaunch')}</span>

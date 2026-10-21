@@ -12,6 +12,7 @@ import QuickSearch from './components/QuickSearch';
 import CloudTitleBar from './components/CloudTitleBar';
 const CloudInstaller = lazy(() => import('./components/CloudInstaller'));
 const VaultPage = lazy(() => import('./components/VaultPage'));
+const MobileApp = lazy(() => import('./components/mobile/MobileApp'));
 import UpdateModal from './components/UpdateModal';
 import DisasterRecoveryModal from './components/DisasterRecoveryModal';
 import { I18nProvider, translate } from './i18n';
@@ -83,7 +84,7 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [folderDeleteModal, setFolderDeleteModal] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState('1.7.87');
+  const [appVersion, setAppVersion] = useState('1.7.96');
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState([]);
@@ -138,7 +139,9 @@ export default function App() {
     let unsubProgress;
     if (window.electronAPI.onUpdateAvailable) {
       unsubAvailable = window.electronAPI.onUpdateAvailable((info) => {
-        if (info) setUpdateInfo(info);
+        if (info && info.updateAvailable && !info.isMobileRelease) {
+          setUpdateInfo(info);
+        }
       });
     }
     if (window.electronAPI.onUpdateProgress) {
@@ -146,16 +149,16 @@ export default function App() {
         if (prog) setUpdateProgress(prog);
       });
     }
-    // Check GitHub releases quietly 4 seconds after launch
+    // Check GitHub releases quietly 15 seconds after launch (only for desktop)
     const t = setTimeout(() => {
       if (window.electronAPI?.checkForUpdates) {
         window.electronAPI.checkForUpdates().then((res) => {
-          if (res && res.updateAvailable) {
+          if (res && res.updateAvailable && !res.isMobileRelease) {
             setUpdateInfo(res);
           }
         }).catch(() => {});
       }
-    }, 4000);
+    }, 15000);
     return () => {
       clearTimeout(t);
       if (unsubAvailable) unsubAvailable();
@@ -171,16 +174,19 @@ export default function App() {
     try {
       if (interactive) showToast('جارٍ فحص التحديثات من GitHub...', 'info');
       const res = await window.electronAPI.checkForUpdates();
-      if (res && res.updateAvailable) {
+      if (res && res.updateAvailable && !res.isMobileRelease) {
         setUpdateInfo(res);
         if (interactive) setShowUpdateModal(true);
-        showToast(`يتوفر تحديث جديد: v${res.latestVersion}`, 'success');
+        showToast(`يتوفر تحديث جديد للكمبيوتر: v${res.latestVersion}`, 'success');
+      } else if (res && res.isMobileRelease) {
+        setUpdateInfo({ ...res, updateAvailable: false });
+        if (interactive) showToast('نسخة الكمبيوتر محدثة بالكامل (التحديث المنشور مخصص لتطبيق الهاتف فقط)', 'info');
       } else if (res && res.success === false) {
         setUpdateInfo(res);
         if (interactive) showToast(`تعذر فحص التحديثات من الخادم: ${res.error || 'خطأ في الشبكة'}`, 'error');
       } else {
         setUpdateInfo(res);
-        if (interactive) showToast('أنت تستخدم أحدث إصدار بالفعل!', 'success');
+        if (interactive) showToast('أنت تستخدم أحدث إصدار للكمبيوتر بالفعل!', 'success');
       }
       return res;
     } catch (err) {
@@ -835,9 +841,44 @@ export default function App() {
 
   const hasAccounts = providers.some((p) => p.connected);
 
+  const [isMobileMode, setIsMobileMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      if (window.AuraSyncAndroid) return true;
+      const stored = localStorage.getItem('aurasync_mobile_mode');
+      if (stored !== null) return stored === 'true';
+      return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
+    }
+    return false;
+  });
+
   const toastIcon = toast?.type === 'error' ? AlertCircle : toast?.type === 'success' ? CheckCircle2 : Info;
   const ToastIcon = toastIcon;
   const toastColor = toast?.type === 'error' ? 'var(--danger)' : toast?.type === 'success' ? 'var(--success)' : 'var(--accent)';
+
+  if (isMobileMode) {
+    return (
+      <I18nProvider lang={settings.language || 'ar'}>
+        <Suspense fallback={<div className="p-8 text-center text-white bg-black min-h-screen flex items-center justify-center">Loading AuraSync Mobile...</div>}>
+          <MobileApp
+            version={appVersion}
+            accounts={providers}
+            storage={{
+              google: providers.find((p) => p.id === 'google')?.storage,
+              onedrive: providers.find((p) => p.id === 'onedrive')?.storage
+            }}
+            stats={stats}
+            files={[]}
+            onTriggerSync={handleSyncAll}
+            onSwitchToDesktop={() => {
+              setIsMobileMode(false);
+              localStorage.setItem('aurasync_mobile_mode', 'false');
+            }}
+            isSyncing={isSyncing}
+          />
+        </Suspense>
+      </I18nProvider>
+    );
+  }
 
   return (
     <I18nProvider lang={settings.language || 'ar'}>
@@ -879,6 +920,10 @@ export default function App() {
                 onOpenSearch={() => setSearchOpen(true)}
                 updateInfo={updateInfo}
                 onOpenUpdate={() => setShowUpdateModal(true)}
+                onToggleMobileMode={() => {
+                  setIsMobileMode(true);
+                  try { localStorage.setItem('aurasync_mobile_mode', 'true'); } catch (_) {}
+                }}
               />
 
           <main

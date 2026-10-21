@@ -80,7 +80,12 @@ export default function RemoteCloudFolders({
       if (window.electronAPI?.listRemoteFolderFiles) {
         const res = await window.electronAPI.listRemoteFolderFiles(folder.provider, folder.id);
         if (res && res.success) {
-          setInspectFiles(res.files || []);
+          setInspectFiles(
+            (res.files || []).filter((f) => {
+              const n = (f.name || '').toLowerCase();
+              return n !== 'desktop.ini' && n !== 'thumbs.db' && n !== '.ds_store';
+            })
+          );
         } else {
           showToast?.(res?.error || t('remote.downloadFailed', { error: 'Unknown' }), 'error');
         }

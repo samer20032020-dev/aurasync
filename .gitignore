@@ -5,7 +5,9 @@ node_modules/
 dist/
 release/
 releases-archive/
+build-*/
 *.exe
+*.apk
 scratch/
 
 # Secrets & private data

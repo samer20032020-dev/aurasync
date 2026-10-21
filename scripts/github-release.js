@@ -56,11 +56,15 @@ function extractReleaseNotes(version) {
     const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
     const escaped = version.replace(/\./g, '\\.');
     const rx = new RegExp(
-      `##\\s+✨\\s+What['']s new in ${escaped}([\\s\\S]*?)(?=\\n##\\s+|$)`, 'i'
+      `##\\s+✨\\s+What['']s new in(?:\\s+mobile)?\\s+${escaped}([\\s\\S]*?)(?=\\n##\\s+|$)`, 'i'
     );
     const m = readme.match(rx);
     if (m && m[1]) return m[1].trim();
   } catch (_) {}
+  const isMobile = (version === PKG.mobileVersion) || version.startsWith('1.0.');
+  if (isMobile) {
+    return `### AuraSync Mobile v${version} (Android APK)\n\n* تحديثات تطبيق الهاتف للأندرويد وتحسينات المزامنة مع مجلد aurasync-mobile.\n* Dedicated mobile release with background gallery backup and biometric security.`;
+  }
   return `### AuraSync v${version}\n\n* تحديثات أمنية وتحسينات للأداء واستقرار المزامنة والسحابة.\n* Automatic multi-cloud desktop backup with zero-deletion policy.`;
 }
 
@@ -80,45 +84,67 @@ async function publishVersion(version, isHistorical = false) {
 
   // Find binaries for this version
   const assetsToUpload = [];
-  const candidateFiles = [
-    // release folder files
-    path.join(RELEASE_DIR, `AuraSync-Setup-v${version}.exe`),
-    path.join(RELEASE_DIR, `AuraSync-Portable-v${version}.exe`),
-    // releases-archive files
-    path.join(ARCHIVE_DIR, `AuraSync-Setup-v${version}.exe`),
-    path.join(ARCHIVE_DIR, `AuraSync-Portable-v${version}.exe`),
-    // root files
-    path.join(ROOT, `AuraSync-Setup-v${version}.exe`),
-    path.join(ROOT, `AuraSync-Portable-v${version}.exe`)
-  ];
+  const mobileVer = PKG.mobileVersion || '1.0.5';
+  const isMobileRelease = (version === mobileVer);
+  const candidateFiles = [];
 
-  // If this is current version, also check unversioned files in release/
-  if (version === CURRENT_VERSION) {
-    candidateFiles.unshift(
-      path.join(RELEASE_DIR, 'AuraSync-Setup.exe'),
-      path.join(RELEASE_DIR, 'AuraSync-Portable.exe'),
-      path.join(ROOT, 'AuraSync-Setup.exe'),
-      path.join(ROOT, 'AuraSync-Portable.exe')
+  if (isMobileRelease) {
+    candidateFiles.push(
+      path.join(RELEASE_DIR, 'mobile', `AuraSync-v${mobileVer}.apk`),
+      path.join(RELEASE_DIR, 'mobile', 'AuraSync.apk'),
+      path.join(RELEASE_DIR, `AuraSync-v${mobileVer}.apk`),
+      path.join(RELEASE_DIR, 'AuraSync.apk'),
+      path.join(ROOT, `AuraSync-v${mobileVer}.apk`),
+      path.join(ROOT, 'AuraSync.apk')
     );
+  } else {
+    // Desktop EXE assets
+    candidateFiles.push(
+      path.join(RELEASE_DIR, 'desktop', `AuraSync-Setup-v${version}.exe`),
+      path.join(RELEASE_DIR, 'desktop', `AuraSync-Portable-v${version}.exe`),
+      path.join(RELEASE_DIR, 'desktop', 'AuraSync-Setup.exe'),
+      path.join(RELEASE_DIR, 'desktop', 'AuraSync-Portable.exe'),
+      path.join(RELEASE_DIR, `AuraSync-Setup-v${version}.exe`),
+      path.join(RELEASE_DIR, `AuraSync-Portable-v${version}.exe`),
+      path.join(ARCHIVE_DIR, `AuraSync-Setup-v${version}.exe`),
+      path.join(ARCHIVE_DIR, `AuraSync-Portable-v${version}.exe`),
+      path.join(ROOT, `AuraSync-Setup-v${version}.exe`),
+      path.join(ROOT, `AuraSync-Portable-v${version}.exe`)
+    );
+    if (version === CURRENT_VERSION) {
+      candidateFiles.push(
+        path.join(RELEASE_DIR, 'AuraSync-Setup.exe'),
+        path.join(RELEASE_DIR, 'AuraSync-Portable.exe'),
+        path.join(ROOT, 'AuraSync-Setup.exe'),
+        path.join(ROOT, 'AuraSync-Portable.exe')
+      );
+    }
   }
 
   const seenNames = new Set();
   for (const f of candidateFiles) {
     if (fs.existsSync(f)) {
       const stat = fs.statSync(f);
-      if (stat.size > 50 * 1024 * 1024) { // Only valid electron bundles (> 50MB)
-        // Ensure the PE version matches the target version
-        try {
-          const peVer = execSync(`powershell -Command "(Get-Item '${f}').VersionInfo.ProductVersion"`, { encoding: 'utf8', windowsHide: true }).trim();
-          if (peVer && !peVer.startsWith(version)) {
-            console.warn(`⚠️ Skipping stale asset ${f} (PE version is ${peVer}, expected ${version})`);
-            continue;
-          }
-        } catch (_) {}
+      const isExe = f.endsWith('.exe');
+      const isApk = f.endsWith('.apk');
+
+      // Valid files: Electron bundles (> 50MB) or Android APK packages (> 100KB)
+      if ((isExe && stat.size > 50 * 1024 * 1024) || (isApk && stat.size > 100 * 1024)) {
+        if (isExe) {
+          // Ensure the PE version matches the target version
+          try {
+            const peVer = execSync(`powershell -Command "(Get-Item '${f}').VersionInfo.ProductVersion"`, { encoding: 'utf8', windowsHide: true }).trim();
+            if (peVer && !peVer.startsWith(version)) {
+              console.warn(`⚠️ Skipping stale asset ${f} (PE version is ${peVer}, expected ${version})`);
+              continue;
+            }
+          } catch (_) {}
+        }
 
         let uploadName = path.basename(f);
         if (uploadName === 'AuraSync-Setup.exe') uploadName = `AuraSync-Setup-v${version}.exe`;
         if (uploadName === 'AuraSync-Portable.exe') uploadName = `AuraSync-Portable-v${version}.exe`;
+        if (uploadName === 'AuraSync.apk') uploadName = `AuraSync-v${mobileVer}.apk`;
 
         if (!seenNames.has(uploadName)) {
           seenNames.add(uploadName);
@@ -221,7 +247,7 @@ function discoverVersions() {
       const files = fs.readdirSync(dir);
       for (const f of files) {
         const m = f.match(/v?(\d+\.\d+\.\d+)/);
-        if (m && /\.exe$/i.test(f)) {
+        if (m && /\.(exe|apk)$/i.test(f)) {
           versions.add(m[1]);
         }
       }
@@ -260,6 +286,15 @@ async function main() {
       await publishVersion(v, true);
     }
     console.log('\n🎉 All versions processed and archived on GitHub Releases!');
+  } else if (arg === '--mobile' || arg === '--mobile-only') {
+    const mobileVer = PKG.mobileVersion || '1.0.8';
+    console.log(`📱 Publishing ONLY Mobile Release v${mobileVer}...`);
+    await publishVersion(mobileVer, false);
+    console.log('\n🎉 Mobile release published to GitHub Releases!');
+  } else if (arg === '--desktop' || arg === '--desktop-only') {
+    console.log(`💻 Publishing ONLY Desktop Release v${CURRENT_VERSION}...`);
+    await publishVersion(CURRENT_VERSION, false);
+    console.log('\n🎉 Desktop release published to GitHub Releases!');
   } else if (arg && /^\d+\.\d+\.\d+$/.test(arg)) {
     await publishVersion(arg, arg !== CURRENT_VERSION);
   } else {

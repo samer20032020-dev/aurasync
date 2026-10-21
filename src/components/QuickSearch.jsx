@@ -39,7 +39,12 @@ export default function QuickSearch({ open, onClose, showToast }) {
       setLoading(true);
       try {
         const list = await window.electronAPI.getFiles({ search: q, limit: 40, offset: 0 });
-        setResults(list || []);
+        setResults(
+          (list || []).filter((f) => {
+            const n = (f.name || f.relative_path || '').split(/[/\\]/).pop().toLowerCase();
+            return n !== 'desktop.ini' && n !== 'thumbs.db' && n !== '.ds_store';
+          })
+        );
       } catch (_) {
         setResults([]);
       } finally {

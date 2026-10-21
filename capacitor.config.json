@@ -1,0 +1,22 @@
+{
+  "appId": "com.aurasync.mobile",
+  "appName": "AuraSync",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#000000",
+      "showSpinner": false
+    },
+    "App": {
+      "appUrlOpen": {
+        "url": "aurasync"
+      }
+    }
+  }
+}

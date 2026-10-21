@@ -1,24 +1,24 @@
 ---
 name: auto-version-bump
-description: Enforce automatic version bumping, full file synchronization, testing, and executable rebuilding after every modification in AuraSync
+description: Enforce independent automatic version bumping and isolated release pipelines for Desktop and Mobile platforms
 trigger: always_on
 ---
 
-# Automatic Version Bumping & Full Project Sync Rule
+# Independent Desktop & Mobile Version Bumping & Release Pipelines
 
 Whenever ANY modification is made in this project:
-1. Increment the version number (`x.y.z` ➔ `x.y.z+1`).
-2. Update all version occurrences:
-   - `package.json`
-   - `package-lock.json`
-   - `electron/main.js`
-   - `src/App.jsx`
-   - `src/components/Sidebar.jsx`
-   - `src/components/SettingsPage.jsx`
-   - `src/components/CloudInstaller.jsx`
-   - `website/index.html`
-   - `README.md`
-   - `scripts/test-suite.js`
-3. Run `npm run check` and `npm test` (100% pass required).
-4. Run `npm run dist` to produce updated `AuraSync-Setup.exe` and `AuraSync-Portable.exe` in root and `release/`.
-5. Run `node scripts/clean-release.js` which automatically invokes `node scripts/github-release.js`, publishing the new release and binaries with full release notes to GitHub Releases (`samer20032020-dev/aurasync`), and purging older local installer archives to permanently keep computer disk space 100% free.
+
+### 1. If Mobile files modified (`src/components/mobile/`, `src/mobile/`, `mobile/`):
+1. Run `node update-version.js --mobile` (bumps Mobile version only, e.g., `1.0.8` ➔ `1.0.9`).
+2. Run `npm run check`.
+3. Run `npm run dist:mobile` to build and publish only `AuraSync.apk` and `AuraSync-v1.0.x.apk` to GitHub Releases. Desktop builds are completely skipped.
+
+### 2. If Desktop files modified (`electron/`, desktop components):
+1. Run `node update-version.js --desktop` (bumps Desktop version only, e.g., `1.7.98` ➔ `1.7.99`).
+2. Run `npm run check` and `npm test` (100% pass required).
+3. Run `npm run dist:desktop` to build and publish only Windows executables (`AuraSync-Setup.exe` & `AuraSync-Portable.exe`) to GitHub Releases. Android APK builds are completely skipped.
+
+### 3. If both modified:
+1. Run `node update-version.js` to bump both.
+2. Run `npm run check` and `npm test`.
+3. Run `npm run dist` to build and publish both platforms.

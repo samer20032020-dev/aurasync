@@ -226,6 +226,8 @@ class OneDriveService {
     while (nextUrl) {
       const data = await this.graph(nextUrl);
       for (const it of data.value || []) {
+        const itemLower = (it.name || '').toLowerCase();
+        if (itemLower === 'desktop.ini' || itemLower === 'thumbs.db' || itemLower === '.ds_store') continue;
         children.push({
           id: it.id,
           name: it.name,
@@ -313,6 +315,23 @@ class OneDriveService {
     return this.ensureRootFolder();
   }
 
+  async ensureMobileFolder() {
+    if (this.mobileFolderId) return this.mobileFolderId;
+    try {
+      const MOBILE_NAME = 'aurasync-mobile';
+      const existing = await this.findChildByName(null, MOBILE_NAME);
+      if (existing) {
+        this.mobileFolderId = existing.id;
+        return this.mobileFolderId;
+      }
+      this.mobileFolderId = await this.ensureFolderAt(null, MOBILE_NAME);
+      return this.mobileFolderId;
+    } catch (err) {
+      console.warn('OneDrive ensureMobileFolder warning:', err.message);
+      return null;
+    }
+  }
+
   async getRootFolderId() {
     return this.ensureRootFolder();
   }
@@ -326,8 +345,13 @@ class OneDriveService {
     if (!this.isConnected()) throw new Error('OneDrive is not connected');
     if (!fs.existsSync(localPath)) throw new Error(`File does not exist: ${localPath}`);
 
-    const size = fileSize != null ? fileSize : fs.statSync(localPath).size;
     const name = fileName || path.basename(localPath);
+    const nameLower = (name || '').toLowerCase();
+    if (nameLower === 'desktop.ini' || nameLower === 'thumbs.db' || nameLower === '.ds_store') {
+      return { driveFileId: null, skipped: true };
+    }
+
+    const size = fileSize != null ? fileSize : fs.statSync(localPath).size;
 
     // Empty file: simple upload
     if (size === 0) {

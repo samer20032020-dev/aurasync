@@ -67,15 +67,29 @@ export default function CloudTitleBar({ stats, isSyncing, isMaximized: propIsMax
     >
       {/* Cloud App Identity */}
       <div className="flex items-center gap-2.5 window-no-drag">
-        <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-cyan-500/15 border border-cyan-400/35 text-cyan-400 shadow-sm shadow-cyan-500/25">
-          <Cloud className={`w-3.5 h-3.5 fill-cyan-400/20 ${isSyncing ? 'animate-bounce' : 'animate-pulse'}`} />
+        <div
+          className="flex items-center justify-center w-6 h-6 rounded-lg transition-all"
+          style={{
+            backgroundColor: 'var(--accent-soft)',
+            border: '1px solid var(--border-strong)',
+            color: 'var(--accent)'
+          }}
+        >
+          <Cloud className={`w-3.5 h-3.5 ${isSyncing ? 'animate-bounce' : ''}`} />
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[12.5px] font-extrabold tracking-wide text-slate-100">
+          <span className="text-[12.5px] font-extrabold tracking-wide" style={{ color: 'var(--text-main)' }}>
             AuraSync
           </span>
-          <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+          <span
+            className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-muted)',
+              border: '1px solid var(--border-color)'
+            }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)' }}></span>
             {isRtl ? 'سحابة ذكية' : 'Smart Cloud'}
           </span>
         </div>
@@ -89,7 +103,8 @@ export default function CloudTitleBar({ stats, isSyncing, isMaximized: propIsMax
         {/* Minimize */}
         <button
           onClick={handleMinimize}
-          className="w-8 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-white/10 active:scale-95 transition-all"
+          className="w-8 h-7 rounded-md flex items-center justify-center hover:bg-[var(--bg-surface-hover)] active:scale-95 transition-all"
+          style={{ color: 'var(--text-muted)' }}
           title={isRtl ? 'تصغير النافذة' : 'Minimize'}
           aria-label="Minimize"
         >
@@ -99,7 +114,8 @@ export default function CloudTitleBar({ stats, isSyncing, isMaximized: propIsMax
         {/* Maximize / Restore */}
         <button
           onClick={handleMaximize}
-          className="w-8 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-white/10 active:scale-95 transition-all"
+          className="w-8 h-7 rounded-md flex items-center justify-center hover:bg-[var(--bg-surface-hover)] active:scale-95 transition-all"
+          style={{ color: 'var(--text-muted)' }}
           title={isMaximized ? (isRtl ? 'استعادة الحجم' : 'Restore') : (isRtl ? 'تكبير النافذة' : 'Maximize')}
           aria-label="Maximize or Restore"
         >

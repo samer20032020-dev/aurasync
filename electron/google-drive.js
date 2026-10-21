@@ -402,6 +402,8 @@ class GoogleDriveService {
         includeItemsFromAllDrives: true
       });
       for (const f of res.data.files || []) {
+        const fn = (f.name || '').toLowerCase();
+        if (fn === 'desktop.ini') continue;
         items.push({
           id: f.id,
           name: f.name,
@@ -480,6 +482,42 @@ class GoogleDriveService {
     })();
 
     return this._ensureRootPromise;
+  }
+
+  async ensureMobileFolder() {
+    if (this.mobileFolderId) return this.mobileFolderId;
+    if (!this.drive) throw new Error('Google Drive API client not initialized');
+
+    try {
+      const MOBILE_NAME = 'aurasync-mobile';
+      const q = `mimeType = 'application/vnd.google-apps.folder' and name = '${MOBILE_NAME}' and trashed = false and 'root' in parents`;
+      const res = await this.drive.files.list({
+        q,
+        fields: 'files(id, name)',
+        spaces: 'drive',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
+      if (res.data.files && res.data.files.length > 0) {
+        this.mobileFolderId = res.data.files[0].id;
+        return this.mobileFolderId;
+      }
+      const createRes = await this.drive.files.create({
+        requestBody: {
+          name: MOBILE_NAME,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: ['root'],
+          description: 'AuraSync Mobile gallery & media cloud storage'
+        },
+        fields: 'id, name',
+        supportsAllDrives: true,
+      });
+      this.mobileFolderId = createRes.data.id;
+      return this.mobileFolderId;
+    } catch (err) {
+      console.warn('ensureMobileFolder warning:', err.message);
+      return null;
+    }
   }
 
   async deduplicateChildFolders(parentFolderId = null) {
@@ -666,6 +704,10 @@ class GoogleDriveService {
 
     const size = fileSize != null ? fileSize : fs.statSync(localPath).size;
     const resolvedName = fileName || path.basename(localPath);
+    const resolvedNameLower = (resolvedName || '').toLowerCase();
+    if (resolvedNameLower === 'desktop.ini') {
+      return { driveFileId: null, skipped: true };
+    }
 
     // Concurrency guard: serialize uploads for the exact same destination folder and file name
     // to prevent simultaneous uploads from creating duplicate files in Google Drive.

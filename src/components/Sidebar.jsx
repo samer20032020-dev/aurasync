@@ -23,7 +23,7 @@ export default function Sidebar({
   providers = [],
   stats,
   isSyncing,
-  version = '1.7.87',
+  version = '1.7.96',
   updateInfo = null,
   onOpenUpdate = null
 }) {
@@ -210,7 +210,7 @@ export default function Sidebar({
         >
           <Settings className="w-[17px] h-[17px] shrink-0" strokeWidth={2} />
           <span className="flex-1 truncate text-start">{t('nav.settings')}</span>
-          {updateInfo?.updateAvailable && (
+          {updateInfo?.updateAvailable && !updateInfo?.isMobileRelease && (
             <span
               className="badge text-[9.5px] px-2 py-0.5 font-black animate-pulse shrink-0"
               style={{

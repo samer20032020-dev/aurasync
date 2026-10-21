@@ -423,9 +423,11 @@ class SyncEngine {
       return false;
     }
 
+    const baseLower = base.toLowerCase();
+    if (baseLower === 'desktop.ini' || baseLower === 'thumbs.db' || baseLower === '.ds_store') return true;
     if (base.startsWith('.')) return true;
     if (BUILTIN_IGNORED_DIRS.has(base)) return true;
-    if (BUILTIN_IGNORED_FILES.has(base)) return true;
+    if (BUILTIN_IGNORED_FILES.has(base) || BUILTIN_IGNORED_FILES.has(baseLower)) return true;
     if (BUILTIN_IGNORED_EXTS.has(path.extname(fullPath).toLowerCase())) return true;
     const relativePath = path.relative(folderPath, fullPath);
     if (relativePath && this.isExcluded(relativePath)) return true;
@@ -973,11 +975,7 @@ class SyncEngine {
               driveFileId: m.drive_folder_id
             });
           }
-          try {
-            await this.processPendingCloudDeletions(watchedFolder.path);
-          } catch (cloudErr) {
-            console.warn('Cloud deletion warning (watchedFolder):', cloudErr.message);
-          }
+          await this.processPendingCloudDeletions(watchedFolder.path);
           // Unwatch and delete folder record + its file records from DB
           this.unwatchFolder(watchedFolder.id);
           db.removeFolder(watchedFolder.id);
@@ -1003,11 +1001,7 @@ class SyncEngine {
                     driveFileId: mirror.drive_file_id
                   });
                 }
-                try {
-                  await this.processPendingCloudDeletions(file.local_path);
-                } catch (cloudErr) {
-                  console.warn('Cloud deletion warning (subfile):', cloudErr.message);
-                }
+                await this.processPendingCloudDeletions(file.local_path);
                 db.deleteFileRecord(file.local_path);
               }
             }
@@ -1050,11 +1044,7 @@ class SyncEngine {
           driveFileId: m.drive_file_id
         });
       }
-      try {
-        await this.processPendingCloudDeletions(norm);
-      } catch (cloudErr) {
-        console.warn('Cloud deletion warning (file):', cloudErr.message);
-      }
+      await this.processPendingCloudDeletions(norm);
 
       // 2. Delete from Local disk (if present)
       if (fs.existsSync(norm)) {

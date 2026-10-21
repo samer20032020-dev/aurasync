@@ -510,6 +510,13 @@ function getRow(sql, params = []) {
   }
 }
 
+// Filter out system junk files like desktop.ini, Thumbs.db, .DS_Store
+function isJunkSystemFile(filePath) {
+  if (!filePath) return false;
+  const base = path.basename(filePath).toLowerCase();
+  return base === 'desktop.ini' || base === 'thumbs.db' || base === '.ds_store';
+}
+
 // Escape SQLite LIKE wildcards (%, _) and the escape char itself
 function escapeLike(value) {
   return String(value).replace(/[\\%_]/g, (c) => '\\' + c);
@@ -910,7 +917,7 @@ function getChildEntries(folderId, relativePrefix) {
 }
 
 function getFiles({ folderId = null, status = null, limit = 100, offset = 0, search = '' }) {
-  let query = 'SELECT * FROM files WHERE 1=1';
+  let query = "SELECT * FROM files WHERE 1=1 AND local_path NOT LIKE '%desktop.ini' AND relative_path NOT LIKE '%desktop.ini'";
   const params = [];
 
   if (folderId) {

@@ -90,7 +90,12 @@ export default function FilesPage({
         status: statusFilter || null,
         limit: 300
       });
-      setFlatFiles(data || []);
+      setFlatFiles(
+        (data || []).filter((f) => {
+          const n = (f.name || f.relative_path || '').split(/[/\\]/).pop().toLowerCase();
+          return n !== 'desktop.ini' && n !== 'thumbs.db' && n !== '.ds_store';
+        })
+      );
     } catch (e) {
       console.error('Error fetching files:', e);
     } finally {
@@ -109,7 +114,12 @@ export default function FilesPage({
         folders.map(async (folder) => [folder.id, await window.electronAPI.getFileTree(folder.id)])
       );
       const map = {};
-      for (const [id, entries] of results) map[id] = entries || [];
+      for (const [id, entries] of results) {
+        map[id] = (entries || []).filter((e) => {
+          const n = (e.name || '').toLowerCase();
+          return n !== 'desktop.ini' && n !== 'thumbs.db' && n !== '.ds_store';
+        });
+      }
       setTreeByFolder(map);
     } catch (e) {
       console.error('Error fetching file tree:', e);
@@ -123,7 +133,11 @@ export default function FilesPage({
     const key = `${folderId}:${relativePath}`;
     try {
       const entries = await window.electronAPI.getFileChildren(folderId, relativePath);
-      setChildrenByFolder((prev) => ({ ...prev, [key]: entries || [] }));
+      const filtered = (entries || []).filter((e) => {
+        const n = (e.name || '').toLowerCase();
+        return n !== 'desktop.ini' && n !== 'thumbs.db' && n !== '.ds_store';
+      });
+      setChildrenByFolder((prev) => ({ ...prev, [key]: filtered }));
     } catch (e) {
       console.error('Error fetching children:', e);
     }
@@ -763,26 +777,36 @@ export default function FilesPage({
 
       {/* Bulk Operation Live Progress Indicator */}
       {bulkBusy && bulkProgress && (
-        <div className="surface p-3.5 rounded-2xl border border-cyan-500/35 bg-cyan-950/20 shadow-lg flex flex-col gap-2">
+        <div
+          className="surface p-3.5 rounded-2xl border flex flex-col gap-2"
+          style={{
+            borderColor: 'var(--border-strong)',
+            backgroundColor: 'var(--bg-surface)'
+          }}
+        >
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-cyan-200 flex items-center gap-2">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+            <span className="font-bold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ color: 'var(--accent)' }} />
               {bulkAction === 'restoring' ? t('files.restoringProgress') : t('files.purgingProgress')}
             </span>
-            <span className="font-mono text-cyan-300 font-bold">
+            <span className="font-mono font-bold" style={{ color: 'var(--accent)' }}>
               {bulkProgress.done} / {bulkProgress.total}
             </span>
           </div>
-          <div className="w-full h-2 bg-cyan-950/60 rounded-full overflow-hidden border border-cyan-500/20">
+          <div
+            className="w-full h-2 rounded-full overflow-hidden"
+            style={{ backgroundColor: 'var(--bg-main)', border: '1px solid var(--border-color)' }}
+          >
             <div
-              className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-300"
+              className="h-full rounded-full transition-all duration-300"
               style={{
+                background: 'var(--accent-gradient)',
                 width: `${bulkProgress.total > 0 ? Math.min(100, Math.round((bulkProgress.done / bulkProgress.total) * 100)) : 0}%`
               }}
             />
           </div>
           {bulkProgress.name && (
-            <div className="text-[11px] font-mono text-cyan-300/80 truncate" dir="ltr">
+            <div className="text-[11px] font-mono truncate" dir="ltr" style={{ color: 'var(--text-muted)' }}>
               {bulkProgress.name}
             </div>
           )}

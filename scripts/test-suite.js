@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.87', 'package.json version is 1.7.87', pkg.version);
+  assert(pkg.version === '1.7.96', 'package.json version is 1.7.96', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -992,16 +992,16 @@ async function runTests() {
   );
   const contextMenuSrc = fs.readFileSync(path.join(rootDir, 'electron', 'context-menu.js'), 'utf8');
   assert(
-    contextMenuSrc.includes('AuraSyncVault') && contextMenuSrc.includes('1_Lock') && contextMenuSrc.includes('2_Hide') && contextMenuSrc.includes('3_LockHide'),
-    'Windows Explorer Context Menu engine is implemented with 3 distinct modes'
+    contextMenuSrc.includes('cleanLegacyVaultKeys'),
+    'Context menu manager implements complete cleanup of legacy vault and lock keys'
   );
   assert(
-    contextMenuSrc.includes('قفل المجلد بكلمة سر') && contextMenuSrc.includes('قفل وإخفاء المجلد'),
-    'Explorer context menu exposes folder lock and lock-and-hide actions'
+    !contextMenuSrc.includes('1_Lock') && !contextMenuSrc.includes('2_Hide') && !contextMenuSrc.includes('3_LockHide'),
+    'Context menu is clean and has hidden/removed all file locking and vault encryption actions'
   );
   assert(
-    contextMenuSrc.includes('.aura') && contextMenuSrc.includes('AuraSync.VaultFile') && contextMenuSrc.includes('--vault-open'),
-    '.aura file association and double-click unlock handler are registered in Windows registry'
+    contextMenuSrc.includes('AuraSync') && contextMenuSrc.includes('refreshShellIcons'),
+    'Explorer context menu is sanitized for clean cloud sync actions without vault'
   );
   const unlockHtml = path.join(rootDir, 'electron', 'unlock-dialog.html');
   const unlockHtmlSrc = fs.existsSync(unlockHtml) ? fs.readFileSync(unlockHtml, 'utf8') : '';
@@ -1095,7 +1095,7 @@ async function runTests() {
   );
   const updatedContextMenu = fs.readFileSync(path.join(rootDir, 'electron', 'context-menu.js'), 'utf8');
   assert(
-    updatedContextMenu.includes('5_DeleteBoth') && updatedContextMenu.includes('--delete-both'),
+    updatedContextMenu.includes('DeleteBoth') && updatedContextMenu.includes('--delete-both'),
     'Windows Context Menu includes 1-click option to delete from PC and Cloud simultaneously'
   );
   const filesPageLatestSrc = fs.readFileSync(path.join(rootDir, 'src', 'components', 'FilesPage.jsx'), 'utf8');
@@ -1527,8 +1527,8 @@ async function runTests() {
     'Settings page exposes exactCopyMode and archiveInstallerVersions UI switches'
   );
 
-  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.87) ---
-  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.87) ---');
+  // --- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.99) ---
+  console.log('\n--- 25. High-Performance Full Browser Lock Engine & Clean Vault UI (v1.7.99) ---');
   browserGuardMod.setGuardMode('full');
   assert(browserGuardMod.getGuardMode() === 'full', 'BrowserGuard defaults strictly to Full Browser Lock mode');
   assert(browserGuardMod.setGuardMode('full').mode === 'full', 'BrowserGuard enforces full mode');
@@ -1745,7 +1745,211 @@ async function runTests() {
     'i18n.jsx contains full Arabic & English localizations for bulk preserved actions'
   );
 
-  assert(pkg.version === '1.7.87', 'package.json version matches 1.7.87');
+  // Test: Pure Pitch Black Theme & Rich Midnight Navy Blue Theme (v1.7.88)
+  console.log('\n--- 32. Pure Pitch Black & Rich Midnight Navy Blue Themes (v1.7.88) ---');
+  const indexCssSrc32 = fs.readFileSync(path.join(rootDir, 'src', 'index.css'), 'utf8');
+  assert(
+    indexCssSrc32.includes('--bg-main: #000000;') &&
+    indexCssSrc32.includes('--bg-sidebar: #000000;') &&
+    indexCssSrc32.includes('--bg-surface: #0a0a0a;') &&
+    indexCssSrc32.includes('--accent: #2563eb;'),
+    'Pure pitch black theme (.theme-dark) uses true #000000 background and human software royal blue accent'
+  );
+  assert(
+    indexCssSrc32.includes('--bg-main: #08112b;') &&
+    indexCssSrc32.includes('--bg-surface: #0d1b3f;') &&
+    indexCssSrc32.includes('--accent: #3b82f6;'),
+    'Midnight theme (.theme-midnight) is enriched with deep sapphire navy blue tones'
+  );
+  assert(
+    indexCssSrc32.includes('--bg-main: #f6f7f9;') &&
+    indexCssSrc32.includes('--bg-sidebar: #ffffff;') &&
+    indexCssSrc32.includes('--bg-surface: #ffffff;'),
+    'Light theme (.theme-light) is preserved 100% untouched and pristine'
+  );
+
+  const titleBarSrc32 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'CloudTitleBar.jsx'), 'utf8');
+  assert(
+    titleBarSrc32.includes("backgroundColor: 'var(--accent-soft)'") &&
+    titleBarSrc32.includes("backgroundColor: 'var(--bg-surface)'"),
+    'CloudTitleBar seamlessly integrates with theme variables without artificial cyan tint'
+  );
+
+  const settingsSrc32 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'SettingsPage.jsx'), 'utf8');
+  assert(
+    settingsSrc32.includes("base: '#0a0a0a'") &&
+    settingsSrc32.includes("base: '#0d1b3f'"),
+    'SettingsPage preview swatches reflect pure pitch black and rich sapphire navy'
+  );
+
+  // Test: Windows Context Menu Vault/Lock Sanitization (v1.7.89)
+  console.log('\n--- 33. Windows Context Menu Vault/Lock Sanitization (v1.7.89) ---');
+  const cmSrc = fs.readFileSync(path.join(rootDir, 'electron', 'context-menu.js'), 'utf8');
+  assert(
+    !cmSrc.includes('الخزنة والحماية') && !cmSrc.includes('قفل الملف') && !cmSrc.includes('إخفاء في الخزنة'),
+    'Context menu is completely purged of all vault, file lock, and encryption references'
+  );
+  assert(
+    cmSrc.includes('cleanLegacyVaultKeys'),
+    'Context menu manager implements automatic cleanup of legacy vault registry keys'
+  );
+  const mainSrc33 = fs.readFileSync(path.join(rootDir, 'electron', 'main.js'), 'utf8');
+  assert(
+    mainSrc33.includes('contextMenu.cleanLegacyVaultKeys()'),
+    'electron/main.js invokes cleanLegacyVaultKeys upon startup'
+  );
+
+  // Test: Permanent desktop.ini & System Junk Filtering (v1.7.90)
+  console.log('\n--- 34. Permanent desktop.ini & OS System Junk Filtering (v1.7.90) ---');
+  const seInstance = require('../electron/sync-engine');
+  assert(seInstance.shouldIgnorePath('C:\\test', 'C:\\test\\desktop.ini') === true, 'shouldIgnorePath blocks desktop.ini');
+  assert(seInstance.shouldIgnorePath('C:\\test', 'C:\\test\\Desktop.ini') === true, 'shouldIgnorePath blocks Desktop.ini case-insensitively');
+  assert(seInstance.shouldIgnorePath('C:\\test', 'C:\\test\\DESKTOP.INI') === true, 'shouldIgnorePath blocks DESKTOP.INI uppercase');
+  assert(seInstance.shouldIgnorePath('C:\\test', 'C:\\test\\Thumbs.db') === true, 'shouldIgnorePath blocks Thumbs.db');
+  assert(seInstance.shouldIgnorePath('C:\\test', 'C:\\test\\.DS_Store') === true, 'shouldIgnorePath blocks .DS_Store');
+
+  const dbSrc34 = fs.readFileSync(path.join(rootDir, 'electron', 'database.js'), 'utf8');
+  assert(
+    dbSrc34.includes('isJunkSystemFile') &&
+    dbSrc34.includes("NOT LIKE '%desktop.ini'"),
+    'database.js filters desktop.ini and system junk from queries and insertions'
+  );
+
+  const gdriveSrc34 = fs.readFileSync(path.join(rootDir, 'electron', 'google-drive.js'), 'utf8');
+  assert(
+    gdriveSrc34.includes("fn === 'desktop.ini'") &&
+    gdriveSrc34.includes("resolvedNameLower === 'desktop.ini'"),
+    'google-drive.js filters desktop.ini from folder listings and blocks uploads'
+  );
+
+  const filesPageSrc34 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'FilesPage.jsx'), 'utf8');
+  assert(
+    filesPageSrc34.includes("n !== 'desktop.ini'"),
+    'FilesPage.jsx filters desktop.ini from tree and flat file listings'
+  );
+
+  const remoteSrc34 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'RemoteCloudFolders.jsx'), 'utf8');
+  assert(
+    remoteSrc34.includes("n !== 'desktop.ini'"),
+    'RemoteCloudFolders.jsx filters desktop.ini from remote folder inspection view'
+  );
+
+  // Test: Ultra-Premium Official Product Website & 3D Showcase Assets (v1.7.91)
+  console.log('\n--- 35. Ultra-Premium Official Product Website & 3D Showcase Assets (v1.7.91) ---');
+  const webHtml = fs.readFileSync(path.join(rootDir, 'website', 'index.html'), 'utf8');
+  assert(
+    webHtml.includes('hero-vault.jpg') &&
+    webHtml.includes('cloud-migration.jpg') &&
+    webHtml.includes('security-shield.jpg'),
+    'website/index.html integrates high-resolution 3D showcase artwork'
+  );
+  assert(
+    webHtml.includes('toggleLanguage') &&
+    webHtml.includes('Zero-Deletion') &&
+    webHtml.includes('comparison-table'),
+    'website/index.html includes dynamic bilingual toggle, Zero-Deletion showcase, and comparison matrix'
+  );
+  assert(
+    fs.existsSync(path.join(rootDir, 'website', 'assets', 'hero-vault.jpg')) &&
+    fs.existsSync(path.join(rootDir, 'website', 'assets', 'cloud-migration.jpg')) &&
+    fs.existsSync(path.join(rootDir, 'website', 'assets', 'security-shield.jpg')),
+    'All generated high-tech showcase images exist in website/assets/'
+  );
+
+  // Test: Enterprise Legal Footer, Privacy Modal & Zero-GitHub Decoupling (v1.7.92)
+  console.log('\n--- 36. Enterprise Legal Footer, Privacy Modal & Zero-GitHub Decoupling (v1.7.92) ---');
+  const webHtmlUpdated = fs.readFileSync(path.join(rootDir, 'website', 'index.html'), 'utf8');
+  assert(!webHtmlUpdated.includes('github.com'), 'website/index.html completely removes all GitHub links for public privacy');
+  assert(!webHtmlUpdated.includes('>GitHub<'), 'website/index.html has zero visible GitHub buttons');
+  assert(
+    webHtmlUpdated.includes('privacyModal') &&
+    webHtmlUpdated.includes('termsModal') &&
+    webHtmlUpdated.includes('securityModal'),
+    'website/index.html integrates comprehensive legal modals for Privacy Policy, Terms of Service, and Security'
+  );
+  assert(
+    webHtmlUpdated.includes('openLegalModal') &&
+    webHtmlUpdated.includes('closeLegalModalDirect'),
+    'website/index.html contains interactive legal modal handler functions'
+  );
+  assert(
+    webHtmlUpdated.includes('هل يؤثر البرنامج على سرعة الجهاز أو أداء الألعاب'),
+    'website/index.html FAQ replaces desktop.ini question with system performance and gaming FAQ'
+  );
+
+  // Test: AuraSync Mobile Edition for Android & iOS (v1.7.93)
+  console.log('\n--- 37. AuraSync Mobile Edition for Android & iOS (v1.7.93) ---');
+  assert(fs.existsSync(path.join(rootDir, 'capacitor.config.json')), 'Capacitor mobile configuration (capacitor.config.json) exists');
+  assert(fs.existsSync(path.join(rootDir, 'mobile', 'android', 'AndroidManifest.xml')), 'Android Manifest with full permissions exists');
+
+  const androidManifest = fs.readFileSync(path.join(rootDir, 'mobile', 'android', 'AndroidManifest.xml'), 'utf8');
+  assert(
+    androidManifest.includes('MANAGE_EXTERNAL_STORAGE') &&
+    androidManifest.includes('READ_MEDIA_IMAGES') &&
+    androidManifest.includes('READ_MEDIA_VIDEO') &&
+    androidManifest.includes('READ_MEDIA_AUDIO'),
+    'Android Manifest includes full media and all-files storage permissions'
+  );
+  assert(
+    androidManifest.includes('android.intent.action.SEND_MULTIPLE'),
+    'Android Manifest registers SEND_MULTIPLE intent filter for sharing hundreds of files'
+  );
+
+  assert(fs.existsSync(path.join(rootDir, 'src', 'components', 'mobile', 'MobileApp.jsx')), 'MobileApp master component exists');
+  assert(fs.existsSync(path.join(rootDir, 'src', 'components', 'mobile', 'MobileAutoBackup.jsx')), 'MobileAutoBackup component exists');
+  assert(fs.existsSync(path.join(rootDir, 'src', 'components', 'mobile', 'MobileShareReceiver.jsx')), 'MobileShareReceiver component exists');
+
+  const appSrc37 = fs.readFileSync(path.join(rootDir, 'src', 'App.jsx'), 'utf8');
+  assert(appSrc37.includes('MobileApp') && appSrc37.includes('isMobileMode'), 'App.jsx integrates mobile mode detection and rendering');
+
+  assert(fs.existsSync(path.join(rootDir, 'src', 'components', 'TopBar.jsx')), 'TopBar component exists');
+  const topBarSrc37 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'TopBar.jsx'), 'utf8');
+  assert(topBarSrc37.includes('onToggleMobileMode'), 'TopBar.jsx exposes mobile mode toggle button');
+
+  // Test: Native Android Mobile APK Packaging Engine (v1.7.95)
+  console.log('\n--- 38. Native Android Mobile APK Packaging Engine (v1.7.95) ---');
+  assert(fs.existsSync(path.join(rootDir, 'scripts', 'build-android-apk.js')), 'build-android-apk.js build script exists');
+  assert(fs.existsSync(path.join(rootDir, 'mobile', 'android', 'src', 'com', 'aurasync', 'mobile', 'MainActivity.java')), 'Native Android MainActivity.java exists');
+
+  const androidManifest38 = fs.readFileSync(path.join(rootDir, 'mobile', 'android', 'AndroidManifest.xml'), 'utf8');
+  assert(androidManifest38.includes('targetSdkVersion="34"'), 'AndroidManifest.xml targets Android 14/15 (SDK 34) eliminating legacy OS popups');
+
+  const mainActivityCode = fs.readFileSync(path.join(rootDir, 'mobile', 'android', 'src', 'com', 'aurasync', 'mobile', 'MainActivity.java'), 'utf8');
+  assert(mainActivityCode.includes('AuraSyncAndroid') && mainActivityCode.includes('ACTION_SEND_MULTIPLE'), 'MainActivity implements AuraSyncAndroid JS bridge & bulk share intent receiver');
+  assert(mainActivityCode.includes('candidates') && mainActivityCode.includes('setMixedContentMode'), 'MainActivity implements resilient asset fallback and mixed content modes');
+  assert(mainActivityCode.includes('return "text/html"') && mainActivityCode.includes('return "text/javascript"'), 'MainActivity uses standard W3C MIME types for WebView resource serving');
+  assert(mainActivityCode.includes('getEncoding') && mainActivityCode.includes('URLDecoder'), 'MainActivity provides clean encoding separation and URL decoding for assets');
+  assert(mainActivityCode.includes('vibrate') && mainActivityCode.includes('getStorageUsage'), 'MainActivity exposes native haptics and hardware storage inspection');
+  assert(androidManifest38.includes('android.permission.VIBRATE'), 'AndroidManifest.xml declares VIBRATE permission for tactile feedback');
+
+  const cleanReleaseCode = fs.readFileSync(path.join(rootDir, 'scripts', 'clean-release.js'), 'utf8');
+  assert(cleanReleaseCode.includes('build-android-apk.js'), 'clean-release.js automatically triggers build-android-apk.js');
+
+  const ghReleaseCode = fs.readFileSync(path.join(rootDir, 'scripts', 'github-release.js'), 'utf8');
+  assert(ghReleaseCode.includes('.apk') && ghReleaseCode.includes('AuraSync-v'), 'github-release.js supports uploading versioned .apk packages');
+
+  const webHtmlCode = fs.readFileSync(path.join(rootDir, 'website', 'index.html'), 'utf8');
+  assert(webHtmlCode.includes('AuraSync.apk'), 'website/index.html integrates AuraSync.apk download button');
+
+  const pkgJsonRaw = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+  assert(Boolean(pkgJsonRaw.scripts && pkgJsonRaw.scripts['build:android']), 'package.json includes build:android script');
+
+  // Test: Gallery Transfer to aurasync-mobile Cloud Folder (v1.7.96)
+  console.log('\n--- 39. Gallery Transfer to aurasync-mobile Cloud Folder (v1.7.96) ---');
+  const mobileEngineSrc = fs.readFileSync(path.join(rootDir, 'src', 'mobile', 'mobileEngine.js'), 'utf8');
+  assert(mobileEngineSrc.includes("AURASYNC_MOBILE_FOLDER = MOBILE_FOLDER_NAME") && mobileEngineSrc.includes("'aurasync-mobile'"), 'mobileEngine exports AURASYNC_MOBILE_FOLDER constant as aurasync-mobile');
+  assert(mobileEngineSrc.includes('receiveShareIntent') && mobileEngineSrc.includes('stagedShareFiles'), 'mobileEngine implements staged share files and intent receiver');
+  
+  const gDriveMobileSrc = fs.readFileSync(path.join(rootDir, 'electron', 'google-drive.js'), 'utf8');
+  assert(gDriveMobileSrc.includes("const MOBILE_NAME = 'aurasync-mobile';"), 'Google Drive ensures aurasync-mobile folder in cloud root');
+
+  const oneDriveMobileSrc = fs.readFileSync(path.join(rootDir, 'electron', 'onedrive.js'), 'utf8');
+  assert(oneDriveMobileSrc.includes("const MOBILE_NAME = 'aurasync-mobile';"), 'OneDrive ensures aurasync-mobile folder in cloud root');
+
+  const mobileHomeSrc = fs.readFileSync(path.join(rootDir, 'src', 'components', 'mobile', 'MobileHome.jsx'), 'utf8');
+  assert(mobileHomeSrc.includes('handleStartGalleryBackup') && mobileHomeSrc.includes('AURASYNC_MOBILE_FOLDER'), 'MobileHome implements gallery transfer to aurasync-mobile cloud folder as primary feature');
+
+  assert(pkgJsonRaw.version === '1.7.96', 'package.json version matches 1.7.96');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);
@@ -1753,6 +1957,7 @@ async function runTests() {
 
   if (passedTests === totalTests) {
     console.log('>>> ALL SYSTEMS 100% OPERATIONAL AND VALIDATED! <<<');
+    process.exit(0);
   } else {
     console.error('>>> SOME CHECKS FAILED! <<<');
     process.exit(1);

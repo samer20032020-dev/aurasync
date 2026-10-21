@@ -276,6 +276,30 @@ class DropboxService {
     return target;
   }
 
+  async ensureMobileFolder() {
+    if (this.mobileFolderPath) return this.mobileFolderPath;
+    const MOBILE_NAME = 'aurasync-mobile';
+    const target = `/${MOBILE_NAME}`;
+    try {
+      try {
+        await this.rpc('/files/get_metadata', { path: target });
+        this.mobileFolderPath = target;
+        return this.mobileFolderPath;
+      } catch (_) {
+        await this.rpc('/files/create_folder_v2', { path: target, autorename: false });
+        this.mobileFolderPath = target;
+        return this.mobileFolderPath;
+      }
+    } catch (err) {
+      if (/409/.test(err.message)) {
+        this.mobileFolderPath = target;
+        return this.mobileFolderPath;
+      }
+      console.warn('Dropbox ensureMobileFolder warning:', err.message);
+      return null;
+    }
+  }
+
   async listFolder(folderId = null) {
     const basePath = folderId !== null && folderId !== undefined
       ? folderId
@@ -290,6 +314,8 @@ class DropboxService {
 
     while (true) {
       for (const entry of res.entries || []) {
+        const lowerName = (entry.name || '').toLowerCase();
+        if (lowerName === 'desktop.ini' || lowerName === 'thumbs.db' || lowerName === '.ds_store') continue;
         items.push({
           id: entry.path_display || entry.path_lower,
           name: entry.name,
@@ -329,8 +355,13 @@ class DropboxService {
   }
 
   async uploadFile({ localPath, fileName, parentFolderId, existingDriveFileId, fileSize = null, onProgress = null, throttle = null }) {
+    const resolvedName = fileName || path.basename(localPath);
+    const resolvedNameLower = (resolvedName || '').toLowerCase();
+    if (resolvedNameLower === 'desktop.ini' || resolvedNameLower === 'thumbs.db' || resolvedNameLower === '.ds_store') {
+      return { driveFileId: null, skipped: true };
+    }
     const size = fileSize != null ? fileSize : fs.statSync(localPath).size;
-    const targetPath = existingDriveFileId || `${parentFolderId || ''}/${fileName}`;
+    const targetPath = existingDriveFileId || `${parentFolderId || ''}/${resolvedName}`;
 
     if (size <= SIMPLE_UPLOAD_LIMIT) {
       if (typeof throttle === 'function' && size > 0) {

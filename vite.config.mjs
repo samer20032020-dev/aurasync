@@ -2,12 +2,12 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const PROD_CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
+  "default-src 'self' https: data: blob: content:",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "img-src 'self' data: https:",
-  "connect-src 'self'",
+  "img-src 'self' data: https: blob: content:",
+  "connect-src 'self' https: http: ws: wss: data: blob:",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'"

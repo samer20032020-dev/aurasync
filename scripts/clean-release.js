@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 const rootDir = path.resolve(__dirname, '..');
 const releaseDir = path.join(rootDir, 'release');
@@ -68,12 +68,20 @@ try {
   const files = fs.readdirSync(releaseDir);
   for (const f of files) {
     if (f.endsWith('.exe')) {
-      // If file contains a version tag that is NOT the current expected version, purge it!
       const match = f.match(/v(\d+\.\d+\.\d+)/i);
       if (match && match[1] !== expectedVersion) {
         try {
           fs.unlinkSync(path.join(releaseDir, f));
-          console.log(`Purged stale older version executable: ${f}`);
+          console.log(`Purged stale older version binary: ${f}`);
+        } catch (_) {}
+      }
+    } else if (f.endsWith('.apk')) {
+      const match = f.match(/v(\d+\.\d+\.\d+)/i);
+      const mobileVer = pkg.mobileVersion || '1.0.5';
+      if (match && match[1] !== mobileVer) {
+        try {
+          fs.unlinkSync(path.join(releaseDir, f));
+          console.log(`Purged stale non-mobile APK: ${f}`);
         } catch (_) {}
       }
     }
@@ -83,6 +91,50 @@ try {
 }
 
 // 4. Locate the newly compiled portable executable
+const copyWithRetry = (src, dst) => {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      if (fs.existsSync(dst)) {
+        try { fs.unlinkSync(dst); } catch (_) {}
+      }
+      fs.copyFileSync(src, dst);
+      return true;
+    } catch (err) {
+      try {
+        execSync('powershell -Command "Get-Process -Name AuraSync*,electron* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"', { windowsHide: true });
+        execSync('powershell -Command "Start-Sleep -Milliseconds 400"', { windowsHide: true });
+      } catch (_) {}
+      if (attempt === 9) throw err;
+    }
+  }
+};
+
+// Check if electron-builder outputted to any dynamic build-* or dist-electron directory
+try {
+  const rootEntries = fs.readdirSync(rootDir);
+  const candidateDirs = rootEntries.filter(
+    (e) => e.startsWith('build-') || e === 'build-output' || e === 'dist-electron'
+  );
+  for (const outSub of candidateDirs) {
+    const outDir = path.join(rootDir, outSub);
+    if (fs.existsSync(outDir) && fs.statSync(outDir).isDirectory()) {
+      try {
+        const dFiles = fs.readdirSync(outDir);
+        for (const df of dFiles) {
+          if (df.endsWith('.exe')) {
+            const srcExe = path.join(outDir, df);
+            const dstExe = path.join(releaseDir, df);
+            copyWithRetry(srcExe, dstExe);
+            console.log(`[Clean-Release] Imported ${df} from ${outSub} to release/`);
+          }
+        }
+      } catch (dErr) {
+        console.warn(`[Clean-Release] Notice importing ${outSub}:`, dErr.message);
+      }
+    }
+  }
+} catch (_) {}
+
 const portableFinal = path.join(releaseDir, 'AuraSync-Portable.exe');
 const setupFinal = path.join(releaseDir, 'AuraSync-Setup.exe');
 const setupVersioned = path.join(releaseDir, `AuraSync-Setup-v${expectedVersion}.exe`);
@@ -120,23 +172,6 @@ try {
 }
 
 // 6. Generate Setup and versioned binaries from the freshly verified portable build
-const copyWithRetry = (src, dst) => {
-  for (let attempt = 0; attempt < 10; attempt++) {
-    try {
-      if (fs.existsSync(dst)) {
-        try { fs.unlinkSync(dst); } catch (_) {}
-      }
-      fs.copyFileSync(src, dst);
-      return true;
-    } catch (err) {
-      try {
-        execSync('powershell -Command "Get-Process -Name AuraSync*,electron* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"', { windowsHide: true });
-        execSync('powershell -Command "Start-Sleep -Milliseconds 400"', { windowsHide: true });
-      } catch (_) {}
-      if (attempt === 9) throw err;
-    }
-  }
-};
 
 try {
   copyWithRetry(portableFinal, setupFinal);
@@ -144,6 +179,14 @@ try {
   copyWithRetry(portableFinal, portableVersioned);
   const stat = fs.statSync(setupFinal);
   console.log(`Updated AuraSync-Setup.exe (cloud-shaped installer) (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+
+  // Update dedicated desktop release folder
+  const desktopReleaseDir = path.join(releaseDir, 'desktop');
+  fs.mkdirSync(desktopReleaseDir, { recursive: true });
+  copyWithRetry(setupFinal, path.join(desktopReleaseDir, 'AuraSync-Setup.exe'));
+  copyWithRetry(setupFinal, path.join(desktopReleaseDir, `AuraSync-Setup-v${expectedVersion}.exe`));
+  copyWithRetry(portableFinal, path.join(desktopReleaseDir, 'AuraSync-Portable.exe'));
+  copyWithRetry(portableFinal, path.join(desktopReleaseDir, `AuraSync-Portable-v${expectedVersion}.exe`));
 
   // Update root files
   copyWithRetry(setupFinal, path.join(rootDir, 'AuraSync-Setup.exe'));
@@ -159,6 +202,24 @@ try {
 } catch (copyErr) {
   console.error('Fatal error copying binaries:', copyErr.message);
   process.exit(1);
+}
+
+// 6b. Automatically compile and package the native Android Mobile APK (skipped if desktop-only)
+const isDesktopOnly = process.argv.includes('--desktop') || process.argv.includes('--desktop-only');
+const isMobileOnly = process.argv.includes('--mobile') || process.argv.includes('--mobile-only');
+
+if (!isDesktopOnly) {
+  try {
+    console.log('\n📱 Compiling and packaging AuraSync Android Mobile APK...');
+    const apkScript = path.join(__dirname, 'build-android-apk.js');
+    if (fs.existsSync(apkScript)) {
+      execFileSync(process.execPath, [apkScript], { stdio: 'inherit', windowsHide: true });
+    }
+  } catch (apkErr) {
+    console.error('Android APK build error (non-fatal):', apkErr.message);
+  }
+} else {
+  console.log('\n💻 [Desktop-Only Mode] Skipping Android APK compilation.');
 }
 
 console.log('\nFinal Release Contents:');
@@ -184,7 +245,10 @@ try {
   const { execFileSync } = require('child_process');
   const ghScript = path.join(__dirname, 'github-release.js');
   if (fs.existsSync(ghScript)) {
-    execFileSync(process.execPath, [ghScript], { stdio: 'inherit', windowsHide: true });
+    const ghArgs = [];
+    if (isDesktopOnly) ghArgs.push('--desktop');
+    else if (isMobileOnly) ghArgs.push('--mobile');
+    execFileSync(process.execPath, [ghScript, ...ghArgs], { stdio: 'inherit', windowsHide: true });
   }
 } catch (ghErr) {
   console.warn('GitHub release sync notice (non-fatal):', ghErr.message);
