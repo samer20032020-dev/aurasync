@@ -71,7 +71,7 @@ function Section({ title, children, colors }) {
 }
 
 export default function MobileSettings({
-  version = '1.0.7',
+  version = '1.0.9',
   theme = 'dark',
   onToggleTheme,
   onSwitchToDesktop,

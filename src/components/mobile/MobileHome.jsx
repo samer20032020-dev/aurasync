@@ -25,7 +25,7 @@ const DropboxIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.7',
+  version = '1.0.9',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
