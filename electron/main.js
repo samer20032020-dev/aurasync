@@ -830,7 +830,7 @@ function setupIpcHandlers() {
     try {
       return app.getVersion();
     } catch (_) {
-      return '1.7.96';
+      return '1.7.97';
     }
   });
 
@@ -1927,6 +1927,15 @@ function setupIpcHandlers() {
   ipcMain.handle('browser-guard:minimize', async () => {
     browserGuard.minimizeProtectedBrowser();
     return { success: true };
+  });
+
+  ipcMain.handle('browser-guard:close-tab', async () => {
+    browserGuard.closeCurrentLockedTab();
+    return { success: true };
+  });
+
+  ipcMain.handle('browser-guard:set-grace-period', async (event, minutes) => {
+    return browserGuard.setGracePeriodMinutes(minutes);
   });
 
   ipcMain.handle('browser-guard:get-live-tabs', async () => {

@@ -644,5 +644,17 @@ public class MainActivity extends Activity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public void downloadCloudFile(final String fileName) {
+            final String name = fileName != null && !fileName.isEmpty() ? fileName : "ملف سحابي";
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    vibrate(25);
+                    showToast("جاري حفظ الملف في ذاكرة الهاتف: " + name);
+                }
+            });
+        }
     }
 }

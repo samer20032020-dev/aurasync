@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.96', 'package.json version is 1.7.96', pkg.version);
+  assert(pkg.version === '1.7.97', 'package.json version is 1.7.97', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1949,7 +1949,22 @@ async function runTests() {
   const mobileHomeSrc = fs.readFileSync(path.join(rootDir, 'src', 'components', 'mobile', 'MobileHome.jsx'), 'utf8');
   assert(mobileHomeSrc.includes('handleStartGalleryBackup') && mobileHomeSrc.includes('AURASYNC_MOBILE_FOLDER'), 'MobileHome implements gallery transfer to aurasync-mobile cloud folder as primary feature');
 
-  assert(pkgJsonRaw.version === '1.7.96', 'package.json version matches 1.7.96');
+  // Test: Swarm Parallel Architecture & End-to-End Bridge Verification
+  console.log('\n--- 40. Swarm Parallel Architecture & End-to-End Bridge Verification ---');
+  const swarmMainSrc = fs.readFileSync(path.join(rootDir, 'electron', 'main.js'), 'utf8');
+  assert(swarmMainSrc.includes("ipcMain.handle('browser-guard:close-tab'"), 'main.js registers browser-guard:close-tab handler');
+  assert(swarmMainSrc.includes("ipcMain.handle('browser-guard:set-grace-period'"), 'main.js registers browser-guard:set-grace-period handler');
+
+  const mainJavaSrc = fs.readFileSync(path.join(rootDir, 'mobile', 'android', 'src', 'com', 'aurasync', 'mobile', 'MainActivity.java'), 'utf8');
+  assert(mainJavaSrc.includes('public void downloadCloudFile('), 'MainActivity.java implements downloadCloudFile @JavascriptInterface');
+
+  const mcpConfigSrc = fs.readFileSync('C:\\Users\\samer\\.gemini\\config\\mcp_config.json', 'utf8');
+  assert(mcpConfigSrc.includes('"swarm-code"'), 'mcp_config.json includes swarm-code server');
+
+  const projectMcpSrc = fs.readFileSync(path.join(rootDir, '.mcp.json'), 'utf8');
+  assert(projectMcpSrc.includes('"swarm-code"'), '.mcp.json in workspace includes swarm-code server');
+
+  assert(pkgJsonRaw.version === '1.7.97', 'package.json version matches 1.7.97');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "swarm-code": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "swarm-code",
+        "mcp",
+        "--dir",
+        "."
+      ]
+    }
+  }
+}

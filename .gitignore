@@ -35,3 +35,6 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Swarm worktrees
+.swarm-worktrees/

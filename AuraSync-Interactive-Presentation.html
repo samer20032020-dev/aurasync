@@ -1,0 +1,2143 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AuraSync — العرض التقديمي التفاعلي الشامل للمشروع 2026</title>
+  <link rel="icon" href="website/assets/app-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #070a13;
+      --surface: rgba(13, 21, 39, 0.75);
+      --surface-solid: #0d1527;
+      --surface-hover: rgba(22, 35, 66, 0.9);
+      --border: rgba(30, 48, 80, 0.7);
+      --border-glow: rgba(6, 182, 212, 0.4);
+      --cyan: #06b6d4;
+      --blue: #2563eb;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --purple: #a855f7;
+      --rose: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --grad-cyan: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+      --grad-purple: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+      --grad-emerald: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      --grad-amber: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: 'Cairo', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    body.lang-en {
+      font-family: 'Outfit', system-ui, sans-serif;
+      direction: ltr;
+    }
+
+    /* Ambient Animated Matrix Canvas */
+    #ambient-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.45;
+    }
+
+    /* Top Presentation Bar */
+    header.deck-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(7, 10, 19, 0.82);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      z-index: 50;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-section img {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.5);
+    }
+    .brand-title {
+      font-weight: 800;
+      font-size: 17px;
+      letter-spacing: -0.5px;
+    }
+    .brand-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--cyan);
+      border: 1px solid rgba(6, 182, 212, 0.35);
+      font-weight: 700;
+    }
+
+    .deck-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-ctrl {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .btn-ctrl:hover {
+      background: var(--surface-hover);
+      border-color: var(--cyan);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .btn-ctrl.active {
+      background: var(--cyan);
+      color: #000;
+      border-color: var(--cyan);
+    }
+    .btn-ctrl-pptx {
+      background: linear-gradient(135deg, #d97706, #f59e0b);
+      color: #000;
+      border: none;
+      font-weight: 800;
+    }
+    .btn-ctrl-pptx:hover {
+      background: linear-gradient(135deg, #f59e0b, #fbbf24);
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+      color: #000;
+    }
+
+    /* Slide Progress Bar */
+    .progress-bar-container {
+      position: fixed;
+      top: 59px;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.05);
+      z-index: 55;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--grad-cyan);
+      width: 5.55%;
+      transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 10px var(--cyan);
+    }
+
+    /* Main Stage */
+    main.deck-stage {
+      position: fixed;
+      top: 62px;
+      left: 0;
+      right: 0;
+      bottom: 60px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    .slide {
+      position: absolute;
+      width: 92vw;
+      max-width: 1380px;
+      height: 82vh;
+      max-height: 780px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px 44px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      opacity: 0;
+      transform: scale(0.96) translateY(20px);
+      pointer-events: none;
+      transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      backdrop-filter: blur(24px);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      pointer-events: auto;
+      z-index: 20;
+    }
+
+    /* Slide Header */
+    .slide-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .slide-category {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--cyan);
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .slide-title {
+      font-size: 26px;
+      font-weight: 900;
+      color: var(--text-main);
+      line-height: 1.25;
+    }
+    .slide-subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .slide-num-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 8px;
+    }
+
+    /* Slide Content Layouts */
+    .slide-body {
+      flex: 1;
+      display: grid;
+      gap: 20px;
+      align-items: stretch;
+      min-height: 0;
+    }
+
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid-4 { grid-template-columns: repeat(4, 1fr); }
+    .grid-hero { grid-template-columns: 4.8fr 7.2fr; }
+
+    /* Interactive Cards */
+    .card {
+      background: rgba(10, 16, 32, 0.65);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .card:hover {
+      border-color: rgba(6, 182, 212, 0.5);
+      background: rgba(14, 23, 46, 0.85);
+      transform: translateY(-2px);
+    }
+    .card.accent-cyan { border-top: 3px solid var(--cyan); }
+    .card.accent-emerald { border-top: 3px solid var(--emerald); }
+    .card.accent-amber { border-top: 3px solid var(--amber); }
+    .card.accent-purple { border-top: 3px solid var(--purple); }
+    .card.accent-rose { border-top: 3px solid var(--rose); }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      align-self: flex-start;
+      margin-bottom: 10px;
+    }
+    .card-badge.cyan { background: rgba(6, 182, 212, 0.15); color: var(--cyan); }
+    .card-badge.emerald { background: rgba(16, 185, 129, 0.15); color: var(--emerald); }
+    .card-badge.amber { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
+    .card-badge.purple { background: rgba(168, 85, 247, 0.15); color: var(--purple); }
+    .card-badge.rose { background: rgba(244, 63, 94, 0.15); color: var(--rose); }
+
+    .card-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .card-list li {
+      position: relative;
+      padding-right: 14px;
+    }
+    body.lang-en .card-list li {
+      padding-right: 0;
+      padding-left: 14px;
+    }
+    .card-list li::before {
+      content: "•";
+      position: absolute;
+      right: 0;
+      color: var(--cyan);
+      font-weight: bold;
+    }
+    body.lang-en .card-list li::before {
+      right: auto;
+      left: 0;
+    }
+
+    /* Metric Stat Box */
+    .stat-box {
+      background: rgba(12, 18, 36, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transition: all 0.25s ease;
+    }
+    .stat-box:hover {
+      border-color: var(--cyan);
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.2);
+    }
+    .stat-num {
+      font-size: 26px;
+      font-weight: 900;
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1.1;
+    }
+    .stat-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-top: 4px;
+    }
+    .stat-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Step Cards */
+    .step-card {
+      background: rgba(12, 18, 36, 0.7);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    .step-num {
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .step-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+    .step-body {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* Image Showcase Frame */
+    .image-frame {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+    .image-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .image-caption {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(7, 10, 19, 0.88);
+      backdrop-filter: blur(8px);
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-main);
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Comparison Table */
+    .comp-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12.5px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .comp-table th, .comp-table td {
+      padding: 11px 14px;
+      text-align: center;
+    }
+    .comp-table th:first-child, .comp-table td:first-child {
+      text-align: right;
+    }
+    body.lang-en .comp-table th:first-child, body.lang-en .comp-table td:first-child {
+      text-align: left;
+    }
+    .comp-table th {
+      background: #0e1628;
+      font-weight: 800;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .comp-table th.col-highlight {
+      background: #101c38;
+      color: var(--cyan);
+      border-bottom: 2px solid var(--cyan);
+    }
+    .comp-table td {
+      background: rgba(11, 16, 32, 0.6);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .comp-table tr:hover td {
+      background: rgba(18, 28, 54, 0.8);
+    }
+    .comp-table td.col-highlight {
+      background: rgba(16, 28, 56, 0.7);
+      font-weight: 800;
+      color: var(--emerald);
+    }
+
+    /* Live Interactive Simulators */
+    .sim-container {
+      background: #0a0e1a;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .sim-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--cyan);
+    }
+    .sim-screen {
+      background: #03050a;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      min-height: 100px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* Bottom Control Bar */
+    footer.deck-footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(7, 10, 19, 0.88);
+      backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border);
+      z-index: 50;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .btn-nav {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      transition: all 0.2s ease;
+    }
+    .btn-nav:hover {
+      background: var(--cyan);
+      color: #000;
+      border-color: var(--cyan);
+    }
+    .slide-counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-muted);
+    }
+    .slide-counter span {
+      color: var(--cyan);
+    }
+
+    /* Speaker Notes Drawer */
+    #notes-drawer {
+      position: fixed;
+      bottom: 60px;
+      left: 0;
+      right: 0;
+      background: rgba(10, 15, 28, 0.95);
+      backdrop-filter: blur(20px);
+      border-top: 2px solid var(--cyan);
+      padding: 20px 32px;
+      transform: translateY(105%);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 45;
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7);
+    }
+    #notes-drawer.open {
+      transform: translateY(0);
+    }
+    .notes-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .notes-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--cyan);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .notes-content {
+      font-size: 14px;
+      color: var(--text-main);
+      line-height: 1.7;
+      max-height: 160px;
+      overflow-y: auto;
+      white-space: pre-line;
+    }
+
+    /* Slide Grid Modal */
+    #grid-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 7, 15, 0.92);
+      backdrop-filter: blur(24px);
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      padding: 30px 50px;
+      overflow-y: auto;
+    }
+    #grid-modal.open {
+      display: flex;
+    }
+    .grid-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .grid-thumbs-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 18px;
+    }
+    .thumb-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .thumb-card:hover {
+      border-color: var(--cyan);
+      transform: scale(1.02);
+      background: var(--surface-hover);
+    }
+    .thumb-card.active {
+      border: 2px solid var(--cyan);
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+    }
+    .thumb-num {
+      font-size: 11px;
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+    }
+    .thumb-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    /* Print Optimization */
+    @media print {
+      body { overflow: visible !important; background: #fff !important; color: #000 !important; }
+      header.deck-header, footer.deck-footer, #ambient-canvas, .progress-bar-container, #notes-drawer { display: none !important; }
+      main.deck-stage { position: static !important; display: block !important; }
+      .slide { position: static !important; opacity: 1 !important; transform: none !important; width: 100% !important; height: 100vh !important; max-width: none !important; max-height: none !important; page-break-after: always !important; border: none !important; background: #fff !important; color: #000 !important; }
+      .card, .stat-box, .step-card { border: 1px solid #ccc !important; background: #f8f9fa !important; color: #000 !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Animated Starfield Canvas -->
+  <canvas id="ambient-canvas"></canvas>
+
+  <!-- Top Presentation Header -->
+  <header class="deck-header">
+    <div class="brand-section">
+      <img src="website/assets/app-icon.png" alt="AuraSync Icon" />
+      <span class="brand-title">AuraSync — مشروع سحابه</span>
+      <span class="brand-badge">2026 MASTER PRESENTATION</span>
+    </div>
+
+    <div class="deck-controls">
+      <button class="btn-ctrl" id="btn-sound" title="تبديل مؤثرات الصوت (S)">🔊 الصوت: مُفعّل</button>
+      <button class="btn-ctrl" id="btn-lang" title="تبديل اللغة (L)">🌐 English</button>
+      <button class="btn-ctrl" id="btn-notes" title="ملاحظات المتحدث (N)">📝 ملاحظات العرض</button>
+      <button class="btn-ctrl" id="btn-grid" title="المخطط العام (G)">📑 الشرائح (18)</button>
+      <button class="btn-ctrl" id="btn-fullscreen" title="ملء الشاشة (F)">⛶ ملء الشاشة</button>
+      <a href="AuraSync-Full-Project-Presentation.pptx" download class="btn-ctrl btn-ctrl-pptx" title="تحميل ملف البوربوينت الأصلي">
+        📥 تنزيل بوربوينت PPTX
+      </a>
+    </div>
+  </header>
+
+  <!-- Progress Bar -->
+  <div class="progress-bar-container">
+    <div class="progress-fill" id="progress-fill"></div>
+  </div>
+
+  <!-- Main Slide Deck Stage -->
+  <main class="deck-stage" id="deck-stage">
+
+    <!-- SLIDE 1: COVER -->
+    <div class="slide active" data-index="1">
+      <div class="slide-body grid-hero">
+        <div class="image-frame">
+          <img src="website/assets/hero-vault.jpg" alt="AuraSync Vault" />
+          <div class="image-caption">AuraSync Digital Cloud Vault — 8K 3D Architecture</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <span class="slide-category">OFFICIAL PROJECT PRESENTATION 2026</span>
+            <h1 class="slide-title" style="font-size:36px; margin: 8px 0 12px 0;">AuraSync — مشروع سحابه</h1>
+            <p style="font-size:17px; color:var(--cyan); font-weight:700; margin-bottom:12px;">
+              المنصة الهندسية الذكية للنسخ الاحتياطي متعدد السحابات وحماية البيانات بسياسة انعدام الحذف
+            </p>
+            <p style="font-size:13.5px; color:var(--text-muted); line-height:1.6;">
+              منظومة إنتاجية متكاملة تجمع بين سياسة انعدام الحذف الحصرية، ودمج أكثر من 25 سحابة، وحارس المتصفحات المبتكر Win+L، وتطبيق أندرويد مستقل لنقل المعرض بنقرة واحدة.
+            </p>
+          </div>
+
+          <div class="grid-4" style="margin: 16px 0;">
+            <div class="stat-box">
+              <span class="stat-num">+25</span>
+              <span class="stat-label">سحابة مدعومة</span>
+              <span class="stat-sub">دمج موحد شامل</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-num" style="color:var(--emerald);">0%</span>
+              <span class="stat-label">حذف عَرَضي</span>
+              <span class="stat-sub">سياسة عدم الحذف</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-num" style="color:var(--amber);">32x</span>
+              <span class="stat-label">قناة توازي</span>
+              <span class="stat-sub">توربو الفايبر</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-num" style="color:var(--purple);">100%</span>
+              <span class="stat-label">جناح اختبارات</span>
+              <span class="stat-sub">382+ فحص مؤتمت</span>
+            </div>
+          </div>
+
+          <div style="background:rgba(11,16,30,0.8); border:1px solid var(--border); border-radius:12px; padding:12px 18px; text-align:center;">
+            <p style="font-size:12px; font-weight:800; color:#fff;">Desktop v1.7.97 (Electron + SQLite WASM) &nbsp;|&nbsp; Mobile v1.0.7 (Android APK Native)</p>
+            <p style="font-size:11px; color:var(--cyan); margin-top:2px;">Commercial Grade Architecture • Principal Software Architect Standard</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 2: THE MARKET PROBLEM -->
+    <div class="slide" data-index="2">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">THE MARKET PROBLEM & CRITICAL GAP</span>
+          <h2 class="slide-title">معضلة فقدان البيانات ومخاطر السحابة التقليدية</h2>
+          <p class="slide-subtitle">تحليل الثغرات الكارثية في خدمات التخزين السحابي الحالية وسلوك المستخدمين</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 02 / 18</span>
+      </div>
+
+      <div class="slide-body grid-2">
+        <div class="card accent-rose">
+          <span class="card-badge rose">مخاطرة فقدان قصوى</span>
+          <h3 class="card-title">⚠️ كارثة الحذف المتزامن التبادلي</h3>
+          <ul class="card-list">
+            <li>في Google Drive و OneDrive و Dropbox، إذا حذفت ملفاً من حاسوبك بالخطأ، تحذفه السحابة فوراً من كافة الأجهزة!</li>
+            <li>برمجيات الفدية (Ransomware): بمجرد تشفير الملفات محلياً، تقوم المزامنة العادية باستبدال النسخ السليمة في السحابة فوراً.</li>
+            <li>انعدام الحماية التلقائية للبيانات المحذوفة محلياً دون اشتراكات مؤسسية باهظة.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-amber">
+          <span class="card-badge amber">احتكار وتكاليف باهظة</span>
+          <h3 class="card-title">🔒 تشتت التخزين واحتكار الشركات (Vendor Lock-in)</h3>
+          <ul class="card-list">
+            <li>يمتلك المستخدم 15GB في جوجل، 5GB في ون درايف، و 20GB في ميجا دون أي رابط موحد بينها.</li>
+            <li>الشركات تجبر المستخدم على شراء اشتراكات شهرية متكررة عند امتلاء حساب واحد.</li>
+            <li>استحالة نقل الملفات مباشرة من سحابة إلى سحابة أخرى دون تنزيلها أولاً على القرص الصلب.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-cyan">
+          <span class="card-badge cyan">اختناق تخزين الهواتف</span>
+          <h3 class="card-title">📱 أزمة ذاكرة الهواتف الذكية والمعرض</h3>
+          <ul class="card-list">
+            <li>امتلاء ذاكرة الهاتف بآلاف الصور والفيديوهات دون أداة بنقرة واحدة لنقل المعرض بالكامل لسحابة خاصة.</li>
+            <li>قيود رفع المعرض: أغلب التطبيقات تنهار عند محاولة مشاركة أكثر من 50-100 صورة معاً.</li>
+            <li>الاستنزاف السريع لبطارية الهاتف وباقة البيانات الخلوية أثناء المزامنة العشوائية.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-purple">
+          <span class="card-badge purple">انكشاف الخصوصية</span>
+          <h3 class="card-title">👁️ مخاطر الخصوصية وتطفل الأجهزة المفتوحة</h3>
+          <ul class="card-list">
+            <li>ترك أجهزة الكمبيوتر أو الهواتف في المكاتب والمنازل يُعرّض الحسابات والواتساب والبريد للتطفل.</li>
+            <li>المتصفحات الحديثة تحفظ الجلسات مفتوحة دون أي طلب لرمز PIN أو بصمة عند التبديل للنوافذ.</li>
+            <li>غياب التشفير الحقيقي للمجلدات الحساسة قبل رفعها إلى الخوادم السحابية الخارجية.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 3: THE AURASYNC SOLUTION -->
+    <div class="slide" data-index="3">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">THE AURASYNC STRATEGIC SOLUTION</span>
+          <h2 class="slide-title">الحل الثوري: منصة AuraSync الهجينة الذكية</h2>
+          <p class="slide-subtitle">منظومة متكاملة لحفظ الملفات وتوحيد السحابات وتأمين النظام على مستوى النواة</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 03 / 18</span>
+      </div>
+
+      <div class="slide-body grid-hero">
+        <div class="image-frame">
+          <img src="website/assets/security-shield.jpg" alt="Security Shield" />
+          <div class="image-caption">Military-Grade Zero-Knowledge Defense Shield</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px; justify-content:center;">
+          <div class="card accent-emerald" style="padding:14px 18px;">
+            <h3 class="card-title" style="color:var(--emerald);">🛡️ 1. سياسة انعدام الحذف نهائياً (Zero-Deletion Policy)</h3>
+            <p style="font-size:12.5px; color:var(--text-muted); line-height:1.5;">الملف المحذوف محلياً يظل محفوظاً في السحابة بأمان 100% مع شارة تنبيه برتقالية وإمكانية استرجاعه بنقرة زر.</p>
+          </div>
+
+          <div class="card accent-cyan" style="padding:14px 18px;">
+            <h3 class="card-title" style="color:var(--cyan);">☁️ 2. مُجمّع السحابات الشامل (Universal Cloud Aggregator)</h3>
+            <p style="font-size:12.5px; color:var(--text-muted); line-height:1.5;">ربط وإدارة +25 سحابة وبروتوكول قياسي مع محرك نقل مباشر بين السحابات دون استهلاك مساحة القرص.</p>
+          </div>
+
+          <div class="card accent-purple" style="padding:14px 18px;">
+            <h3 class="card-title" style="color:var(--purple);">🔐 3. حارس المتصفحات المبتكر والأمان السيبراني (Browser Guard & Vault)</h3>
+            <p style="font-size:12.5px; color:var(--text-muted); line-height:1.5;">قفل فوري للمتصفحات (Chrome, Edge, Brave...) برمز PIN مع حماية قفل الجهاز بالكامل Win+L بعد خطأين.</p>
+          </div>
+
+          <div class="card accent-amber" style="padding:14px 18px;">
+            <h3 class="card-title" style="color:var(--amber);">⚡ 4. سرعة الفايبر واستعادة الكوارث (Turbo Concurrency & Recovery)</h3>
+            <p style="font-size:12.5px; color:var(--text-muted); line-height:1.5;">محرك توازي يصل إلى 32 عاملاً لاستغلال خطوط الفايبر، واستعادة الحاسوب بالكامل بعد الفورمات بضغطة زر.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 4: ZERO DELETION ARCHITECTURE & INTERACTIVE SIM -->
+    <div class="slide" data-index="4">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">CORE ARCHITECTURAL ADVANTAGE</span>
+          <h2 class="slide-title">الجوهرة الهندسية: سياسة انعدام الحذف (Zero-Deletion)</h2>
+          <p class="slide-subtitle">كيف تضمن AuraSync بقاء ملفاتك محمية للأبد حتى لو تم مسحها محلياً؟</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 04 / 18</span>
+      </div>
+
+      <div class="slide-body" style="display:flex; flex-direction:column; gap:16px;">
+        <div class="grid-4">
+          <div class="step-card" style="border-top: 3px solid var(--cyan);">
+            <span class="step-num" style="color:var(--cyan);">STEP 01</span>
+            <div class="step-title">رصد الحذف المحلي</div>
+            <div class="step-body">محرك Chokidar على مستوى النواة يلتقط حدث الحذف (unlink) في أقل من 5 ميلي ثانية.</div>
+          </div>
+          <div class="step-card" style="border-top: 3px solid var(--emerald);">
+            <span class="step-num" style="color:var(--emerald);">STEP 02</span>
+            <div class="step-title">تجميد أوامر السحابة</div>
+            <div class="step-body">إلغاء فوري لإرسال أي طلب Delete API إلى خوادم Google أو Microsoft أو Dropbox.</div>
+          </div>
+          <div class="step-card" style="border-top: 3px solid var(--amber);">
+            <span class="step-num" style="color:var(--amber);">STEP 03</span>
+            <div class="step-title">الوسم بقاعدة البيانات</div>
+            <div class="step-body">تحديث حالة السجل إلى (preserved) وتسجيل البصمة الرقمية وتوقيت الحذف بدقة.</div>
+          </div>
+          <div class="step-card" style="border-top: 3px solid var(--purple);">
+            <span class="step-num" style="color:var(--purple);">STEP 04</span>
+            <div class="step-title">التنبيه والاسترجاع</div>
+            <div class="step-body">ظهور شارة تنبيه برتقالية مع إمكانية استرجاع الملف أو تنزيل الكل بنقرة زر واحدة.</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- Interactive Zero-Deletion Simulator -->
+          <div class="sim-container">
+            <div class="sim-header">
+              <span>محاكي سياسة انعدام الحذف التفاعلي (Interactive Simulator)</span>
+              <button class="btn-ctrl" id="btn-sim-delete" style="padding:4px 10px; font-size:11px;">🗑️ جرّب حذف ملف محلي</button>
+            </div>
+            <div class="sim-screen" id="sim-delete-screen">
+              <span style="color:#64748b;">// النظام جاهز: اضغط على زر 'جرّب حذف ملف محلي' لمشاهدة استجابة النواة...</span>
+              <span style="color:var(--cyan);">> Local File: C:\Users\samer\Documents\Annual-Report-2026.pdf (Synced)</span>
+              <span style="color:var(--emerald);">> Cloud Status: Google Drive [Synced 1:1]</span>
+            </div>
+          </div>
+
+          <div class="card accent-cyan">
+            <span class="card-badge cyan">تحكم سيادي كامل</span>
+            <h3 class="card-title">الحذف المشترك المتعمد (Dual Joint Delete)</h3>
+            <p style="font-size:12.5px; color:var(--text-muted); line-height:1.5; margin-bottom:8px;">
+              إذا رغب المستخدم في مسح ملف بشكل نهائي من الحاسوب والسحابة معاً، يتوفر خيار حصري عبر قائمة كليك يمين أو الواجهة.
+            </p>
+            <ul class="card-list">
+              <li>تأكيد أمان ذكي يمنع الحذف غير المقصود.</li>
+              <li>تنفيذ الحذف بالتوازي على الطرفين في أجزاء من الثانية.</li>
+              <li>حصانة كاملة ضد هجمات الفدية والأخطاء البشرية.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 5: UNIVERSAL CLOUD ECOSYSTEM -->
+    <div class="slide" data-index="5">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">UNIVERSAL CLOUD ECOSYSTEM</span>
+          <h2 class="slide-title">سحابة واحدة تجمع كل السحابات: دعم +25 منصة وبروتوكول</h2>
+          <p class="slide-subtitle">توحيد حساباتك السحابية المشتتة تحت مظلة أمنية واحدة مع ميزة النقل السحابي المباشر</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 05 / 18</span>
+      </div>
+
+      <div class="slide-body" style="display:flex; flex-direction:column; gap:16px;">
+        <div class="grid-3">
+          <div class="card accent-cyan">
+            <span class="card-badge cyan">Native OAuth 2.0</span>
+            <h3 class="card-title">🌐 السحابات الكبرى</h3>
+            <ul class="card-list">
+              <li>Google Drive (كاش لمنع حظر 429)</li>
+              <li>Microsoft OneDrive (Personal & Business)</li>
+              <li>Dropbox (تكامل مباشر عبر API v2)</li>
+              <li>Box & pCloud (مزامنة سريعة)</li>
+            </ul>
+          </div>
+
+          <div class="card accent-purple">
+            <span class="card-badge purple">End-to-End Encrypted</span>
+            <h3 class="card-title">🔒 السحابات المشفرة والخاصة</h3>
+            <ul class="card-list">
+              <li>Mega.nz (تشفير طرف لطرف وتجاوز القيود)</li>
+              <li>Telegram Cloud (تخزين غير محدود عبر البوت)</li>
+              <li>Yandex Disk & Koofr</li>
+              <li>تشفير إضافي محلي قبل وصول الملف للسيرفر</li>
+            </ul>
+          </div>
+
+          <div class="card accent-amber">
+            <span class="card-badge amber">Enterprise & NAS</span>
+            <h3 class="card-title">🗄️ البروتوكولات المفتوحة وسحابات S3</h3>
+            <ul class="card-list">
+              <li>WebDAV: Nextcloud, Synology, QNAP</li>
+              <li>S3 Compatible: Amazon AWS S3, Cloudflare R2</li>
+              <li>MinIO (للخوادم المنزلية والشركات)</li>
+              <li>Wasabi & Backblaze B2 (أقل تكلفة)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="background:rgba(16,26,48,0.9); border:1px solid var(--emerald); border-radius:14px; padding:16px 22px;">
+          <h3 style="color:var(--emerald); font-size:15px; font-weight:800; margin-bottom:4px;">⚡ أداة النقل السحابي المباشر المدمجة (Cross-Cloud Direct Transfer Engine)</h3>
+          <p style="font-size:13px; color:var(--text-main); line-height:1.6;">
+            نقل عشرات الجيجابايت من سحابة إلى سحابة أخرى (مثلاً من Google Drive إلى OneDrive أو Mega) مباشرة في الذاكرة دون حفظ الملفات على القرص الصلب (Zero Local Disk Footprint)، مما يحافظ على عمر القرص SSD وسرعة جهازك.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 6: DUAL ARCHITECTURE -->
+    <div class="slide" data-index="6">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">CROSS-PLATFORM ENGINEERING</span>
+          <h2 class="slide-title">معمارية برمجية مزدوجة ومستقلة: الحاسوب والهاتف</h2>
+          <p class="slide-subtitle">هندسة برمجية بمعايير 25 عاماً: مساران مستقلان بالكامل في التطوير والبناء والإصدار</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 06 / 18</span>
+      </div>
+
+      <div class="slide-body grid-hero">
+        <div class="image-frame">
+          <img src="website/assets/shot-dashboard.png" alt="AuraSync Desktop Dashboard" />
+          <div class="image-caption">AuraSync Desktop Native Dashboard (60 FPS)</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:16px; justify-content:center;">
+          <div class="card accent-cyan">
+            <span class="card-badge cyan">Windows x64 / Portable / Setup</span>
+            <h3 class="card-title">💻 المسار الأول: نسخة الحاسوب المستقلة (Desktop Engine)</h3>
+            <ul class="card-list">
+              <li>البيئة واللغات: Electron + Node.js 20+ مع واجهة React 18 و Vite فائقة السرعة.</li>
+              <li>قاعدة بيانات محلية فائقة القوة: SQLite WASM مع معاملات الدفعات المجمعة.</li>
+              <li>تكامل نظام ويندوز: استدعاءات Win32 API وقشرة ويندوز عبر user32.dll وقوائم شل.</li>
+              <li>استهلاك موارد متناهي الصغر: أقل من 65MB رام في الخمول، واستهلاك معالج &lt; 1%.</li>
+            </ul>
+          </div>
+
+          <div class="card accent-emerald">
+            <span class="card-badge emerald">Android APK Native Engine</span>
+            <h3 class="card-title">📱 المسار الثاني: نسخة الهاتف المستقلة (Android Native APK)</h3>
+            <ul class="card-list">
+              <li>تطبيق أندرويد حقيقي: مبني بلغة Java الأصلية (MainActivity.java) مع جسر أصول مباشر.</li>
+              <li>أمان بيومتري حقيقي: دمج مستشعر البصمة الرسمي للنظام (BiometricPrompt).</li>
+              <li>مستقبل المشاركة الجماعي: استقبال 900+ صورة دفعة واحدة عبر Android Share Intent دون أي انهيار.</li>
+              <li>حزم APK موقعة ومحدثة لأحدث أنظمة Android 14 و Android 15 (Target SDK 34).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: DESKTOP ENGINE DEEP DIVE -->
+    <div class="slide" data-index="7">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">SYSTEMS & BACKEND ARCHITECTURE</span>
+          <h2 class="slide-title">الغوص الهندسي في محرك الحاسوب (Desktop Engine)</h2>
+          <p class="slide-subtitle">حلول هندسية عميقة لمعالجة أقفال الملفات، وتسريع قواعد البيانات، واستقرار الذاكرة</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 07 / 18</span>
+      </div>
+
+      <div class="slide-body grid-2">
+        <div class="card accent-cyan">
+          <span class="card-badge cyan">أداء فائق للبيانات</span>
+          <h3 class="card-title">⚡ المعالجة المجمعة وقواعد البيانات (Batch SQLite)</h3>
+          <ul class="card-list">
+            <li>استبدال آلاف استعلامات القرص الفردية بمعاملات مجمعة عبر upsertFilesBatch.</li>
+            <li>تقليص زمن فحص ومزامنة 40,000 ملف من 3 دقائق كاملة إلى أقل من 4 ثوانٍ فقط!</li>
+            <li>فهارس B-Tree محسنة لمسارات الملفات ومعرفات المجلدات لزمن استعلام O(log N).</li>
+            <li>كتابة وحفظ لاتزامني غير حاجب لواجهة المستخدم (Non-blocking async disk flushing).</li>
+          </ul>
+        </div>
+
+        <div class="card accent-amber">
+          <span class="card-badge amber">تخطي قيود الـ API</span>
+          <h3 class="card-title">🧠 كاش المجلدات الذكي (Parent Folder Caching)</h3>
+          <ul class="card-list">
+            <li>معضلة Google Drive: تكرار طلبات البحث عن المجلدات يؤدي لحظر الحساب برمز 429.</li>
+            <li>ابتكار الكاش الداخلي: تخزين شجرة المجلدات بالذاكرة (parentFolderFilesCache).</li>
+            <li>إلغاء آلاف طلبات files.list المكررة وضمان تدفق الرفع بسرعة خط الإنترنت القصوى.</li>
+            <li>إنشاء تلقائي للمجلدات الفارغة والحفاظ على هيكل المجلدات مطابقاً للأصل 1:1.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-emerald">
+          <span class="card-badge emerald">مناعة أعطال ويندوز</span>
+          <h3 class="card-title">🔧 تجاوز أقفال ملفات ويندوز (EBUSY / EPERM)</h3>
+          <ul class="card-list">
+            <li>المعضلة: برامج مكافحة الفيروسات وويندوز تقفل الملفات التنفيذية أثناء التحديثات.</li>
+            <li>الحل المعماري: نظام التفويض لقشرة ويندوز مع إعادة المحاولة المتكررة (Exponential Retry).</li>
+            <li>تحديث ذكي بالدلتا: نسخ الملفات المتغيرة فقط app.asar وتخطي ملفات Chromium.</li>
+            <li>إنهاء التحديث وإعادة تشغيل التطبيق في أقل من 800 ميلي ثانية بصمت تام.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-purple">
+          <span class="card-badge purple">تخزين سحابي نقي 100%</span>
+          <h3 class="card-title">🧹 فلترة المخلفات ونقاء السحابة (Zero Junk Guarantee)</h3>
+          <ul class="card-list">
+            <li>حجب دائم ونهائي لملفات النظام المخفية: desktop.ini, Thumbs.db, .DS_Store.</li>
+            <li>تطهير فوري لقاعدة البيانات عند الإقلاع لمحو أي سجلات سابقة للملفات المخفية.</li>
+            <li>المحو السحابي الصاعق (1-Second Cloud Wipe): مسح السحابة بالكامل عبر شلال الخوادم.</li>
+            <li>تفريغ سلة المهملات تلقائياً لضمان عودة كوتا التخزين إلى 0GB بدقة.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 8: MOBILE ENGINE DEEP DIVE -->
+    <div class="slide" data-index="8">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">MOBILE ENGINE & GALLERY ARCHITECTURE</span>
+          <h2 class="slide-title">هندسة نسخة الهاتف: نقل كامل المعرض بضغطة زر</h2>
+          <p class="slide-subtitle">حل مشكلة امتلاء ذاكرة الهاتف وتقديم تجربة مستخدم سريعة، مشفرة ومستقلة</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 08 / 18</span>
+      </div>
+
+      <div class="slide-body grid-2">
+        <div class="card accent-emerald">
+          <span class="card-badge emerald">تنظيم سحابي تلقائي</span>
+          <h3 class="card-title">📁 مجلد الهاتف المخصص (aurasync-mobile)</h3>
+          <ul class="card-list">
+            <li>عزل كامل لملفات الهاتف: إنشاء مجلد aurasync-mobile تلقائياً على كل السحابات.</li>
+            <li>عدم خلط صور الهاتف بملفات الكمبيوتر أو مجلدات العمل لضمان الترتيب التام.</li>
+            <li>التحقق الحقيقي من السحابة: فحص وجود المجلد السحابي والملفات قبل أي تنزيل.</li>
+            <li>ميزة إخلاء مساحة الهاتف الآمنة بعد التأكد التام من اكتمال الرفع السحابي.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-cyan">
+          <span class="card-badge cyan">سرعة استيعاب قصوى</span>
+          <h3 class="card-title">📤 مشاركة 900+ ملف دفعة واحدة (Bulk Share Intent)</h3>
+          <ul class="card-list">
+            <li>استقبال المشاركات الضخمة عبر MainActivity.java بنظام ACTION_SEND_MULTIPLE.</li>
+            <li>تحديد مئات الصور والفيديوهات من المعرض ومشاركتها مباشرة مع AuraSync.</li>
+            <li>محرك الرفع المتوازي مع شريط تقدم حي ومؤشر {done} / {total} دقيق بالثانية.</li>
+            <li>استئناف تلقائي لعمليات الرفع عند انقطاع الإنترنت دون إعادة الملفات من البداية.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-purple">
+          <span class="card-badge purple">حماية بيومترية حقيقية</span>
+          <h3 class="card-title">👆 الأمان البيومتري ولوحة PIN التفاعلية</h3>
+          <ul class="card-list">
+            <li>مستشعر البصمة الحقيقي: استدعاء واجهة BiometricPrompt الرسمية لنظام أندرويد.</li>
+            <li>لوحة أرقام PIN زجاجية (12-Key Glassmorphism) مع ردود فعل حركية عند الخطأ.</li>
+            <li>جسر أمان لاتزامني: لا يتم فتح القفل إلا بعد صدور إشارة المصادقة الحقيقية.</li>
+            <li>حماية الخزنة السحابية من أي متطفل حتى لو كان الهاتف مفتوحاً.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-amber">
+          <span class="card-badge amber">استهلاك ذكي للطاقة</span>
+          <h3 class="card-title">🔋 حارس البطارية وشبكة الواي فاي (Smart Sentinel)</h3>
+          <ul class="card-list">
+            <li>المزامنة المشروطة: إمكانية تفعيل النسخ التلقائي عند الاتصال بشبكة Wi-Fi فقط.</li>
+            <li>المزامنة أثناء الشحن فقط: للحفاظ على عمر البطارية ومنع استنزافها أثناء التنقل.</li>
+            <li>فحص البصمة الرقمية (Hash Deduplication): منع إعادة رفع الصور المكررة نهائياً.</li>
+            <li>توافق كامل مع Android 14 و Android 15 بحزم APK موقعة وخالية من المشاكل.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: CYBERSECURITY & BROWSER GUARD SIMULATOR -->
+    <div class="slide" data-index="9">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">CYBERSECURITY & BROWSER GUARD</span>
+          <h2 class="slide-title">الأمن السيبراني: تشفير الحاويات وحارس المتصفحات</h2>
+          <p class="slide-subtitle">ابتكار غير مسبوق يدمج بين التشفير العسكري وقفل تصفح الإنترنت الفوري لحماية الخصوصية</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 09 / 18</span>
+      </div>
+
+      <div class="slide-body grid-hero">
+        <div class="image-frame">
+          <img src="website/assets/shot-protection.png" alt="Browser Guard Hub" />
+          <div class="image-caption">AuraSync Browser Guard & PIN Security Hub</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <!-- Interactive Browser Guard Simulator -->
+          <div class="sim-container">
+            <div class="sim-header">
+              <span>محاكي حارس المتصفحات المبتكر Win+L (Live Simulator)</span>
+              <button class="btn-ctrl" id="btn-sim-guard" style="padding:4px 10px; font-size:11px;">🔒 التبديل لمتصفح Chrome</button>
+            </div>
+            <div class="sim-screen" id="sim-guard-screen">
+              <span style="color:#64748b;">// المراقبة نشطة عبر user32.dll (تردد الفحص: 35ms)</span>
+              <span style="color:var(--text-muted);">> المتصفحات المحمية: Chrome, Edge, Brave, Opera, Firefox</span>
+              <span style="color:var(--cyan);">> الحالة: في انتظار التبديل إلى نافذة المتصفح...</span>
+            </div>
+          </div>
+
+          <div class="card accent-purple">
+            <span class="card-badge purple">ابتكار أمني حصري</span>
+            <h3 class="card-title">🛡️ حارس المتصفحات وقفل نظام ويندوز (Win + L)</h3>
+            <ul class="card-list">
+              <li>قفل فوري (0ms) بمجرد التبديل للمتصفح مع ظهور بطاقة زجاجية فاخرة لإدخال رمز PIN.</li>
+              <li>حماية نظام ويندوز الصارمة: بعد محاولتين خاطئتين للرمز، يتم قفل الكمبيوتر بالكامل فوراً (Win + L).</li>
+              <li>خزنة التشفير العسكري AES-256-GCM مع اشتقاق PBKDF2 والجلسة المعزولة الآمنة.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 10: 1-CLICK DISASTER RECOVERY -->
+    <div class="slide" data-index="10">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">DISASTER RECOVERY & PC MIGRATION</span>
+          <h2 class="slide-title">استعادة الجهاز وهجرة الحواسيب بنقرة واحدة (1-Click Recovery)</h2>
+          <p class="slide-subtitle">إعادة بناء جهازك بالكامل بعد الفورمات أو الانتقال لحاسوب جديد بنفس الترتيب والمجلدات</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 10 / 18</span>
+      </div>
+
+      <div class="slide-body grid-hero">
+        <div class="image-frame">
+          <img src="website/assets/cloud-migration.jpg" alt="1-Click PC Migration" />
+          <div class="image-caption">1-Click PC Migration & Bare-Metal Restore</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:16px; justify-content:center;">
+          <div class="card accent-amber">
+            <span class="card-badge amber">بصمة سحابية ذكية</span>
+            <h3 class="card-title">💾 معمارية بصمة الجهاز (aurasync-machine-manifest.json)</h3>
+            <ul class="card-list">
+              <li>حفظ خريطة المجلدات السحابية: يتم تسجيل مسارات الحاسوب الأصلية في ملف مانيفست سحابي ذكي.</li>
+              <li>التعرف التلقائي على مسارات ويندوز القياسية وإعادة ربطها فورياً على الجهاز الجديد:</li>
+              <li>Desktop ➔ سطح المكتب الجديد | Documents ➔ المستندات | Pictures ➔ الصور.</li>
+              <li>التعامل الذكي مع مسارات ون درايف الافتراضية وإعادة توجيهها دون حدوث تكرار.</li>
+            </ul>
+          </div>
+
+          <div class="card accent-cyan">
+            <span class="card-badge cyan">استرجاع فوري متكامل</span>
+            <h3 class="card-title">⚡ محرك التنزيل المتزامن فائق السرعة (Parallel Restore)</h3>
+            <ul class="card-list">
+              <li>حوض عمال متوازيين (Download Worker Pool) لتنزيل عشرات الملفات بالتزامن.</li>
+              <li>مؤشرات سرعة وإنجاز حية: عداد رقمي دقيق للسرعة بالثانية ونسبة مئوية للإتمام.</li>
+              <li>التخطي الذكي للملفات المتطابقة: عدم إهدار الإنترنت في تنزيل ملفات موجودة بالفعل.</li>
+              <li>إعادة تفعيل المراقبة وتلوين المجلدات تلقائياً بمجرد اكتمال الاستعادة.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 11: TURBO CONCURRENCY -->
+    <div class="slide" data-index="11">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">HIGH-THROUGHPUT NETWORKING</span>
+          <h2 class="slide-title">محرك السرعة الفائقة واستغلال شبكات الفايبر (Turbo Concurrency)</h2>
+          <p class="slide-subtitle">أقصى استغلال لسرعة الإنترنت وسحق زمن الانتظار عبر المعالجة المتزامنة المتعددة</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 11 / 18</span>
+      </div>
+
+      <div class="slide-body" style="display:flex; flex-direction:column; gap:18px;">
+        <div class="grid-2">
+          <div class="card accent-amber">
+            <span class="card-badge amber">تخصيص كامل للأداء</span>
+            <h3 class="card-title">🎛️ أنماط السرعة الأربعة (Speed & Concurrency Profiles)</h3>
+            <ul class="card-list">
+              <li>نمط الهدوء (Quiet — 2 Workers): استهلاك صفري، مثالي للألعاب والمكالمات.</li>
+              <li>النمط المتوازن الموصى به (Balanced — 4 Workers): أفضل توازن للأداء.</li>
+              <li>نمط التوربو (Turbo — 8 to 16 Workers): مضاعفة السرعة لشبكات الألياف.</li>
+              <li>ألترا توربو لسرعات الفايبر (Ultra Turbo — 24 to 32 Workers): استغلال خطوط 1000 Mbps.</li>
+            </ul>
+          </div>
+
+          <div class="card accent-cyan">
+            <span class="card-badge cyan">تشبع النطاق الترددي</span>
+            <h3 class="card-title">🌐 تخطي زمن استجابة السحابة (Overcoming HTTP Latency)</h3>
+            <ul class="card-list">
+              <li>المعضلة: استجابة خوادم جوجل ومايكروسوفت تستغرق 200-400ms لكل ملف فردي.</li>
+              <li>الحل: الرفع المتوازي لـ 32 ملفاً في نفس اللحظة يجعل سرعة الرفع مشبعة لخط الإنترنت.</li>
+              <li>رفع آلاف الصور والمستندات في دقائق معدودة بدلاً من الانتظار لساعات طويلة.</li>
+              <li>إعادة المحاولة الذكية المتدرجة (Exponential Backoff) عند أي تقلب بالشبكة.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="grid-4">
+          <div class="stat-box">
+            <span class="stat-num" style="color:var(--cyan);">4 ثوانٍ</span>
+            <span class="stat-label">فحص 40,000 ملف</span>
+            <span class="stat-sub">بدلاً من 3 دقائق سابقاً</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-num" style="color:var(--emerald);">&lt; 65 MB</span>
+            <span class="stat-label">استهلاك الذاكرة (RAM)</span>
+            <span class="stat-sub">خفة فائقة في الخمول</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-num" style="color:var(--amber);">1 ثانية</span>
+            <span class="stat-label">تصفير السحابة بالكامل</span>
+            <span class="stat-sub">Cascade Deletion الذكي</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-num" style="color:var(--purple);">60 FPS</span>
+            <span class="stat-label">سلاسة تصفح الملفات</span>
+            <span class="stat-sub">Windowed Chunking</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 12: DESIGN SYSTEM & LUXURY AESTHETICS -->
+    <div class="slide" data-index="12">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">DESIGN SYSTEM & LUXURY AESTHETICS</span>
+          <h2 class="slide-title">فلسفة التصميم: نظام Calm وثلاثة ثيمات فاخرة</h2>
+          <p class="slide-subtitle">تصميم عصري فائق النقاء يدمج بين الفخامة والراحة البصرية وسلاسة التصفح 60FPS</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 12 / 18</span>
+      </div>
+
+      <div class="slide-body grid-hero">
+        <div class="image-frame">
+          <img src="website/assets/shot-files.png" alt="AuraSync Files Explorer" />
+          <div class="image-caption">Windowed 60 FPS File Explorer & Category View</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:16px; justify-content:center;">
+          <div class="card accent-cyan">
+            <span class="card-badge cyan">جماليات متقدمة</span>
+            <h3 class="card-title">🎨 نظام التصميم الهادئ (The Calm Visual Design System)</h3>
+            <ul class="card-list">
+              <li>انحناءات ناعمة مدروسة بدقة 20px تعطي شعوراً بالحداثة والاستقرار.</li>
+              <li>توهج محيطي خافت (Subtle Ambient Glow) يبرز العناصر المهمة دون إجهاد العين.</li>
+              <li>أزرار تفاعلية لمسية مع استجابة ميكروية سلسة عند النقر والتحويم.</li>
+              <li>كبسولات إحصائية مضغوطة توفر نظرة سريعة على حالة المزامنة والسعة.</li>
+            </ul>
+          </div>
+
+          <div class="card accent-purple">
+            <span class="card-badge purple">ثيمات أصلية متباينة</span>
+            <h3 class="card-title">✨ الثيمات الثلاثة الفاخرة وسلاسة العرض (60 FPS)</h3>
+            <ul class="card-list">
+              <li>الأسود الفاحم النقي (Pure Pitch Black): خلفيات #000000 مع أزرق ملكي كلاسيكي وتصميم إنساني أصيل.</li>
+              <li>الأزرق الكحلي الملكي (Midnight Sapphire): زرقة عميقة غنية ومبهرة لبيئات العمل.</li>
+              <li>الأبيض اللؤلؤي العصري (Pristine White): نقاء ووضوح استثنائي للمكاتب المضيئة.</li>
+              <li>تصفح افتراضي خفيف (Windowed Browsing): سلاسة مطلقة عند استعراض آلاف الملفات.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 13: ENTERPRISE ROI & FINANCIAL SAVINGS -->
+    <div class="slide" data-index="13">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">FINANCIAL IMPACT & BUSINESS VALUE</span>
+          <h2 class="slide-title">دراسة الجدوى وتوفير التكاليف (Enterprise ROI & Cloud Savings)</h2>
+          <p class="slide-subtitle">كيف يوفر AuraSync آلاف الدولارات سنوياً للمستخدمين والشركات مع حماية أصول البيانات</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 13 / 18</span>
+      </div>
+
+      <div class="slide-body" style="display:flex; flex-direction:column; gap:18px;">
+        <div class="grid-2">
+          <div class="card accent-emerald">
+            <span class="card-badge emerald">توفير فوري للأفراد</span>
+            <h3 class="card-title">💰 توحيد السعات المجانية وتفادي الاشتراكات المتكررة</h3>
+            <ul class="card-list">
+              <li>دمج السعات المجانية: 15GB جوجل + 5GB ون درايف + 20GB ميجا + تيليجرام غير المحدود.</li>
+              <li>يحصل المستخدم العادي على سعة سحابية هائلة مدمجة مجاناً 100% دون دفع أي اشتراك.</li>
+              <li>توفير ما بين 24$ إلى 120$ سنوياً لكل فرد كان يدفعها في اشتراكات متكررة.</li>
+              <li>إدارة كافة الحسابات من نافذة موحدة دون التنقل بين المتصفحات والتطبيقات.</li>
+            </ul>
+          </div>
+
+          <div class="card accent-cyan">
+            <span class="card-badge cyan">عائد استثماري ضخم للشركات</span>
+            <h3 class="card-title">🏢 خفض تكاليف الشركات بنسبة تتجاوز 80%</h3>
+            <ul class="card-list">
+              <li>استبدال اشتراكات Dropbox Business (24$ لكل مستخدم شهرياً) بحلول S3 و Wasabi (فقط 6$ للتيرابايت!).</li>
+              <li>توفير أكثر من 70% إلى 80% من فواتير التخزين السحابي السنوية للمؤسسات.</li>
+              <li>انعدام تكاليف الخوادم الوسيطة (Zero Server Overhead): الاتصال مباشر من أجهزة الموظفين للسحابة.</li>
+              <li>أمان عسكري محلي يغني عن شراء برمجيات تشفير منفصلة باهظة الثمن.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="stat-box">
+            <span class="stat-num" style="color:var(--emerald);">80%+</span>
+            <span class="stat-label">وفر سنوي في تكاليف السحابة</span>
+            <span class="stat-sub">باستخدام بروتوكولات S3 و Wasabi المفتوحة</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-num" style="color:var(--cyan);">0 $</span>
+            <span class="stat-label">تكاليف خوادم وسيطة</span>
+            <span class="stat-sub">اتصال مشفر مباشر من جهازك للسحابة</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-num" style="color:var(--amber);">100%</span>
+            <span class="stat-label">حماية ضد خسائر توقف الأعمال</span>
+            <span class="stat-sub">استرجاع فوري للأجهزة وحصانة ضد الفدية</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 14: REAL-WORLD USE CASES & PERSONAS -->
+    <div class="slide" data-index="14">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">REAL-WORLD APPLICATIONS</span>
+          <h2 class="slide-title">سيناريوهات الاستخدام الميدانية (Target Personas & Use Cases)</h2>
+          <p class="slide-subtitle">حلول مخصصة تلبي متطلبات المحترفين، المبرمجين، الشركات، والعائلات</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 14 / 18</span>
+      </div>
+
+      <div class="slide-body grid-2">
+        <div class="card accent-cyan">
+          <span class="card-badge cyan">صناع المحتوى</span>
+          <h3 class="card-title">📸 1. المصورون وصناع المحتوى (Creators & Photographers)</h3>
+          <ul class="card-list">
+            <li>رفع آلاف الصور بصيغ RAW وفيديوهات 4K عبر محرك التوربو بسرعة الفايبر الكاملة.</li>
+            <li>نقل مكتبة الصور السحابية من سحابة لأخرى دون تحميلها على القرص الصلب.</li>
+            <li>سياسة انعدام الحذف تضمن عدم ضياع جلسات التصوير الحساسة أثناء فرز الملفات.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-emerald">
+          <span class="card-badge emerald">المهندسون والتقنيون</span>
+          <h3 class="card-title">💻 2. المبرمجون والمهندسون (Developers & Engineers)</h3>
+          <ul class="card-list">
+            <li>استثناء ذكي للملفات المؤقتة ومجلدات node_modules و .git لتوفير السعة.</li>
+            <li>نسخ احتياطي فوري لمشاريع الأكواد والبيانات دون تباطؤ الحاسوب أو تعطيل البرمجة.</li>
+            <li>استعادة بيئة العمل ومجلدات البرمجة بالكامل على أي جهاز جديد بضغطة زر.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-purple">
+          <span class="card-badge purple">الشركات والمؤسسات</span>
+          <h3 class="card-title">🏢 3. الشركات وبيئات العمل المشتركة (Enterprises & Offices)</h3>
+          <ul class="card-list">
+            <li>حارس المتصفحات Win+L يحمي حسابات العمل الحساسة والبريد والواتساب من التطفل.</li>
+            <li>ربط أجهزة التخزين الشبكي للشركات (Synology / QNAP NAS) عبر WebDAV.</li>
+            <li>تشفير العقود والمستندات السرية بتقنية AES-256 قبل رفعها للسحابة.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-amber">
+          <span class="card-badge amber">الاستخدام المنزلي</span>
+          <h3 class="card-title">👨‍👩‍👧‍👦 4. العائلات والمستخدمون اليوميون (Everyday Families)</h3>
+          <ul class="card-list">
+            <li>نقل مئات صور وفيديوهات المعرض من الهاتف للسحابة بضغطة زر لإخلاء الذاكرة فوراً.</li>
+            <li>أمان بيومتري وبصمة إصبع لحماية الصور العائلية في مجلد aurasync-mobile المنعزل.</li>
+            <li>راحة بال مطلقة بعدم ضياع ذكريات العائلة حتى لو تلف الهاتف أو تعطل الحاسوب.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 15: COMPETITIVE MATRIX -->
+    <div class="slide" data-index="15">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">HEAD-TO-HEAD COMPETITIVE MATRIX</span>
+          <h2 class="slide-title">المقارنة الحاسمة: كيف يتفوق AuraSync على عمالقة السحاب؟</h2>
+          <p class="slide-subtitle">مقارنة تفصيلية مباشرة توضح الفوارق الجوهرية والامتيازات الحصرية لمنصة AuraSync</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 15 / 18</span>
+      </div>
+
+      <div class="slide-body" style="display:flex; flex-direction:column; justify-content:center;">
+        <table class="comp-table">
+          <thead>
+            <tr>
+              <th>الميزة والخاصية الهندسية</th>
+              <th class="col-highlight">AuraSync ☁️</th>
+              <th>Google Drive</th>
+              <th>OneDrive</th>
+              <th>Dropbox</th>
+              <th>Mega.nz</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>سياسة عدم الحذف عند المسح المحلي (Zero-Deletion)</td>
+              <td class="col-highlight">✅ نعم 100% تلقائي</td>
+              <td>❌ يحذف فوراً</td>
+              <td>❌ يحذف فوراً</td>
+              <td>❌ يحذف فوراً</td>
+              <td>❌ يحذف فوراً</td>
+            </tr>
+            <tr>
+              <td>دمج أكثر من 25 سحابة وبروتوكول بواجهة واحدة</td>
+              <td class="col-highlight">✅ نعم مدمج موحد</td>
+              <td>❌ سحابتهم فقط</td>
+              <td>❌ سحابتهم فقط</td>
+              <td>❌ سحابتهم فقط</td>
+              <td>❌ سحابتهم فقط</td>
+            </tr>
+            <tr>
+              <td>النقل المباشر بين السحابات (Cloud-to-Cloud)</td>
+              <td class="col-highlight">✅ نعم (Zero Disk)</td>
+              <td>❌ غير مدعوم</td>
+              <td>❌ غير مدعوم</td>
+              <td>❌ غير مدعوم</td>
+              <td>❌ غير مدعوم</td>
+            </tr>
+            <tr>
+              <td>قفل المتصفحات برمز PIN وحماية قفل ويندوز Win+L</td>
+              <td class="col-highlight">✅ نعم حصرياً</td>
+              <td>❌ غير متوفر</td>
+              <td>❌ غير متوفر</td>
+              <td>❌ غير متوفر</td>
+              <td>❌ غير متوفر</td>
+            </tr>
+            <tr>
+              <td>استعادة الجهاز بالكامل بعد الفورمات بنقرة واحدة</td>
+              <td class="col-highlight">✅ نعم (Manifest)</td>
+              <td>❌ تنزيل يدوي</td>
+              <td>❌ تنزيل يدوي</td>
+              <td>❌ تنزيل يدوي</td>
+              <td>❌ تنزيل يدوي</td>
+            </tr>
+            <tr>
+              <td>تشفير الحاويات العسكري AES-256 محلياً قبل الرفع</td>
+              <td class="col-highlight">✅ نعم مدمج مجاناً</td>
+              <td>❌ لا يوجد محلي</td>
+              <td>❌ قبو محدود 3 ملفات</td>
+              <td>❌ غير متاح</td>
+              <td>✅ تشفير خاص</td>
+            </tr>
+            <tr>
+              <td>استهلاك الذاكرة في الخلفية وضع الخمول</td>
+              <td class="col-highlight">⚡ خفيف (&lt; 65MB)</td>
+              <td>⚠️ ثقيل (250MB+)</td>
+              <td>⚠️ ثقيل (200MB+)</td>
+              <td>⚠️ ثقيل (300MB+)</td>
+              <td>⚠️ متوسط (150MB+)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SLIDE 16: DEVOPS & QA PIPELINES -->
+    <div class="slide" data-index="16">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">DEVOPS & ENTERPRISE QUALITY ASSURANCE</span>
+          <h2 class="slide-title">هندسة الجودة، الـ CI/CD، ومسارات الإصدار المستقلة</h2>
+          <p class="slide-subtitle">بنية برمجية صارمة تضمن استقرار التحديثات بنسبة خطأ 0% واختبارات مؤتمتة شاملة</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 16 / 18</span>
+      </div>
+
+      <div class="slide-body grid-2">
+        <div class="card accent-cyan">
+          <span class="card-badge cyan">Continuous Delivery</span>
+          <h3 class="card-title">🚀 مسارات الإصدار المستقلة (Independent Dual Pipelines)</h3>
+          <ul class="card-list">
+            <li>قاعدة هندسية صارمة: تعديلات الهاتف لا تبني الحاسوب، وتعديلات الحاسوب لا تبني حزم الأندرويد.</li>
+            <li>مسار الهاتف (Track A): تحديث إصدار الهاتف، فحص الجودة، بناء وتوقيع AuraSync.apk، ورفعه تلقائياً.</li>
+            <li>مسار الحاسوب (Track B): فحص 100% للاختبارات، بناء Setup.exe و Portable.exe، والنشر التلقائي للريليز.</li>
+            <li>توفير هائل في استهلاك المعالج وتوفير مساحة التخزين وسرعة التسليم في ثوانٍ.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-emerald">
+          <span class="card-badge emerald">100% Test Pass Rate</span>
+          <h3 class="card-title">✅ جناح الاختبارات المؤتمت الشامل (382+ Tests)</h3>
+          <ul class="card-list">
+            <li>تنفيذ مئات الاختبارات الآلية (npm test & npm run check) قبل كل عملية نشر.</li>
+            <li>فحص شامل لتكامل قواعد البيانات، مفاتيح التشفير، ومحركات Google Drive و OneDrive و Dropbox.</li>
+            <li>التدقيق الثلاثي قبل التنفيذ (Triple Code Review): فحص الحالات الشاذة، تنظيف الموارد، ومناعة الانتكاس.</li>
+            <li>تحقيق نسبة نجاح 100% دائماً وخلو تام من أي تحذيرات لينت أو تسريب ذاكرة.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-amber">
+          <span class="card-badge amber">1-Click Silent Update</span>
+          <h3 class="card-title">🔄 المُحدّث التلقائي الصامت بنقرة واحدة (Auto-Updater)</h3>
+          <ul class="card-list">
+            <li>فحص ذكي كل 3 دقائق وعند استعادة نافذة التطبيق لأي إصدار جديد على GitHub.</li>
+            <li>تجاوز قيود الـ API (Zero-Rate-Limit): دعم التحويل 302 وسيرفرات CDN السريعة.</li>
+            <li>تحديث ذكي فوري بالدلتا: تنزيل وتطبيق التحديث وإعادة تشغيل التطبيق في أقل من ثانية واحدة.</li>
+            <li>شارة تنبيه ذهبية هادئة وحصرية في شريط الإعدادات لتفادي تشتيت المستخدم.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-purple">
+          <span class="card-badge purple">Artifacts Management</span>
+          <h3 class="card-title">📦 أرشفة الإصدارات الدائمة والتحكم بالنسخ</h3>
+          <ul class="card-list">
+            <li>نظام أرشفة دائم يحفظ كل مثبت تنفيذي مستقل (v1.7.68 ... v1.7.96) بأمان.</li>
+            <li>حفظ مساحة القرص المحلي بحذف الملفات المؤقتة ورفع النسخ الموثقة إلى GitHub Releases.</li>
+            <li>إمكانية الرجوع لأي إصدار سابق بضغطة زر عند الحاجة لبيئات العمل المؤسسية القديمة.</li>
+            <li>حماية الملفات التجميعية من أخطاء المشاركة عبر إدارة حصرية لعمليات الإغلاق.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 17: STRATEGIC ROADMAP -->
+    <div class="slide" data-index="17">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">FUTURE STRATEGIC ROADMAP</span>
+          <h2 class="slide-title">المستقبل يبدأ الآن: خارطة طريق التوسع والتطوير</h2>
+          <p class="slide-subtitle">رؤية طموحة لنقل المنصة إلى آفاق التخزين اللامركزي، الذكاء الاصطناعي، ومزامنة الند-للند</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 17 / 18</span>
+      </div>
+
+      <div class="slide-body grid-2">
+        <div class="card accent-cyan">
+          <span class="card-badge cyan">المرحلة القادمة Q3</span>
+          <h3 class="card-title">📡 1. المزامنة المباشرة الند-للند (P2P Local LAN Sync)</h3>
+          <ul class="card-list">
+            <li>مزامنة ونقل الملفات الضخمة بين أجهزة الكمبيوتر والهواتف على نفس شبكة الواي فاي المحلية.</li>
+            <li>سرعة نقل خارقة تتجاوز 100 ميجابايت/ثانية دون أن تمر الملفات عبر الإنترنت نهائياً.</li>
+            <li>حماية قصوى للبيانات الحساسة وتوفير كامل لباقة الإنترنت المنزلية والمكتبية.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-blue">
+          <span class="card-badge blue">توسع متعدد المنصات</span>
+          <h3 class="card-title">🍏 2. تطبيق الآيفون الأصلي (Native iOS Edition)</h3>
+          <ul class="card-list">
+            <li>تطوير نسخة متوافقة بالكامل مع نظام iOS ومتاحة على متجر Apple App Store.</li>
+            <li>ربط مباشر مع مكتبة صور آبل (Apple Photos iCloud) ومحرك مشاركة iOS Share Sheet.</li>
+            <li>تكامل مع بصمة الوجه (Face ID) لتأمين الخزنة السحابية على أجهزة iPhone و iPad.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-purple">
+          <span class="card-badge purple">ذكاء محلي فائق الخصوصية</span>
+          <h3 class="card-title">🤖 3. الذكاء الاصطناعي لتنظيم الصور (AI Smart Gallery)</h3>
+          <ul class="card-list">
+            <li>خوارزميات ذكاء اصطناعي محلية (Local On-Device AI) للتعرف على محتوى الصور وفرزها تلقائياً.</li>
+            <li>البحث الذكي بالكلمات الدلالية: كتابة 'سيارة' أو 'مستند عقد' للعثور على الصورة فوراً.</li>
+            <li>الكشف الذكي التلقائي عن الصور المتطابقة والمشوشة واقتراح مسحها لتوفير المساحة.</li>
+          </ul>
+        </div>
+
+        <div class="card accent-emerald">
+          <span class="card-badge emerald">أمان رقمي أبدي</span>
+          <h3 class="card-title">🌐 4. التخزين اللامركزي والويب 3 (Web3 Decentralized)</h3>
+          <ul class="card-list">
+            <li>ربط شبكات التخزين اللامركزية العالمية (IPFS, Arweave, Filecoin) كخيارات تخزين إضافية.</li>
+            <li>حفظ البيانات المشفرة للأبد دون الاعتماد على خوادم أي شركة تجارية قد تقفل حسابك.</li>
+            <li>سيادة رقمية كاملة للمستخدم على بياناته وأسراره الرقمية.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 18: EXECUTIVE SUMMARY & DELIVERABLES -->
+    <div class="slide" data-index="18">
+      <div class="slide-header">
+        <div>
+          <span class="slide-category">PROJECT SUMMARY & DELIVERABLES</span>
+          <h2 class="slide-title">AuraSync — الأمان المطلق لبياناتك الرقمية اليوم ومستقبلاً</h2>
+          <p class="slide-subtitle">مشروع متكامل، ناضج، ومتاح للإنتاج والاستخدام التجاري والمؤسسي الفوري</p>
+        </div>
+        <span class="slide-num-badge">SLIDE 18 / 18</span>
+      </div>
+
+      <div class="slide-body grid-hero">
+        <div class="image-frame">
+          <img src="website/assets/shot-settings.png" alt="Settings & Cloud Hub" />
+          <div class="image-caption">AuraSync Unified Settings & Cloud Manager</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:16px; justify-content:center;">
+          <div class="card accent-emerald">
+            <span class="card-badge emerald">جاهز للاستخدام التجاري</span>
+            <h3 class="card-title">🏆 الخلاصة التنفيذية للمشروع (Executive Value Summary)</h3>
+            <ul class="card-list">
+              <li>حل شامل وجاهز للإنتاج التجاري (Commercial Production-Grade) بمعايير معمارية عالمية.</li>
+              <li>أول منصة في العالم تجمع بين سياسة انعدام الحذف، دمج 25 سحابة، وحارس المتصفحات Win+L.</li>
+              <li>نسخة هاتف مستقلة (APK) بمستشعر بصمة حقيقي ومشاركة 900+ صورة بضغطة زر واحدة.</li>
+              <li>كود نظيف ومختبر بنسبة 100% عبر 382+ فحص تكاملي لضمان الصفر أخطاء الدائم.</li>
+            </ul>
+          </div>
+
+          <div style="background:rgba(16,26,48,0.9); border:1px solid var(--cyan); border-radius:14px; padding:16px 20px;">
+            <h3 style="color:var(--cyan); font-size:14px; font-weight:800; margin-bottom:8px;">🔗 مصادر المشروع والمخرجات الجاهزة للتشغيل (Deliverables)</h3>
+            <ul class="card-list" style="font-size:12px;">
+              <li>نسخة الكمبيوتر الرسمية: AuraSync-Setup-v1.7.96.exe و AuraSync-Portable.exe</li>
+              <li>نسخة الهاتف الرسمية: AuraSync.apk و AuraSync-v1.0.7.apk (جاهزة للتثبيت الفوري على Android)</li>
+              <li>الموقع الرسمي الفاخر: website/index.html (يدعم اللغتين العربية والإنجليزية بتصاميم 3D)</li>
+              <li>المستودع البرمجي الرسمي: samer20032020-dev/aurasync على منصة GitHub</li>
+              <li>العرض التقديمي الأصلي: ملف PowerPoint الاحترافي AuraSync-Full-Project-Presentation.pptx</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Navigation Bar -->
+  <footer class="deck-footer">
+    <div class="footer-left">
+      <button class="btn-nav" id="btn-prev" title="الشريحة السابقة (السهم الأيمن / Up)">◀</button>
+      <button class="btn-nav" id="btn-next" title="الشريحة التالية (السهم الأيسر / المسافة / Down)">▶</button>
+      <div class="slide-counter">
+        الشريحة <span id="current-slide-num">01</span> / 18
+      </div>
+    </div>
+
+    <div style="font-size:12px; color:var(--text-muted); font-weight:700;">
+      استخدم الأسهم ◄ ► أو المسافة للتنقل &nbsp;|&nbsp; اضغط <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; color:#fff;">F</kbd> لملء الشاشة &nbsp;|&nbsp; اضغط <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; color:#fff;">N</kbd> للملاحظات
+    </div>
+  </footer>
+
+  <!-- Speaker Notes Drawer -->
+  <div id="notes-drawer">
+    <div class="notes-header">
+      <div class="notes-title">
+        <span>🎙️ ملاحظات المتحدث ونقاط الخطاب الإلقائي للشريحة الحالية</span>
+      </div>
+      <button class="btn-ctrl" id="btn-close-notes" style="padding:4px 10px; font-size:11px;">إغلاق ✕</button>
+    </div>
+    <div class="notes-content" id="notes-content-box">
+      <!-- Injected dynamically via JS based on current slide -->
+    </div>
+  </div>
+
+  <!-- Grid View Modal -->
+  <div id="grid-modal">
+    <div class="grid-modal-header">
+      <h2 style="font-size:22px; font-weight:900; color:#fff;">📑 المخطط العام للشرائح (18 شريحة كاملة)</h2>
+      <button class="btn-ctrl" id="btn-close-grid" style="padding:6px 16px;">إغلاق ✕</button>
+    </div>
+    <div class="grid-thumbs-container" id="grid-thumbs-box">
+      <!-- Injected dynamically via JS -->
+    </div>
+  </div>
+
+  <script>
+    // -------------------------------------------------------------
+    // Data: Slide Titles and Speaker Notes
+    // -------------------------------------------------------------
+    const slidesData = [
+      {
+        index: 1,
+        title: "AuraSync — مشروع سحابه (شريحة الغلاف)",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:30 دقيقة]:
+• مرحباً بالحضور الكريم. اليوم نقدم لكم مشروع AuraSync (سحابه)، المنصة التي تعيد تعريف مفهوم النسخ الاحتياطي السحابي والأمن السيبراني للأفراد والشركات.
+• في عالم تضيع فيه ملفات الملايين يومياً بسبب أخطاء الحذف المتزامن التبادلي أو هجمات الفدية، ابتكرنا منصة هجينة مستقلة بالكامل تجمع بين بيئة سطح المكتب الاحترافية وتطبيق الهاتف الذكي الأصلي.
+• لدينا اليوم أكثر من 25 سحابة مدمجة في واجهة واحدة، وسياسة انعدام الحذف التي تضمن بقاء ملفاتك إلى الأبد، مع حارس المتصفحات المبتكر الذي يقفل نظام ويندوز بعد خطأين لحماية الخصوصية.`
+      },
+      {
+        index: 2,
+        title: "معضلة فقدان البيانات ومخاطر السحابة التقليدية",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 2:00 دقيقة]:
+• اسأل الحضور: كم واحد منكم حذف مجلد بالخطأ واكتشف أن جوجل درايف أو ون درايف حذفه فوراً من السحابة وهاتفه أيضاً؟
+• هذه هي المعضلة الأساسية الأولى: 'المزامنة ثنائية الاتجاه' هي أكبر كذبة أمنية، لأنها تحول خطأ المستخدم البسيط إلى كارثة فقدان نهائية.
+• المشكلة الثانية هي احتكار الشركات وتشتت الجيجابايتات المجانية بين المنصات، بالإضافة لأزمة امتلاء ذاكرة الهواتف بالصور، وانكشاف المتصفحات المفتوحة في المكاتب والمنازل.`
+      },
+      {
+        index: 3,
+        title: "الحل الثوري: منصة AuraSync الهجينة الذكية",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:45 دقيقة]:
+• استجابة لهذه التحديات، جاء AuraSync بـ 4 ركائز معمارية رئيسية:
+1. أولاً: سياسة انعدام الحذف — محرك ذكي يراقب النظام ويمنع حذف أي ملف سحابي مهما حدث محلياً.
+2. ثانياً: تجميع أكثر من 25 سحابة في منصة واحدة موحدة مع ميزة النقل المباشر من سحابة لأخرى في الرام.
+3. ثالثاً: حارس المتصفحات المبتكر Win+L الذي يقفل المتصفحات ويقفل نظام ويندوز عند محاولات التطفل.
+4. رابعاً: محرك التوربو فائق السرعة واستعادة الجهاز بالكامل بعد الفورمات بملف البصمة السحابية.`
+      },
+      {
+        index: 4,
+        title: "الجوهرة الهندسية: سياسة انعدام الحذف (Zero-Deletion)",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 2:00 دقيقة]:
+• اشرح الخطوات الأربع في الأعلى: كيف يلتقط البرنامج حذف الملف في 5 ميلي ثانية، ويجمد أوامر السحابة فوراً، ثم يسجله كملف محفوظ (Preserved).
+• قم بتشغيل 'محاكي الحذف التفاعلي' على الشاشة أمام الحضور ليروا بأعينهم كيف يتم تجميد أمر الحذف والحفاظ على الملف.
+• أكد على الفرق الجوهري: في البرامج العادية، حذف الملف = حذفه من السحابة. في AuraSync، حذف الملف = تحوله إلى أصل محفوظ بأمان مع تنبيه بصري هادئ.`
+      },
+      {
+        index: 5,
+        title: "سحابة واحدة تجمع كل السحابات: دعم +25 منصة وبروتوكول",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:45 دقيقة]:
+• بدلاً من أن يقوم المستخدم بتثبيت 4 أو 5 برامج مزامنة مختلفة تستهلك ذاكرة الجهاز، جمعنا أكثر من 25 سحابة وبروتوكول قياسي في برنامج واحد.
+• ندعم السحابات التجارية الكبرى، السحابات المشفرة مثل Mega وتليجرام غير المحدود، وكذلك بروتوكولات الشركات المفتوحة S3 و WebDAV للخوادم الخاصة وأجهزة NAS.
+• ميزة النقل المباشر بين السحابات (Cross-Cloud Transfer): نقل عشرات الجيجابايت من جوجل درايف إلى ون درايف عبر تيار بيانات يمر في الرام فقط دون أن يلمس قرصك الصلب نهائياً.`
+      },
+      {
+        index: 6,
+        title: "معمارية برمجية مزدوجة ومستقلة: الحاسوب والهاتف",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:45 دقيقة]:
+• المعمارية البرمجية للمشروع ليست تطبيقاً هجيناً بطيئاً، بل مساران مستقلان صُمما بأعلى معايير هندسة البرمجيات (25-Year Standard).
+• على الحاسوب: محرك Electron مع واجهة React 18، وقاعدة بيانات SQLite مجمعة، واستدعاءات Win32 أصيلة تضمن استهلاكاً أقل من 65MB رام.
+• على الهاتف: تطبيق أندرويد أصلي بلغة Java ومستشعر بصمة أصلي BiometricPrompt، يستقبل مئات الصور دفعة واحدة من معرض الهاتف ويرفعها مباشرة.`
+      },
+      {
+        index: 7,
+        title: "الغوص الهندسي في محرك الحاسوب (Desktop Engine)",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 2:00 دقيقة]:
+• هذه الشريحة موجهة للمهندسين والمعماريين التقنيين في القاعة:
+1. نقلنا سرعة فحص 40 ألف ملف من 3 دقائق إلى 4 ثوانٍ فقط بفضل استعلامات SQLite الدفعية المجمعة.
+2. تفادينا مشكلة حظر جوجل درايف الشهيرة (Rate Limit 429) بابتكار شجرة كاش المجلدات بالذاكرة.
+3. حللنا معضلة أقفال ملفات ويندوز EBUSY بالتحديث الصامت بالدلتا في 800 ميلي ثانية.
+4. فلترة صارمة لملفات النظام مثل desktop.ini لتبقى السحابة نظيفة 100%.`
+      },
+      {
+        index: 8,
+        title: "هندسة نسخة الهاتف: نقل كامل المعرض بضغطة زر",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:45 دقيقة]:
+• أزمة كل مستخدم هاتف ذكي هي امتلاء ذاكرة الهاتف وظهور رسالة 'مساحة التخزين غير كافية'.
+• يقدم AuraSync حلاً جذرياً: حدد المعرض بالكامل — 900 صورة أو 2000 صورة — وشاركها بنقرة واحدة مع التطبيق ليتم رفعها تلقائياً إلى مجلد aurasync-mobile الخاص في سحابتك المفضلة.
+• التطبيق مؤمن بالبصمة البيومترية الحقيقية مع خيارات ذكية للحفاظ على باقة البيانات والبطارية.`
+      },
+      {
+        index: 9,
+        title: "الأمن السيبراني: تشفير الحاويات وحارس المتصفحات",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 2:00 دقيقة]:
+• هنا الابتكار الأمني الحصري الذي يخطف الأنظار في AuraSync:
+• تخيل أنك تركت حاسوبك في المكتب وذهب لإحضار كوب قهوة. أي شخص يقترب ويضغط على أيقونة Chrome أو Edge لقراءة محادثاتك أو بريدك... يُفاجأ بحارس المتصفح يطلب رمز PIN فوراً!
+• وإذا حاول التخمين مرتين بالخطأ، يقوم AuraSync بقفل نظام ويندوز بالكامل فوراً عبر Win+L لحماية أسرار حاسوبك بالكامل!
+• قم بتشغيل محاكي حارس المتصفح التفاعلي أمام الحضور لإبهارهم!`
+      },
+      {
+        index: 10,
+        title: "استعادة الجهاز وهجرة الحواسيب بنقرة واحدة (1-Click Recovery)",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:30 دقيقة]:
+• كابوس كل مستخدم هو فورمات الحاسوب أو شراء جهاز جديد: ساعات طويلة في تنزيل الملفات وترتيب سطح المكتب والمستندات.
+• مع AuraSync: تثبت البرنامج على جهازك الجديد، وتضغط 'استعادة بنقرة واحدة'. يقرأ البرنامج ملف المانيفست السحابي aurasync-machine-manifest.json، ويعيد بناء سطح المكتب والمجلدات بنفس الهيكل والترتيب فوراً وبأقصى سرعة تنزيل ممكنة.`
+      },
+      {
+        index: 11,
+        title: "محرك السرعة الفائقة واستغلال شبكات الفايبر (Turbo Concurrency)",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:45 دقيقة]:
+• الكثير من المستخدمين لديهم خطوط ألياف ضوئية فائقة السرعة (Gigabit Fiber)، لكن عند رفع الملفات إلى Google Drive يجدون السرعة بطيئة جداً بسبب زمن الـ HTTP Latency لكل ملف.
+• ابتكرنا محرك التوربو المتوازي (حتى 32 عاملاً): يرفع 32 ملفاً بالتزامن في نفس الجزء من الثانية، مشبعاً خط الفايبر بالكامل وموفراً ساعات من الانتظار.
+• مع الحفاظ على استهلاك خفيف جداً للذاكرة أقل من 65MB رام.`
+      },
+      {
+        index: 12,
+        title: "فلسفة التصميم: نظام Calm وثلاثة ثيمات فاخرة",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:30 دقيقة]:
+• البرمجيات العظيمة لا تكتفي بكونها قوية هندسياً، بل يجب أن تأسر عين المستخدم.
+• بنينا نظام التصميم Calm Design: ثلاث ثيمات حقيقية فاخرة:
+1. الأسود الفاحم Pure Pitch Black للمحترفين وشاشات OLED.
+2. الكحلي الملكي Midnight Sapphire.
+3. الأبيض اللؤلؤي Pristine White.
+• الواجهة تعمل بمعدل 60 إطاراً في الثانية حتى لو كنت تستعرض 50 ألف ملف بفضل نظام التقطيع الافتراضي Windowed Chunking.`
+      },
+      {
+        index: 13,
+        title: "دراسة الجدوى وتوفير التكاليف (Enterprise ROI & Cloud Savings)",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:45 دقيقة]:
+• لغة الأرقام والجدوى المالية:
+• للمستخدم العادي: نجمع له سعات حساباته المجانية في سحابة واحدة عملاقة دون أن يدفع سنتاً واحداً لاشتراكات شهرية متكررة.
+• للشركات والمؤسسات: بدلاً من دفع 24 دولاراً شهرياً لكل موظف في Dropbox، يمكنهم استخدام Wasabi أو Backblaze B2 عبر AuraSync بـ 6 دولارات فقط للتيرابايت كاملة، مما يوفر أكثر من 80% من فاتورة التخزين السنوية.
+• إضافة إلى تجنب خسائر برمجيات الفدية وتوقف الأعمال التي تكلف الشركات ملايين الدولارات.`
+      },
+      {
+        index: 14,
+        title: "سيناريوهات الاستخدام الميدانية (Target Personas & Use Cases)",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:45 دقيقة]:
+• المنصة لا تخدم فئة واحدة فقط، بل تم تصميمها لتغطي 4 سيناريوهات حيوية:
+1. المصور وصانع المحتوى الذي يرفع آلاف ملفات RAW في دقائق عبر التوربو.
+2. المبرمج الذي يريد حماية أكواده واستعادة بيئته بعد الفورمات.
+3. المكاتب والشركات التي تحتاج قفل المتصفحات وحماية أسرارها.
+4. العائلات التي تريد إفراغ ذاكرة الهاتف وحفظ الذكريات بأمان دون تعقيد.`
+      },
+      {
+        index: 15,
+        title: "المقارنة الحاسمة: كيف يتفوق AuraSync على عمالقة السحاب؟",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 2:00 دقيقة]:
+• انظروا إلى هذا الجدول المقارن: العمود الثاني الأخضر يمثل AuraSync، وباقي الأعمدة تمثل عمالقة السحابة العالمية.
+• في كل خاصية حاسمة — سياسة انعدام الحذف، دمج 25 سحابة، النقل المباشر بدون قرص، حارس المتصفحات، استعادة الجهاز بمانيفست سحابي، والخفة الفائقة — يتفوق AuraSync بشكل مطلق.
+• الشركات الكبرى تبني قلاعاً مغلقة لتحبسك داخل خدماتها، بينما نحن بنينا جسراً يوحد كل خدماتك السحابية ويحميها.`
+      },
+      {
+        index: 16,
+        title: "هندسة الجودة، الـ CI/CD، ومسارات الإصدار المستقلة",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:30 دقيقة]:
+• من وراء الكواليس: كيف نضمن استقرار المشروع؟
+• لدينا مساران مؤتمتان بالكامل للـ CI/CD: تعديلات الهاتف لا تبني الحاسوب والعكس، مما يوفر الوقت والموارد.
+• 382 فحصاً مؤتمتاً ينفذ بنسبة نجاح 100% قبل كل إصدار رسمي، مع ميزة التحديث الصامت بنقرة واحدة في أقل من ثانية عبر الدلتا.`
+      },
+      {
+        index: 17,
+        title: "المستقبل يبدأ الآن: خارطة طريق التوسع والتطوير",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:30 دقيقة]:
+• أين تتجه المنصة مستقبلاً؟
+1. المزامنة المباشرة الند-للند P2P LAN لنقل الملفات بين أجهزتك المنزلية بسرعة 100MB/s دون استهلاك باقة الإنترنت.
+2. نسخة الـ iOS الأصلية مع دعم Face ID ومشاركة الآيفون.
+3. ذكاء اصطناعي محلي يعمل على جهازك دون إرسال بياناتك لخوادم خارجية، لفرز الصور والبحث بالمعنى.
+4. ربط شبكات التخزين اللامركزي Web3 لضمان بقاء البيانات للأبد.`
+      },
+      {
+        index: 18,
+        title: "AuraSync — الأمان المطلق لبياناتك الرقمية اليوم ومستقبلاً",
+        notes: `ملاحظات المتحدث [المدة المقترحة: 1:30 دقيقة]:
+• ختاماً: AuraSync ليس مجرد فكرة أو نموذج أولي، بل منتج ناضج بالكامل متاح للاستخدام الفوري على أجهزة ويندوز وهواتف أندرويد.
+• يمثل قمة الأمان السيبراني وسهولة الاستخدام ويوفر استقلالية رقمية حقيقية للمستخدمين.
+• نشكركم جميعاً على حسن استماعكم، ويسعدنا الآن فتح باب الأسئلة والمناقشة والاستعراض الحي للبرنامج.`
+      }
+    ];
+
+    // -------------------------------------------------------------
+    // Deck State & Navigation Controller
+    // -------------------------------------------------------------
+    let currentSlide = 1;
+    const totalSlides = 18;
+    let soundEnabled = true;
+
+    const slides = document.querySelectorAll('.slide');
+    const progressFill = document.getElementById('progress-fill');
+    const currentSlideNum = document.getElementById('current-slide-num');
+    const notesDrawer = document.getElementById('notes-drawer');
+    const notesContentBox = document.getElementById('notes-content-box');
+    const gridModal = document.getElementById('grid-modal');
+    const gridThumbsBox = document.getElementById('grid-thumbs-box');
+
+    // Web Audio Synthesizer for UI sound effects (Zero external assets needed)
+    let audioCtx = null;
+    function playBeep(freq = 600, duration = 0.05, type = 'sine') {
+      if (!soundEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function showSlide(index) {
+      if (index < 1 || index > totalSlides) return;
+      currentSlide = index;
+
+      slides.forEach((s) => {
+        const sIdx = parseInt(s.getAttribute('data-index'));
+        s.classList.toggle('active', sIdx === currentSlide);
+      });
+
+      // Update progress
+      const pct = (currentSlide / totalSlides) * 100;
+      progressFill.style.width = pct + '%';
+      currentSlideNum.textContent = String(currentSlide).padStart(2, '0');
+
+      // Update speaker notes
+      const data = slidesData.find((d) => d.index === currentSlide);
+      if (data) {
+        notesContentBox.textContent = data.notes;
+      }
+
+      // Update grid modal active state
+      document.querySelectorAll('.thumb-card').forEach((tc, idx) => {
+        tc.classList.toggle('active', idx + 1 === currentSlide);
+      });
+
+      playBeep(700, 0.04);
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides) {
+        showSlide(currentSlide + 1);
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 1) {
+        showSlide(currentSlide - 1);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Keyboard Navigation
+    // -------------------------------------------------------------
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        // In Arabic RTL, ArrowLeft goes next, ArrowRight goes prev, but handle both intuitively:
+        if (document.body.classList.contains('lang-en')) {
+          e.key === 'ArrowRight' ? nextSlide() : e.key === 'ArrowLeft' ? prevSlide() : nextSlide();
+        } else {
+          // In RTL standard presentation navigation:
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowDown' || e.key === ' ') nextSlide();
+          else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') prevSlide();
+        }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault();
+        if (document.body.classList.contains('lang-en')) {
+          prevSlide();
+        } else {
+          nextSlide();
+        }
+      } else if (e.key === 'Home') {
+        showSlide(1);
+      } else if (e.key === 'End') {
+        showSlide(totalSlides);
+      } else if (e.key === 'n' || e.key === 'N') {
+        toggleNotes();
+      } else if (e.key === 'g' || e.key === 'G') {
+        toggleGrid();
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      } else if (e.key === 's' || e.key === 'S') {
+        toggleSound();
+      } else if (e.key === 'Escape') {
+        notesDrawer.classList.remove('open');
+        gridModal.classList.remove('open');
+      }
+    });
+
+    // -------------------------------------------------------------
+    // Header & Footer Buttons
+    // -------------------------------------------------------------
+    document.getElementById('btn-next').addEventListener('click', nextSlide);
+    document.getElementById('btn-prev').addEventListener('click', prevSlide);
+
+    function toggleNotes() {
+      notesDrawer.classList.toggle('open');
+      playBeep(900, 0.05);
+    }
+    document.getElementById('btn-notes').addEventListener('click', toggleNotes);
+    document.getElementById('btn-close-notes').addEventListener('click', () => {
+      notesDrawer.classList.remove('open');
+    });
+
+    function toggleGrid() {
+      gridModal.classList.toggle('open');
+      playBeep(850, 0.05);
+    }
+    document.getElementById('btn-grid').addEventListener('click', toggleGrid);
+    document.getElementById('btn-close-grid').addEventListener('click', () => {
+      gridModal.classList.remove('open');
+    });
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('btn-sound').textContent = soundEnabled ? '🔊 الصوت: مُفعّل' : '🔇 الصوت: صامت';
+      if (soundEnabled) playBeep(1000, 0.06);
+    }
+    document.getElementById('btn-sound').addEventListener('click', toggleSound);
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+    document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
+
+    // Bilingual Toggle
+    document.getElementById('btn-lang').addEventListener('click', () => {
+      const isEn = document.body.classList.toggle('lang-en');
+      document.documentElement.dir = isEn ? 'ltr' : 'rtl';
+      document.documentElement.lang = isEn ? 'en' : 'ar';
+      document.getElementById('btn-lang').textContent = isEn ? '🌐 العربية' : '🌐 English';
+      playBeep(800, 0.05);
+    });
+
+    // Populate Grid Thumbnails
+    slidesData.forEach((s) => {
+      const card = document.createElement('div');
+      card.className = `thumb-card ${s.index === 1 ? 'active' : ''}`;
+      card.innerHTML = `
+        <span class="thumb-num">شريحة ${String(s.index).padStart(2, '0')}</span>
+        <span class="thumb-title">${s.title}</span>
+      `;
+      card.addEventListener('click', () => {
+        showSlide(s.index);
+        gridModal.classList.remove('open');
+      });
+      gridThumbsBox.appendChild(card);
+    });
+
+    // -------------------------------------------------------------
+    // Interactive Simulators (Zero-Deletion & Browser Guard)
+    // -------------------------------------------------------------
+    const simDeleteScreen = document.getElementById('sim-delete-screen');
+    const btnSimDelete = document.getElementById('btn-sim-delete');
+    let deleteSimCount = 0;
+
+    btnSimDelete.addEventListener('click', () => {
+      deleteSimCount++;
+      playBeep(450, 0.08, 'square');
+      simDeleteScreen.innerHTML = `
+        <span style="color:#ef4444;">[!] محرك Chokidar يلتقط حدث مسح محلي: Annual-Report-2026.pdf (unlink)</span>
+        <span style="color:#f59e0b;">[⚡] تجميد فوري: تم حظر أمر Delete API إلى Google Drive & OneDrive بنجاح!</span>
+        <span style="color:#10b981;">[🛡️] تسجيل آمن بقاعدة البيانات: status = 'preserved' | timestamp = ${new Date().toLocaleTimeString()}</span>
+        <span style="color:var(--cyan); font-weight:bold;">[✓] الملف محفوظ في السحابة 100% — تفعيل نقطة التنبيه البرتقالية لاسترجاعه بنقرة واحدة!</span>
+      `;
+    });
+
+    const simGuardScreen = document.getElementById('sim-guard-screen');
+    const btnSimGuard = document.getElementById('btn-sim-guard');
+    let guardSimStep = 0;
+
+    btnSimGuard.addEventListener('click', () => {
+      guardSimStep++;
+      if (guardSimStep % 2 === 1) {
+        playBeep(900, 0.08, 'sawtooth');
+        simGuardScreen.innerHTML = `
+          <span style="color:var(--purple); font-weight:bold;">[🚨] رصد نافذة متصفح نشطة: chrome.exe (HWND: 0x004F021)</span>
+          <span style="color:#f59e0b;">[🔒] قفل فوري (0ms): عرض نافذة رمز PIN الزجاجية أمام شاشة التصفح</span>
+          <span style="color:#ef4444;">[!] محاولة إدخال خاطئة: رمز غير مصرح به (المحاولات المتبقية: 1)</span>
+          <span style="color:#f87171; font-weight:bold;">[⚠️] تحذير أمني: المحاولة القادمة ستؤدي لقفل ويندوز بالكامل فوراً!</span>
+        `;
+        btnSimGuard.textContent = '❌ تجربة خطأ ثانٍ (Win+L)';
+        btnSimGuard.style.background = '#ef4444';
+      } else {
+        playBeep(250, 0.25, 'sawtooth');
+        simGuardScreen.innerHTML = `
+          <span style="color:#ef4444; font-weight:bold;">[💥] خطأان متتاليان للرمز! استدعاء Win32 API: LockWorkStation()</span>
+          <span style="color:var(--cyan); font-weight:bold;">[🛡️ WIN+L] تم قفل نظام ويندوز بالكامل فوراً لحماية أسرار حاسوبك من التطفل!</span>
+          <span style="color:#10b981;">[✓] حماية ناجحة بنسبة 100% — لا يمكن قراءة أي بيانات دون فك قفل النظام الأصلي.</span>
+        `;
+        btnSimGuard.textContent = '🔒 إعادة تعيين الحارس';
+        btnSimGuard.style.background = '';
+      }
+    });
+
+    // -------------------------------------------------------------
+    // Ambient Starfield Canvas Animation
+    // -------------------------------------------------------------
+    const canvas = document.getElementById('ambient-canvas');
+    const ctx = canvas.getContext('2d');
+    let stars = [];
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      stars = [];
+      const numStars = Math.floor((canvas.width * canvas.height) / 10000);
+      for (let i = 0; i < numStars; i++) {
+        stars.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          radius: Math.random() * 1.4 + 0.3,
+          alpha: Math.random() * 0.7 + 0.2,
+          speed: Math.random() * 0.3 + 0.05
+        });
+      }
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function animateStars() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#06b6d4';
+      for (let s of stars) {
+        ctx.globalAlpha = s.alpha;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+        ctx.fill();
+        s.y -= s.speed;
+        if (s.y < 0) s.y = canvas.height;
+      }
+      requestAnimationFrame(animateStars);
+    }
+    animateStars();
+
+    // Initial load
+    showSlide(1);
+  </script>
+</body>
+</html>

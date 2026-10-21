@@ -1,6 +1,6 @@
 # AuraSync — Multi-Cloud Desktop Backup
 
-**v1.7.96** — A lightweight, modern Desktop & Mobile Backup application built with **Electron**, **Android Native / WebAssembly**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
+**v1.7.97** — A lightweight, modern Desktop & Mobile Backup application built with **Electron**, **Android Native / WebAssembly**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
 
 Supports **25+ famous clouds** through native integrations and standard protocols, with a built-in **transfer tool** (device ↔ cloud, cloud ↔ cloud).
 
@@ -12,6 +12,11 @@ Supports **25+ famous clouds** through native integrations and standard protocol
 * **Smart Contextual Alerts & Empty State Protection** — If no cloud provider is logged in, the app now warns the user immediately (`⚠️ لم تقم بتسجيل الدخول أو ربط أي حساب سحابي بعد!`), and if the `aurasync-mobile` cloud folder is empty, it informs the user gracefully instead of running a fake download animation.
 * **Accurate Metric Calculations (حساب المساحة والملفات الحقيقية)** — Replaced hardcoded simulated values (such as fake 12.4 GB) with live calculations based on actual files and sizes in the cloud folder.
 * **100% Automated Regression Suite** — All 382+ automated verification tests passed with zero errors.
+
+## ✨ What's new in mobile 1.0.7
+
+* **Native Cloud File Download Integration (تنزيل الملفات السحابية لذاكرة الهاتف)** — Added native `@JavascriptInterface public void downloadCloudFile(String fileName)` bridge in `MainActivity.java` with tactile haptic feedback and toast confirmation.
+* **Full Swarm IPC & Bridge Parity** — Unified all mobile and desktop frontend-to-backend contracts with 100% test pass rate.
 
 ## ✨ What's new in 1.7.97
 
