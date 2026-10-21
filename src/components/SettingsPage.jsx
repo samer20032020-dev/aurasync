@@ -217,7 +217,7 @@ export default function SettingsPage({
   providers = [],
   folders = [],
   showToast,
-  appVersion = '1.7.100',
+  appVersion = '1.7.101',
   updateInfo = null,
   isDownloadingUpdate = false,
   updateProgress = null,

@@ -830,7 +830,7 @@ function setupIpcHandlers() {
     try {
       return app.getVersion();
     } catch (_) {
-      return '1.7.100';
+      return '1.7.101';
     }
   });
 

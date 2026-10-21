@@ -4,7 +4,7 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
+const { app, shell } = require('electron');
 const { spawn } = require('child_process');
 
 const REPO_OWNER = 'samer20032020-dev';
@@ -173,9 +173,20 @@ class UpdaterEngine {
     this.isDownloading = true;
 
     return new Promise((resolve, reject) => {
-      const tempDir = app.getPath('temp');
+      const tempDir = app ? app.getPath('temp') : (process.env.TEMP || process.env.TMP || '.');
       const targetPath = path.join(tempDir, `AuraSync-Update-Setup-${Date.now()}.exe`);
       const fileStream = fs.createWriteStream(targetPath);
+
+      const cleanupAndFail = (err) => {
+        this.isDownloading = false;
+        try { fileStream.destroy(); } catch (_) {}
+        try { if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath); } catch (_) {}
+        reject(err);
+      };
+
+      fileStream.on('error', (err) => {
+        cleanupAndFail(err);
+      });
 
       const downloadFile = (fileUrl) => {
         const client = fileUrl.startsWith('https') ? https : http;
@@ -188,10 +199,7 @@ class UpdaterEngine {
             return downloadFile(res.headers.location);
           }
           if (res.statusCode !== 200) {
-            fileStream.close();
-            try { fs.unlinkSync(targetPath); } catch (_) {}
-            this.isDownloading = false;
-            return reject(new Error(`Failed to download update: HTTP ${res.statusCode}`));
+            return cleanupAndFail(new Error(`Failed to download update: HTTP ${res.statusCode}`));
           }
 
           const totalBytes = parseInt(res.headers['content-length'], 10) || 0;
@@ -215,32 +223,93 @@ class UpdaterEngine {
           });
 
           res.on('end', () => {
-            fileStream.end(async () => {
+            // CRITICAL ARCHITECTURAL FIX: Listen for 'close', NOT 'end' callback.
+            // On Windows NT, the file descriptor lock is only released when the stream fires 'close'.
+            fileStream.on('close', async () => {
               this.isDownloading = false;
-              console.log(`[UpdaterEngine] Update downloaded to: ${targetPath}`);
-              try {
-                // Launch installer with --setup
-                const child = spawn(targetPath, ['--setup'], {
-                  detached: true,
-                  stdio: 'ignore'
-                });
-                child.unref();
+              console.log(`[UpdaterEngine] Update downloaded and file descriptor closed: ${targetPath}`);
 
-                // Cleanly quit app after 600ms
+              // Verify file size integrity
+              try {
+                const stat = fs.statSync(targetPath);
+                if (stat.size < 1024 * 1024) {
+                  throw new Error(`Downloaded installer size too small (${stat.size} bytes)`);
+                }
+              } catch (statErr) {
+                try { fs.unlinkSync(targetPath); } catch (_) {}
+                return reject(statErr);
+              }
+
+              // Resilient launch procedure with Windows Shell delegation to avoid EBUSY / locks
+              const launchInstaller = async () => {
+                let lastError = null;
+                for (let attempt = 1; attempt <= 6; attempt++) {
+                  try {
+                    // Grace period: allow Windows Defender / filesystem flusher to release lock
+                    await new Promise((r) => setTimeout(r, attempt === 1 ? 500 : 700));
+
+                    // Primary method: cmd.exe start (Windows Shell delegation)
+                    // Bypasses direct CreateProcess EBUSY locking and handles UAC elevation smoothly
+                    const child = spawn('cmd.exe', ['/c', 'start', '""', targetPath, '--setup', '--auto-update'], {
+                      detached: true,
+                      stdio: 'ignore',
+                      windowsHide: true
+                    });
+                    child.unref();
+
+                    console.log(`[UpdaterEngine] Installer successfully launched via Windows Shell on attempt ${attempt}`);
+                    return true;
+                  } catch (err) {
+                    lastError = err;
+                    console.warn(`[UpdaterEngine] Launch attempt ${attempt} failed with: ${err.message}`);
+                  }
+                }
+
+                // Fallback 1: Electron native shell.openPath
+                try {
+                  if (shell && typeof shell.openPath === 'function') {
+                    console.log('[UpdaterEngine] Falling back to shell.openPath...');
+                    await shell.openPath(targetPath);
+                    return true;
+                  }
+                } catch (shellErr) {
+                  console.warn('[UpdaterEngine] shell.openPath fallback failed:', shellErr.message);
+                }
+
+                // Fallback 2: Direct spawn
+                try {
+                  console.log('[UpdaterEngine] Falling back to direct spawn...');
+                  const directChild = spawn(targetPath, ['--setup', '--auto-update'], {
+                    detached: true,
+                    stdio: 'ignore'
+                  });
+                  directChild.unref();
+                  return true;
+                } catch (directErr) {
+                  throw lastError || directErr;
+                }
+              };
+
+              try {
+                await launchInstaller();
+
+                // Cleanly quit app after 800ms so setup installer can replace files in place
                 setTimeout(() => {
-                  app.quit();
-                }, 600);
+                  try { if (app) app.isQuitting = true; } catch (_) {}
+                  if (app) app.quit();
+                }, 800);
+
                 resolve({ success: true, targetPath });
               } catch (launchErr) {
+                console.error('[UpdaterEngine] Installer launch error:', launchErr.message);
                 reject(launchErr);
               }
             });
+
+            fileStream.end();
           });
         }).on('error', (err) => {
-          fileStream.close();
-          try { fs.unlinkSync(targetPath); } catch (_) {}
-          this.isDownloading = false;
-          reject(err);
+          cleanupAndFail(err);
         });
       };
 

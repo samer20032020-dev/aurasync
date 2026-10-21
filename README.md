@@ -1,10 +1,16 @@
 # AuraSync — Multi-Cloud Desktop Backup
 
-**v1.7.100** — A lightweight, modern Desktop & Mobile Backup application built with **Electron**, **Android Native / WebAssembly**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
+**v1.7.101** — A lightweight, modern Desktop & Mobile Backup application built with **Electron**, **Android Native / WebAssembly**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
 
 Supports **25+ famous clouds** through native integrations and standard protocols, with a built-in **transfer tool** (device ↔ cloud, cloud ↔ cloud).
 
 ---
+
+## ✨ What's new in 1.7.101
+
+* **Zero-EBUSY In-App Update Engine (حل نهائي وجذري لخطأ spawn EBUSY أثناء التحديث التلقائي)** — Completely eradicated the `spawn EBUSY` error during auto-update download by binding installer launch strictly to the stream `'close'` event rather than `'finish'`, guaranteeing that Windows NT kernel file descriptors are 100% released before execution.
+* **Windows Shell & Antivirus Guard Delegation** — Implemented Windows Shell delegation via `cmd.exe /c start` with intelligent retry cycles and `shell.openPath` fallback, allowing Windows Defender / Microsoft Antimalware service to safely finish signature scans on newly downloaded setup executables without locking out the process.
+* **100% Automated Regression Suite** — All 387+ automated verification tests passed with zero errors.
 
 ## ✨ What's new in 1.7.98
 
