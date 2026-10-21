@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.101', 'package.json version is 1.7.101', pkg.version);
+  assert(pkg.version === '1.7.102', 'package.json version is 1.7.102', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1964,7 +1964,7 @@ async function runTests() {
   const projectMcpSrc = fs.readFileSync(path.join(rootDir, '.mcp.json'), 'utf8');
   assert(projectMcpSrc.includes('"swarm-code"'), '.mcp.json in workspace includes swarm-code server');
 
-  assert(pkgJsonRaw.version === '1.7.101', 'package.json version matches 1.7.101');
+  assert(pkgJsonRaw.version === '1.7.102', 'package.json version matches 1.7.102');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);

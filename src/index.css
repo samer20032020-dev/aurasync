@@ -542,24 +542,24 @@
     border-color: var(--border-color);
   }
 
-  /* ---------- Cloud Floating Window Frame ---------- */
+  /* ---------- Cloud Window Frame ---------- */
   .cloud-window-shell {
     width: 100vw;
     height: 100vh;
     box-sizing: border-box;
-    background: transparent !important;
+    background: var(--bg-main) !important;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: padding 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    padding: 0 !important;
   }
 
   .cloud-window-shell.is-floating {
-    padding: 10px;
+    padding: 0 !important;
   }
 
   .cloud-window-shell.is-maximized {
-    padding: 0;
+    padding: 0 !important;
   }
 
   .cloud-window-frame {
@@ -569,14 +569,15 @@
     overflow: hidden;
     background: var(--bg-main);
     position: relative;
-    transform: translateZ(0);
-    transition: border-radius 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
   }
 
   .cloud-window-shell.is-floating .cloud-window-frame {
-    border-radius: 20px;
-    border: 1px solid var(--border-strong);
-    box-shadow: var(--shadow-strong);
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
   }
 
   .cloud-window-shell.is-maximized .cloud-window-frame {

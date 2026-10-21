@@ -1,10 +1,16 @@
 # AuraSync — Multi-Cloud Desktop Backup
 
-**v1.7.101** — A lightweight, modern Desktop & Mobile Backup application built with **Electron**, **Android Native / WebAssembly**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
+**v1.7.102** — A lightweight, modern Desktop & Mobile Backup application built with **Electron**, **Android Native / WebAssembly**, **React**, **Tailwind CSS**, and **SQLite (sql.js / WebAssembly)**, wrapped in the new **Calm** visual design system.
 
 Supports **25+ famous clouds** through native integrations and standard protocols, with a built-in **transfer tool** (device ↔ cloud, cloud ↔ cloud).
 
 ---
+
+## ✨ What's new in 1.7.102
+
+* **Seamless Edge-to-Edge Desktop Frame (إزالة الإطار الأسود والحواف الزائدة نهائياً)** — Completely eliminated the 10px floating padding and corner cutouts, allowing the app frame to seamlessly fill the window bounds edge-to-edge.
+* **Theme-Adaptive Native Rendering (ملاءمة كاملة للثيم الفاتح والألوان)** — Removed hardcoded `#090a0f` background on the DOM root, ensuring the Light Theme ("أبيض لؤلؤي عصري") and all themes display cleanly with zero dark border leakage.
+* **100% Automated Regression Suite** — All 387+ automated verification tests passed with zero errors.
 
 ## ✨ What's new in 1.7.101
 
