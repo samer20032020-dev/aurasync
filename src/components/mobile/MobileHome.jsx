@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.18',
+  version = '1.0.19',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -258,6 +258,7 @@ export default function MobileHome({
       galleryInputRef.current.click();
     }
   }, [accounts.length, isRtl, onShowToast, triggerHaptic]);
+  const handleStartGalleryBackup = handleStartGalleryTransfer;
 
   // One-click Free Up Device Space (128GB)
   const handleStartFreeUpSpace = useCallback(() => {

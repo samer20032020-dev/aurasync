@@ -23,7 +23,7 @@ const STORAGE_KEY_SETTINGS     = 'aurasync_mobile_settings';
 const STORAGE_KEY_ACCOUNTS     = 'aurasync_mobile_accounts';
 const STORAGE_KEY_FILES        = 'aurasync_mobile_uploaded_files';
 const STORAGE_KEY_STAGED       = 'aurasync_mobile_staged_share';
-const MOBILE_FOLDER_NAME       = 'AuraSync-mobile';
+const MOBILE_FOLDER_NAME       = 'aurasync-mobile';
 
 class MobileEngine {
   constructor() {
