@@ -15,6 +15,7 @@ const VaultPage = lazy(() => import('./components/VaultPage'));
 const MobileApp = lazy(() => import('./components/mobile/MobileApp'));
 import UpdateModal from './components/UpdateModal';
 import DisasterRecoveryModal from './components/DisasterRecoveryModal';
+import versionData from '../version.json';
 import { I18nProvider, translate } from './i18n';
 import { Info, CheckCircle2, AlertCircle, ShieldCheck, ArrowLeftRight, X, Trash2, Cloud, CloudCog, CloudOff, Loader2, Check, FolderCog, Flame } from 'lucide-react';
 
@@ -84,7 +85,7 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [folderDeleteModal, setFolderDeleteModal] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState('1.7.102');
+  const [appVersion, setAppVersion] = useState('1.7.103');
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState([]);
@@ -856,11 +857,12 @@ export default function App() {
   const toastColor = toast?.type === 'error' ? 'var(--danger)' : toast?.type === 'success' ? 'var(--success)' : 'var(--accent)';
 
   if (isMobileMode) {
+    const mobileVersion = versionData.mobileVersion || '1.0.10';
     return (
       <I18nProvider lang={settings.language || 'ar'}>
         <Suspense fallback={<div className="p-8 text-center text-white bg-black min-h-screen flex items-center justify-center">Loading AuraSync Mobile...</div>}>
           <MobileApp
-            version={appVersion}
+            version={mobileVersion}
             accounts={providers}
             storage={{
               google: providers.find((p) => p.id === 'google')?.storage,
@@ -869,10 +871,6 @@ export default function App() {
             stats={stats}
             files={[]}
             onTriggerSync={handleSyncAll}
-            onSwitchToDesktop={() => {
-              setIsMobileMode(false);
-              localStorage.setItem('aurasync_mobile_mode', 'false');
-            }}
             isSyncing={isSyncing}
           />
         </Suspense>
