@@ -31,6 +31,8 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.BufferedReader;
 import java.io.File;
@@ -711,17 +713,19 @@ public class MainActivity extends Activity {
                     try {
                         String rawTarget = (apkUrl != null && !apkUrl.trim().isEmpty())
                                 ? apkUrl.trim()
-                                : "https://github.com/samer20032020-dev/aurasync/releases/latest/download/AuraSync.apk";
+                                : "https://github.com/samer20032020-dev/aurasync/releases/download/v" + (versionName != null && !versionName.isEmpty() ? versionName : "1.0.26") + "/AuraSync.apk";
 
                         URL targetUrl = new URL(rawTarget);
                         int redirects = 0;
 
-                        // Follow GitHub redirects (301, 302, 303, 307, 308) to final S3/CDN URL
+                        // Follow GitHub/CDN redirects (301, 302, 303, 307, 308) to final S3/CDN URL
                         while (redirects < 10) {
                             conn = (HttpURLConnection) targetUrl.openConnection();
-                            conn.setConnectTimeout(25000);
-                            conn.setReadTimeout(45000);
-                            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AuraSyncMobile/1.0");
+                            conn.setConnectTimeout(12000);
+                            conn.setReadTimeout(25000);
+                            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 Chrome/128.0.0.0 Mobile Safari/537.36");
+                            // Mandatory: Accept-Encoding identity prevents gzip compression on APK binaries, preserving Content-Length from CDN/S3
+                            conn.setRequestProperty("Accept-Encoding", "identity");
                             conn.setInstanceFollowRedirects(true);
 
                             int status = conn.getResponseCode();
@@ -745,7 +749,7 @@ public class MainActivity extends Activity {
                         }
 
                         final long totalBytes = conn.getContentLength();
-                        in = conn.getInputStream();
+                        in = new BufferedInputStream(conn.getInputStream(), 32768);
 
                         // Write to internal cache directory
                         updateFile = new File(getCacheDir(), "AuraSync-update.apk");
@@ -754,21 +758,26 @@ public class MainActivity extends Activity {
                         }
 
                         out = new FileOutputStream(updateFile);
-                        byte[] buffer = new byte[8192];
+                        BufferedOutputStream bufferedOut = new BufferedOutputStream(out, 32768);
+                        byte[] buffer = new byte[32768];
                         int bytesRead;
                         long totalRead = 0;
                         long lastReportTime = 0;
 
                         while ((bytesRead = in.read(buffer)) != -1) {
-                            out.write(buffer, 0, bytesRead);
+                            bufferedOut.write(buffer, 0, bytesRead);
                             totalRead += bytesRead;
 
                             long now = System.currentTimeMillis();
-                            if (now - lastReportTime > 150 || totalRead == totalBytes) {
+                            if (now - lastReportTime > 80 || (totalBytes > 0 && totalRead >= totalBytes)) {
                                 lastReportTime = now;
-                                final int percent = totalBytes > 0 ? (int) ((totalRead * 100) / totalBytes) : -1;
-                                final double mbRead = Math.round((totalRead / (1024.0 * 1024.0)) * 10.0) / 10.0;
-                                final double mbTotal = totalBytes > 0 ? Math.round((totalBytes / (1024.0 * 1024.0)) * 10.0) / 10.0 : 0;
+                                final int percent = totalBytes > 0 
+                                        ? Math.min(99, Math.max(1, (int) ((totalRead * 100) / totalBytes))) 
+                                        : Math.min(95, Math.max(1, (int) ((totalRead * 100) / 320000L)));
+                                final double mbRead = Math.round((totalRead / (1024.0 * 1024.0)) * 100.0) / 100.0;
+                                final double mbTotal = totalBytes > 0 
+                                        ? Math.round((totalBytes / (1024.0 * 1024.0)) * 100.0) / 100.0 
+                                        : (mbRead > 0.3 ? mbRead : 0.32);
 
                                 runOnUiThread(new Runnable() {
                                     @Override
@@ -783,8 +792,8 @@ public class MainActivity extends Activity {
                             }
                         }
 
-                        out.flush();
-                        out.close();
+                        bufferedOut.flush();
+                        bufferedOut.close();
                         out = null;
                         in.close();
                         in = null;
@@ -795,13 +804,16 @@ public class MainActivity extends Activity {
                         updateFile.setReadable(true, false);
 
                         final File finalApk = updateFile;
+                        final double finalMb = Math.round((totalRead / (1024.0 * 1024.0)) * 100.0) / 100.0;
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
                                 if (webView != null) {
+                                    webView.evaluateJavascript(
+                                        "if (window.onAuraSyncUpdateProgress) window.onAuraSyncUpdateProgress(100, " + finalMb + ", " + finalMb + ");", null);
                                     webView.evaluateJavascript("if (window.onAuraSyncUpdateReady) window.onAuraSyncUpdateReady();", null);
                                 }
-                                showToast("اكتمل التحميل بنجاح! جاري فتح نافذة التثبيت...");
+                                showToast("اكتمل التحميل بسرعة فائقة! جاري فتح التثبيت...");
                                 launchApkInstall(finalApk);
                             }
                         });

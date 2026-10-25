@@ -141,10 +141,28 @@ async function publishVersion(version, isHistorical = false) {
           } catch (_) {}
         }
 
+        if (isApk) {
+          const namesToStage = [`AuraSync-v${mobileVer}.apk`, 'AuraSync.apk'];
+          for (const targetName of namesToStage) {
+            if (!seenNames.has(targetName)) {
+              seenNames.add(targetName);
+              let actualUploadPath = f;
+              if (path.basename(f) !== targetName) {
+                const staged = path.join(RELEASE_DIR, targetName);
+                try {
+                  fs.copyFileSync(f, staged);
+                  actualUploadPath = staged;
+                } catch (_) {}
+              }
+              assetsToUpload.push({ path: actualUploadPath, name: targetName, originalPath: f, sizeMB: (stat.size / 1024 / 1024).toFixed(1) });
+            }
+          }
+          continue;
+        }
+
         let uploadName = path.basename(f);
         if (uploadName === 'AuraSync-Setup.exe') uploadName = `AuraSync-Setup-v${version}.exe`;
         if (uploadName === 'AuraSync-Portable.exe') uploadName = `AuraSync-Portable-v${version}.exe`;
-        if (uploadName === 'AuraSync.apk') uploadName = `AuraSync-v${mobileVer}.apk`;
 
         if (!seenNames.has(uploadName)) {
           seenNames.add(uploadName);
