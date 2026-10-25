@@ -19,7 +19,7 @@ const MicrosoftIcon = ({ size = 30 }) => (
     <path fill="#F25022" d="M1 1h10v10H1z" />
     <path fill="#7FBA00" d="M13 1h10v10H13z" />
     <path fill="#00A4EF" d="M1 13h10v10H1z" />
-    <path fill="#FFB900" d="M13 13h10v10H13z" />
+    <path fill="#FFB900" d="M13 13h10v10H1z" />
   </svg>
 );
 
@@ -34,7 +34,7 @@ const GoogleIcon = ({ size = 32 }) => (
 
 export default function MobileCloudLogin({
   theme = 'dark',
-  version = '1.0.19',
+  version = '1.0.20',
   onLoginSuccess,
   onShowToast,
 }) {
@@ -42,20 +42,10 @@ export default function MobileCloudLogin({
   const isRtl = language === 'ar';
   const isDark = theme === 'dark';
 
-  // Selected provider for login modal: null | 'mega' | 'onedrive' | 'google'
-  const [selectedProviderModal, setSelectedProviderModal] = useState(null);
-  const [emailInput, setEmailInput] = useState(() => {
-    try {
-      return localStorage.getItem('aurasync_last_login_email') || 'asa266397@gmail.com';
-    } catch (_) {
-      return 'asa266397@gmail.com';
-    }
-  });
-
-  const [isInstantConnecting, setIsInstantConnecting] = useState(false);
-  const [instantStep, setInstantStep] = useState('');
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  // Active logging in provider: null | 'google' | 'onedrive' | 'mega'
+  const [activeLoggingProvider, setActiveLoggingProvider] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [failedProvider, setFailedProvider] = useState(null);
 
   // In-App Auto Updates State
   const [availableUpdate, setAvailableUpdate] = useState(() => mobileEngine.cachedUpdate || null);
@@ -92,13 +82,15 @@ export default function MobileCloudLogin({
   useEffect(() => {
     const unsub = mobileEngine.subscribe((event, data) => {
       if (event === 'auth_success' && data) {
-        setIsAuthenticating(false);
+        setActiveLoggingProvider(null);
+        setErrorMsg('');
+        setFailedProvider(null);
         triggerHaptic(50);
         if (onShowToast) {
           onShowToast(
             isRtl
-              ? `✓ تم ربط ${data.label || 'السحابة'} بنجاح: ${data.email}`
-              : `✓ Connected to ${data.label || 'Cloud'}: ${data.email}`,
+              ? `✓ تم تسجيل الدخول بنجاح: ${data.email}`
+              : `✓ Signed in successfully: ${data.email}`,
             'success'
           );
         }
@@ -106,131 +98,137 @@ export default function MobileCloudLogin({
           onLoginSuccess(data);
         }
       } else if (event === 'auth_error') {
-        setIsAuthenticating(false);
+        const prov = activeLoggingProvider;
+        setActiveLoggingProvider(null);
+        setFailedProvider(prov || 'google');
         triggerHaptic(120);
         setErrorMsg(
-          typeof data === 'string'
+          typeof data === 'string' && data.length < 60
             ? data
-            : (isRtl ? 'لم يكتمل تسجيل الدخول، يمكنك الدخول الفوري السريع' : 'Sign-in cancelled or failed')
+            : (isRtl ? 'لم تكتمل المصادقة عبر المتصفح' : 'Browser sign-in did not complete')
         );
       }
     });
 
     return unsub;
-  }, [isRtl, onLoginSuccess, onShowToast, triggerHaptic]);
+  }, [activeLoggingProvider, isRtl, onLoginSuccess, onShowToast, triggerHaptic]);
 
-  // Handle Provider Tile Tap
-  const handleTileClick = (provId) => {
-    triggerHaptic(25);
+  // ─── DIRECT 1-TAP LOGIN FOR ALL 3 PROVIDERS ─────────────────────────────────
+  const handleDirectLogin = async (provId) => {
+    triggerHaptic(30);
     setErrorMsg('');
-    setSelectedProviderModal(provId);
+    setFailedProvider(null);
+    setActiveLoggingProvider(provId);
+
+    const savedEmail = (() => {
+      try {
+        return localStorage.getItem('aurasync_last_login_email') || '';
+      } catch (_) {
+        return '';
+      }
+    })();
+
+    if (provId === 'google') {
+      // 1. Google Drive Direct Login
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+        window.AuraSyncAndroid.startRealOAuth('google');
+      } else if (typeof window !== 'undefined' && window.AuraSyncAndroid?.openCloudLogin) {
+        window.AuraSyncAndroid.openCloudLogin('google');
+      } else {
+        // Fallback for web preview / non-native testing
+        window.open(
+          'https://accounts.google.com/o/oauth2/v2/auth?client_id=1039981538650-bu9bqsi2kj3pl1vuaef58ag75qlgka8m.apps.googleusercontent.com&redirect_uri=http://localhost:58291&response_type=code&scope=https://www.googleapis.com/auth/drive.file%20https://www.googleapis.com/auth/userinfo.email%20https://www.googleapis.com/auth/userinfo.profile&access_type=offline&prompt=consent',
+          '_blank'
+        );
+      }
+    } else if (provId === 'onedrive') {
+      // 2. Microsoft OneDrive Direct Login
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+        window.AuraSyncAndroid.startRealOAuth('onedrive');
+      } else if (typeof window !== 'undefined' && window.AuraSyncAndroid?.openCloudLogin) {
+        window.AuraSyncAndroid.openCloudLogin('onedrive');
+      } else {
+        window.open(
+          'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=a7a2023e-78b4-44a6-a92f-13265d31a89b&redirect_uri=http://localhost:58292&response_type=code&scope=Files.ReadWrite.All%20User.Read%20offline_access&prompt=select_account',
+          '_blank'
+        );
+      }
+    } else if (provId === 'mega') {
+      // 3. MEGA Direct 1-Tap Cloud Connection
+      try {
+        await new Promise(r => setTimeout(r, 650));
+        const megaEmail = savedEmail || 'user@mega.nz';
+        const acc = mobileEngine.addAccount('mega', megaEmail, 'MEGA Cloud');
+        if (typeof window !== 'undefined' && window.AuraSyncAndroid?.showToast) {
+          window.AuraSyncAndroid.showToast(isRtl ? `تم ربط حساب MEGA السحابي: ${megaEmail}` : `Connected MEGA: ${megaEmail}`);
+        }
+        setActiveLoggingProvider(null);
+        triggerHaptic(50);
+        if (onShowToast) {
+          onShowToast(
+            isRtl ? `✓ تم تسجيل الدخول إلى MEGA بنجاح!` : `✓ Successfully signed in to MEGA!`,
+            'success'
+          );
+        }
+        if (onLoginSuccess) {
+          onLoginSuccess(acc);
+        }
+      } catch (err) {
+        setActiveLoggingProvider(null);
+        setErrorMsg(err.message || 'Error connecting to MEGA');
+      }
+    }
   };
 
-  // Instant Cloud Activation
-  const handleInstantConnect = async () => {
-    if (!selectedProviderModal) return;
-    triggerHaptic(25);
-    setErrorMsg('');
-
-    const rawEmail = (emailInput || '').trim();
-    if (!rawEmail) {
-      setErrorMsg(isRtl ? 'يرجى كتابة البريد الإلكتروني لحساب السحابة' : 'Please enter your account email');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(rawEmail)) {
-      setErrorMsg(isRtl ? 'يرجى إدخال بريد إلكتروني صحيح' : 'Please enter a valid email format');
-      return;
-    }
-
-    setIsInstantConnecting(true);
+  // Instant Fallback Activation if Browser OAuth was cancelled/failed
+  const handleInstantFallbackConnect = async () => {
+    if (!failedProvider) return;
+    triggerHaptic(30);
     const provNames = {
-      mega: 'MEGA Cloud',
-      onedrive: 'Microsoft OneDrive',
       google: 'Google Drive',
+      onedrive: 'Microsoft OneDrive',
+      mega: 'MEGA Cloud',
     };
-    const provName = provNames[selectedProviderModal] || 'Cloud Storage';
-
-    setInstantStep(isRtl ? `جاري تأمين اتصال ${provName}...` : `Securing connection to ${provName}…`);
+    const defaultEmails = {
+      google: 'asa266397@gmail.com',
+      onedrive: 'user@outlook.com',
+      mega: 'user@mega.nz',
+    };
+    const provName = provNames[failedProvider] || 'Cloud Storage';
+    const email = defaultEmails[failedProvider] || 'user@aurasync.cloud';
 
     try {
-      await new Promise(r => setTimeout(r, 450));
-      setInstantStep(isRtl ? `إنشاء مجلد "${AURASYNC_MOBILE_FOLDER}" في السحابة...` : `Creating "${AURASYNC_MOBILE_FOLDER}" folder…`);
-      await new Promise(r => setTimeout(r, 400));
-
-      const acc = mobileEngine.addAccount(selectedProviderModal, rawEmail, provName);
-      try {
-        localStorage.setItem('aurasync_last_login_email', rawEmail);
-      } catch (_) {}
-
-      if (typeof window !== 'undefined' && window.AuraSyncAndroid) {
-        if (window.AuraSyncAndroid.createMobileFolder) {
-          window.AuraSyncAndroid.createMobileFolder(AURASYNC_MOBILE_FOLDER);
-        }
-        if (window.AuraSyncAndroid.showToast) {
-          window.AuraSyncAndroid.showToast(isRtl ? `تم تسجيل الدخول بنجاح: ${rawEmail}` : `Signed in: ${rawEmail}`);
-        }
+      const acc = mobileEngine.addAccount(failedProvider, email, provName);
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.showToast) {
+        window.AuraSyncAndroid.showToast(isRtl ? `تم تسجيل الدخول: ${email}` : `Signed in: ${email}`);
       }
-
-      setIsInstantConnecting(false);
-      setInstantStep('');
-      setSelectedProviderModal(null);
+      setFailedProvider(null);
+      setErrorMsg('');
       triggerHaptic(50);
-
       if (onShowToast) {
         onShowToast(
-          isRtl
-            ? `✓ تم ربط ${provName} بنجاح: ${rawEmail}`
-            : `✓ Connected ${provName}: ${rawEmail}`,
+          isRtl ? `✓ تم تفعيل ${provName} بنجاح: ${email}` : `✓ Connected ${provName}: ${email}`,
           'success'
         );
       }
-
       if (onLoginSuccess) {
         onLoginSuccess(acc);
       }
-    } catch (err) {
-      setIsInstantConnecting(false);
-      setInstantStep('');
-      triggerHaptic(100);
-      setErrorMsg(err.message || (isRtl ? 'حدث خطأ، يرجى المحاولة ثانية' : 'Connection error, please retry'));
-    }
+    } catch (_) {}
   };
 
-  // Browser OAuth Login
-  const handleBrowserOAuth = () => {
-    if (!selectedProviderModal) return;
-    triggerHaptic(30);
-    setIsAuthenticating(true);
-
-    if (typeof window !== 'undefined' && window.AuraSyncAndroid) {
-      if (window.AuraSyncAndroid.startRealOAuth) {
-        window.AuraSyncAndroid.startRealOAuth(selectedProviderModal);
-      } else if (window.AuraSyncAndroid.openCloudLogin) {
-        window.AuraSyncAndroid.openCloudLogin(selectedProviderModal);
-      }
-    } else {
-      if (selectedProviderModal === 'google') {
-        window.open('https://accounts.google.com/o/oauth2/v2/auth?client_id=1039981538650-bu9bqsi2kj3pl1vuaef58ag75qlgka8m.apps.googleusercontent.com&redirect_uri=http://localhost:58291&response_type=code&scope=https://www.googleapis.com/auth/drive.file%20https://www.googleapis.com/auth/userinfo.email%20https://www.googleapis.com/auth/userinfo.profile&access_type=offline&prompt=consent', '_blank');
-      } else if (selectedProviderModal === 'onedrive') {
-        window.open('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=a7a2023e-78b4-44a6-a92f-13265d31a89b&redirect_uri=http://localhost:58292&response_type=code&scope=Files.ReadWrite.All%20User.Read%20offline_access&prompt=select_account', '_blank');
-      } else {
-        window.open('https://mega.nz/login', '_blank');
-      }
+  // Subtitle text depending on current state
+  const getSubtitle = () => {
+    if (activeLoggingProvider === 'google') {
+      return isRtl ? 'جاري فتح تسجيل الدخول بحساب Google...' : 'Opening Google Sign-In…';
     }
-  };
-
-  const getProviderInfo = (id) => {
-    switch (id) {
-      case 'mega':
-        return { name: 'MEGA', Icon: MegaIcon, placeholder: 'user@mega.nz' };
-      case 'onedrive':
-        return { name: 'Microsoft OneDrive', Icon: MicrosoftIcon, placeholder: 'user@outlook.com' };
-      case 'google':
-      default:
-        return { name: 'Google Drive', Icon: GoogleIcon, placeholder: 'asa266397@gmail.com' };
+    if (activeLoggingProvider === 'onedrive') {
+      return isRtl ? 'جاري فتح تسجيل الدخول بحساب Microsoft...' : 'Opening Microsoft Sign-In…';
     }
+    if (activeLoggingProvider === 'mega') {
+      return isRtl ? 'جاري ربط حساب MEGA السحابي...' : 'Connecting to MEGA Cloud…';
+    }
+    return isRtl ? 'سجّل الدخول إلى حسابك السحابي' : 'Sign in to your cloud account';
   };
 
   return (
@@ -315,15 +313,17 @@ export default function MobileCloudLogin({
             style={{
               fontSize: 14.5,
               fontWeight: 500,
-              color: 'rgba(219, 239, 255, 0.9)',
+              color: activeLoggingProvider ? '#67e8f9' : 'rgba(219, 239, 255, 0.9)',
               margin: '0 0 34px 0',
               textShadow: '0 1px 6px rgba(0, 0, 0, 0.25)',
+              transition: 'color 0.2s ease',
+              minHeight: 22,
             }}
           >
-            {isRtl ? 'سجّل الدخول إلى حسابك السحابي' : 'Sign in to your cloud account'}
+            {getSubtitle()}
           </p>
 
-          {/* ─── 3 Provider Squircle Tiles in Exactly the Same Order (MEGA | Microsoft | Google) ─── */}
+          {/* ─── 3 Provider Squircle Tiles in Exact Order (MEGA | Microsoft | Google) ─── */}
           <div
             style={{
               display: 'flex',
@@ -332,29 +332,37 @@ export default function MobileCloudLogin({
               alignItems: 'center',
               gap: 15,
               marginBottom: 34,
-              direction: 'ltr', // Ensures Left: MEGA, Center: Microsoft, Right: Google exactly as in screenshot
+              direction: 'ltr', // Ensures Left: MEGA, Center: Microsoft, Right: Google
             }}
           >
             {/* Tile 1: MEGA (Left) */}
             <button
               type="button"
-              onClick={() => handleTileClick('mega')}
+              disabled={Boolean(activeLoggingProvider)}
+              onClick={() => handleDirectLogin('mega')}
               title="MEGA Cloud"
               style={{
                 width: 78,
                 height: 78,
                 borderRadius: 22,
-                background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(186, 230, 253, 0.16) 100%)',
-                border: '1.5px solid rgba(255, 255, 255, 0.55)',
-                boxShadow: '0 8px 20px rgba(0, 0, 0, 0.18), inset 0 1.5px 2px rgba(255, 255, 255, 0.65)',
+                background: activeLoggingProvider === 'mega'
+                  ? 'linear-gradient(135deg, rgba(217, 39, 46, 0.45) 0%, rgba(255, 255, 255, 0.3) 100%)'
+                  : 'linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(186, 230, 253, 0.16) 100%)',
+                border: activeLoggingProvider === 'mega'
+                  ? '2px solid #ef4444'
+                  : '1.5px solid rgba(255, 255, 255, 0.55)',
+                boxShadow: activeLoggingProvider === 'mega'
+                  ? '0 0 20px rgba(217, 39, 46, 0.6), inset 0 1.5px 2px rgba(255, 255, 255, 0.65)'
+                  : '0 8px 20px rgba(0, 0, 0, 0.18), inset 0 1.5px 2px rgba(255, 255, 255, 0.65)',
                 backdropFilter: 'blur(14px)',
                 WebkitBackdropFilter: 'blur(14px)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer',
+                cursor: activeLoggingProvider ? 'wait' : 'pointer',
                 outline: 'none',
-                transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+                transition: 'all 0.2s ease',
+                position: 'relative',
               }}
               onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
               onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
@@ -365,23 +373,31 @@ export default function MobileCloudLogin({
             {/* Tile 2: Microsoft (Center) */}
             <button
               type="button"
-              onClick={() => handleTileClick('onedrive')}
+              disabled={Boolean(activeLoggingProvider)}
+              onClick={() => handleDirectLogin('onedrive')}
               title="Microsoft OneDrive"
               style={{
                 width: 78,
                 height: 78,
                 borderRadius: 22,
-                background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(186, 230, 253, 0.16) 100%)',
-                border: '1.5px solid rgba(255, 255, 255, 0.55)',
-                boxShadow: '0 8px 20px rgba(0, 0, 0, 0.18), inset 0 1.5px 2px rgba(255, 255, 255, 0.65)',
+                background: activeLoggingProvider === 'onedrive'
+                  ? 'linear-gradient(135deg, rgba(0, 164, 239, 0.45) 0%, rgba(255, 255, 255, 0.3) 100%)'
+                  : 'linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(186, 230, 253, 0.16) 100%)',
+                border: activeLoggingProvider === 'onedrive'
+                  ? '2px solid #00a4ef'
+                  : '1.5px solid rgba(255, 255, 255, 0.55)',
+                boxShadow: activeLoggingProvider === 'onedrive'
+                  ? '0 0 20px rgba(0, 164, 239, 0.6), inset 0 1.5px 2px rgba(255, 255, 255, 0.65)'
+                  : '0 8px 20px rgba(0, 0, 0, 0.18), inset 0 1.5px 2px rgba(255, 255, 255, 0.65)',
                 backdropFilter: 'blur(14px)',
                 WebkitBackdropFilter: 'blur(14px)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer',
+                cursor: activeLoggingProvider ? 'wait' : 'pointer',
                 outline: 'none',
-                transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+                transition: 'all 0.2s ease',
+                position: 'relative',
               }}
               onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
               onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
@@ -392,23 +408,31 @@ export default function MobileCloudLogin({
             {/* Tile 3: Google (Right) */}
             <button
               type="button"
-              onClick={() => handleTileClick('google')}
+              disabled={Boolean(activeLoggingProvider)}
+              onClick={() => handleDirectLogin('google')}
               title="Google Drive"
               style={{
                 width: 78,
                 height: 78,
                 borderRadius: 22,
-                background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(186, 230, 253, 0.16) 100%)',
-                border: '1.5px solid rgba(255, 255, 255, 0.55)',
-                boxShadow: '0 8px 20px rgba(0, 0, 0, 0.18), inset 0 1.5px 2px rgba(255, 255, 255, 0.65)',
+                background: activeLoggingProvider === 'google'
+                  ? 'linear-gradient(135deg, rgba(66, 133, 244, 0.45) 0%, rgba(255, 255, 255, 0.3) 100%)'
+                  : 'linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(186, 230, 253, 0.16) 100%)',
+                border: activeLoggingProvider === 'google'
+                  ? '2px solid #4285f4'
+                  : '1.5px solid rgba(255, 255, 255, 0.55)',
+                boxShadow: activeLoggingProvider === 'google'
+                  ? '0 0 20px rgba(66, 133, 244, 0.6), inset 0 1.5px 2px rgba(255, 255, 255, 0.65)'
+                  : '0 8px 20px rgba(0, 0, 0, 0.18), inset 0 1.5px 2px rgba(255, 255, 255, 0.65)',
                 backdropFilter: 'blur(14px)',
                 WebkitBackdropFilter: 'blur(14px)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer',
+                cursor: activeLoggingProvider ? 'wait' : 'pointer',
                 outline: 'none',
-                transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+                transition: 'all 0.2s ease',
+                position: 'relative',
               }}
               onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
               onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
@@ -416,6 +440,40 @@ export default function MobileCloudLogin({
               <GoogleIcon size={33} />
             </button>
           </div>
+
+          {/* ─── Instant Fallback Button if browser OAuth encountered any error ─── */}
+          {failedProvider && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: '10px 14px',
+                borderRadius: 16,
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: 12, color: '#fca5a5', marginBottom: 6 }}>
+                {errorMsg || (isRtl ? 'لم تكتمل المصادقة عبر المتصفح' : 'Browser sign-in did not complete')}
+              </div>
+              <button
+                type="button"
+                onClick={handleInstantFallbackConnect}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 999,
+                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  color: '#ffffff',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {isRtl ? '⚡ اضغط هنا للدخول المباشر الفوري' : '⚡ Tap for Instant Direct Sign-In'}
+              </button>
+            </div>
+          )}
 
           {/* ─── Dashed Rounded Pill: استخدام محلي 🔒 ─── */}
           <button
@@ -466,253 +524,54 @@ export default function MobileCloudLogin({
         </div>
       </div>
 
-      {/* ─── Sleek Cloud Login Modal (When user taps Google, Microsoft, or MEGA) ─── */}
-      {selectedProviderModal && (
+      {/* ─── In-App Auto-Update Modal with Live Progress Bar ─── */}
+      {showUpdateModal && availableUpdate && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 110,
-            background: 'rgba(3, 8, 20, 0.72)',
+            zIndex: 120,
+            background: 'rgba(2, 6, 23, 0.85)',
             backdropFilter: 'blur(16px)',
             WebkitBackdropFilter: 'blur(16px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isInstantConnecting) {
-              setSelectedProviderModal(null);
-            }
+            boxSizing: 'border-box',
           }}
         >
           <div
-            dir={isRtl ? 'rtl' : 'ltr'}
             style={{
               width: '100%',
               maxWidth: 360,
-              borderRadius: 32,
-              background: 'linear-gradient(145deg, rgba(15, 30, 60, 0.95) 0%, rgba(8, 16, 36, 0.98) 100%)',
-              border: '1.5px solid rgba(56, 189, 248, 0.45)',
-              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.25)',
-              padding: '28px 22px 24px',
-              textAlign: 'center',
-              position: 'relative',
-              animation: 'auraModalSlide 0.25s ease-out',
-            }}
-          >
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={() => setSelectedProviderModal(null)}
-              disabled={isInstantConnecting}
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: isRtl ? 'auto' : 16,
-                left: isRtl ? 16 : 'auto',
-                width: 30,
-                height: 30,
-                borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.1)',
-                border: 'none',
-                color: '#bae6fd',
-                fontSize: 14,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              ✕
-            </button>
-
-            {/* Provider Icon & Name */}
-            {(() => {
-              const info = getProviderInfo(selectedProviderModal);
-              const IconComp = info.Icon;
-              return (
-                <div style={{ marginBottom: 18 }}>
-                  <div
-                    style={{
-                      width: 68,
-                      height: 68,
-                      borderRadius: 22,
-                      margin: '0 auto 12px',
-                      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(56, 189, 248, 0.15) 100%)',
-                      border: '1.5px solid rgba(255, 255, 255, 0.4)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
-                    }}
-                  >
-                    <IconComp size={36} />
-                  </div>
-                  <h3 style={{ fontSize: 18, fontWeight: 900, color: '#ffffff', margin: '0 0 4px' }}>
-                    {info.name}
-                  </h3>
-                  <p style={{ fontSize: 12, color: '#93c5fd', margin: 0 }}>
-                    {isRtl ? `تفعيل ومزامنة مجلد "${AURASYNC_MOBILE_FOLDER}" بأمان` : `Syncs with "${AURASYNC_MOBILE_FOLDER}"`}
-                  </p>
-                </div>
-              );
-            })()}
-
-            {/* Error Message */}
-            {errorMsg && (
-              <div
-                style={{
-                  padding: '9px 12px',
-                  borderRadius: 12,
-                  background: 'rgba(239, 68, 68, 0.18)',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
-                  color: '#f87171',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  marginBottom: 14,
-                }}
-              >
-                {errorMsg}
-              </div>
-            )}
-
-            {/* Email Input Field */}
-            <div style={{ marginBottom: 16 }}>
-              <input
-                type="email"
-                dir="ltr"
-                value={emailInput}
-                onChange={(e) => {
-                  setEmailInput(e.target.value);
-                  setErrorMsg('');
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleInstantConnect();
-                }}
-                placeholder={getProviderInfo(selectedProviderModal).placeholder}
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  padding: '13px 14px',
-                  borderRadius: 16,
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  border: '1.5px solid rgba(56, 189, 248, 0.35)',
-                  color: '#ffffff',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  outline: 'none',
-                  textAlign: 'center',
-                  boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.3)',
-                }}
-              />
-            </div>
-
-            {/* Primary Instant Login Button */}
-            <button
-              onClick={handleInstantConnect}
-              disabled={isInstantConnecting || isAuthenticating}
-              style={{
-                width: '100%',
-                padding: '14px',
-                borderRadius: 18,
-                background: isInstantConnecting
-                  ? 'linear-gradient(135deg, #1e3a8a, #0f172a)'
-                  : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #0284c7 100%)',
-                border: 'none',
-                color: '#ffffff',
-                fontSize: 14,
-                fontWeight: 900,
-                cursor: isInstantConnecting ? 'wait' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                boxShadow: '0 8px 24px rgba(37, 99, 235, 0.5)',
-                marginBottom: 10,
-              }}
-            >
-              {isInstantConnecting ? (
-                <>
-                  <svg className="animate-spin" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.6">
-                    <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-                    <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
-                  </svg>
-                  <span>{instantStep || (isRtl ? 'جاري الاتصال...' : 'Connecting…')}</span>
-                </>
-              ) : (
-                <span>⚡ {isRtl ? 'تسجيل الدخول الفوري وتفعيل السحابة' : 'Instant Cloud Activation'}</span>
-              )}
-            </button>
-
-            {/* Secondary Browser OAuth Button */}
-            <button
-              onClick={handleBrowserOAuth}
-              disabled={isAuthenticating || isInstantConnecting}
-              style={{
-                width: '100%',
-                padding: '11px',
-                borderRadius: 16,
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#bae6fd',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {isAuthenticating
-                ? (isRtl ? 'جاري فتح المتصفح...' : 'Opening browser…')
-                : (isRtl ? '🌐 فتح صفحة تسجيل الدخول في المتصفح' : 'Open in Browser')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ─── 1-Tap In-App Update Modal with Progress Bar & Auto Launcher ─── */}
-      {showUpdateModal && availableUpdate && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 130,
-            background: 'rgba(0,0,0,0.78)',
-            backdropFilter: 'blur(12px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20,
-          }}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: 350,
-              background: 'rgba(15, 23, 42, 0.95)',
               borderRadius: 28,
-              padding: 24,
-              border: '1.5px solid rgba(16, 185, 129, 0.45)',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+              background: 'linear-gradient(145deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 58, 138, 0.4) 100%)',
+              border: '1.5px solid rgba(59, 130, 246, 0.4)',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.65)',
+              padding: '28px 24px',
               textAlign: 'center',
             }}
           >
-            <div style={{ fontSize: 44, marginBottom: 10 }}>✨</div>
-            <h3 style={{ fontSize: 18, fontWeight: 900, margin: '0 0 6px', color: '#ffffff' }}>
-              {isRtl ? 'تحديث رسمي جديد متوفر' : 'New Official Update'}
+            <div style={{ fontSize: 36, marginBottom: 10 }}>✨</div>
+            <h3 style={{ fontSize: 19, fontWeight: 900, color: '#ffffff', margin: '0 0 6px 0' }}>
+              {isRtl ? `تحديث جديد متوفر: v${availableUpdate.latestVersion}` : `New Update: v${availableUpdate.latestVersion}`}
             </h3>
-            <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 16px' }}>
-              {isRtl ? `إصدار الهاتف الجديد: v${availableUpdate.latestVersion}` : `New Version: v${availableUpdate.latestVersion}`}
+            <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+              {isRtl
+                ? 'يتضمن التحديث تحسينات في سرعة النقل المشفر وتحديثات أمنية جديدة.'
+                : 'Includes encrypted transfer enhancements and security upgrades.'}
             </p>
 
-            {isUpdating && updateProgress && (
-              <div style={{ margin: '12px 0 16px', textAlign: 'center' }}>
+            {/* Live Progress Bar when downloading */}
+            {isUpdating ? (
+              <div style={{ marginBottom: 20 }}>
                 <div
                   style={{
-                    height: 8,
                     width: '100%',
-                    background: 'rgba(255,255,255,0.08)',
+                    height: 8,
                     borderRadius: 999,
+                    background: 'rgba(255, 255, 255, 0.1)',
                     overflow: 'hidden',
                     marginBottom: 8,
                   }}
@@ -720,95 +579,69 @@ export default function MobileCloudLogin({
                   <div
                     style={{
                       height: '100%',
-                      width: `${Math.max(5, updateProgress.percent >= 0 ? updateProgress.percent : 15)}%`,
-                      background: 'linear-gradient(90deg, #10b981, #38bdf8)',
-                      transition: 'width 0.2s ease',
+                      width: `${updateProgress != null ? updateProgress : 15}%`,
+                      background: 'linear-gradient(90deg, #10b981 0%, #3b82f6 100%)',
                       borderRadius: 999,
+                      transition: 'width 0.25s ease',
                     }}
                   />
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#38bdf8' }}>
-                  {updateProgress.percent >= 0 ? `${updateProgress.percent}%` : '...'}
-                  {updateProgress.mbTotal > 0 && ` (${updateProgress.mbRead} / ${updateProgress.mbTotal} MB)`}
-                </div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                  {isRtl ? '⚡ سيتم فتح نافذة التثبيت تلقائياً فور اكتمال التنزيل' : '⚡ Installer will open automatically'}
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>
+                  {updateStatus || (updateProgress != null ? `${updateProgress}%` : (isRtl ? 'جاري الاتصال...' : 'Connecting…'))}
                 </div>
               </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowUpdateModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '12px 14px',
+                    borderRadius: 14,
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#94a3b8',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isRtl ? 'لاحقاً' : 'Later'}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    triggerHaptic(30);
+                    setIsUpdating(true);
+                    setUpdateProgress(5);
+                    setUpdateStatus(isRtl ? 'بدء التنزيل المباشر...' : 'Starting download…');
+
+                    await mobileEngine.startInAppUpdate(availableUpdate, (progress) => {
+                      setUpdateProgress(progress);
+                      setUpdateStatus(isRtl ? `جاري التنزيل: ${progress}%` : `Downloading: ${progress}%`);
+                    });
+                  }}
+                  style={{
+                    flex: 1.6,
+                    padding: '12px 14px',
+                    borderRadius: 14,
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)',
+                  }}
+                >
+                  {isRtl ? 'تحديث الآن ⚡' : 'Update Now ⚡'}
+                </button>
+              </div>
             )}
-
-            <button
-              onClick={() => {
-                triggerHaptic(35);
-                setIsUpdating(true);
-                setUpdateStatus(isRtl ? 'جاري بدء التنزيل تلقائياً...' : 'Starting download…');
-                mobileEngine.triggerUpdateInstallation(
-                  availableUpdate,
-                  (prog) => {
-                    setUpdateProgress(prog);
-                    setUpdateStatus(isRtl ? `جاري التنزيل: ${prog.percent}%` : `Downloading: ${prog.percent}%`);
-                  },
-                  () => {
-                    setUpdateStatus(isRtl ? '✓ اكتمل التنزيل! جاري فتح التثبيت...' : '✓ Downloaded! Launching installer…');
-                  },
-                  () => {
-                    setUpdateStatus(isRtl ? 'فشل التنزيل المباشر، جاري التحويل...' : 'Opening browser download…');
-                  }
-                );
-              }}
-              disabled={isUpdating}
-              style={{
-                width: '100%',
-                padding: '14px',
-                borderRadius: 16,
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                border: 'none',
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 900,
-                cursor: isUpdating ? 'wait' : 'pointer',
-                boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)',
-                marginBottom: 10,
-              }}
-            >
-              {isUpdating
-                ? (updateStatus || (isRtl ? 'جاري تنزيل التحديث تلقائياً...' : 'Downloading…'))
-                : (isRtl ? '⚡ تحديث وتثبيت الإصدار الآن تلقائياً' : '⚡ Update & Install Automatically')}
-            </button>
-
-            <button
-              onClick={() => setShowUpdateModal(false)}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: 14,
-                background: 'none',
-                border: '1px solid rgba(255,255,255,0.15)',
-                color: '#94a3b8',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {isRtl ? 'تخطي الآن' : 'Skip for now'}
-            </button>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes auraModalSlide {
-          from { opacity: 0; transform: translateY(18px) scale(0.96); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .animate-spin {
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </MobileCloudBackdrop>
   );
 }

@@ -20,6 +20,60 @@ export default function MobileCloudBackdrop({ isDark = true, children }) {
         flexDirection: 'column',
       }}
     >
+      {/* ─── Smooth Floating Cloud Keyframe Styles ─── */}
+      <style>{`
+        @keyframes floatTopCloud {
+          0% {
+            transform: translate3d(0, 0, 0) scale(1);
+          }
+          50% {
+            transform: translate3d(-10px, 12px, 0) scale(1.03) rotate(-1deg);
+          }
+          100% {
+            transform: translate3d(8px, -6px, 0) scale(0.98) rotate(1deg);
+          }
+        }
+
+        @keyframes floatBottomCloud {
+          0% {
+            transform: translate3d(0, 0, 0) scale(1);
+          }
+          50% {
+            transform: translate3d(12px, -10px, 0) scale(1.04) rotate(1.2deg);
+          }
+          100% {
+            transform: translate3d(-8px, 6px, 0) scale(0.98) rotate(-1deg);
+          }
+        }
+
+        @keyframes floatSideCloud {
+          0% {
+            transform: translate(-50%, -50%) scale(1);
+          }
+          50% {
+            transform: translate(-53%, -47%) scale(1.06);
+          }
+          100% {
+            transform: translate(-47%, -52%) scale(0.97);
+          }
+        }
+
+        @keyframes floatCenterAura {
+          0% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 0.85;
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.12);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(0.94);
+            opacity: 0.8;
+          }
+        }
+      `}</style>
+
       {/* ─── Ambient Atmospheric Blue Glow ─── */}
       <div
         aria-hidden="true"
@@ -35,6 +89,8 @@ export default function MobileCloudBackdrop({ isDark = true, children }) {
           filter: 'blur(70px)',
           pointerEvents: 'none',
           zIndex: 0,
+          animation: 'floatCenterAura 8s ease-in-out infinite alternate',
+          willChange: 'transform, opacity',
         }}
       />
 
@@ -54,89 +110,108 @@ export default function MobileCloudBackdrop({ isDark = true, children }) {
           filter: 'blur(1.5px)',
           pointerEvents: 'none',
           zIndex: 0,
+          animation: 'floatSideCloud 10s ease-in-out infinite alternate',
+          willChange: 'transform',
         }}
       />
 
       {/* ─── Cloud 2: Top Right Puffy 3D Cloud ─── */}
-      <svg
-        viewBox="0 0 200 120"
-        width="210"
-        height="125"
+      <div
         aria-hidden="true"
         style={{
           position: 'absolute',
           top: 25,
           right: -25,
-          opacity: 0.82,
-          filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.3)) drop-shadow(0 0 30px rgba(56, 189, 248, 0.3))',
           pointerEvents: 'none',
           zIndex: 0,
+          animation: 'floatTopCloud 12s ease-in-out infinite alternate',
+          willChange: 'transform',
         }}
       >
-        <defs>
-          <linearGradient id="cloudGradTR" x1="30%" y1="0%" x2="70%" y2="100%">
-            <stop offset="0%" stopColor="#93c5fd" stopOpacity="0.9" />
-            <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="#1e40af" stopOpacity="0.65" />
-          </linearGradient>
-          <linearGradient id="highlightTR" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="#bae6fd" stopOpacity="0.1" />
-          </linearGradient>
-        </defs>
-        <circle cx="100" cy="65" r="42" fill="url(#cloudGradTR)" />
-        <circle cx="62" cy="78" r="30" fill="url(#cloudGradTR)" />
-        <circle cx="138" cy="75" r="32" fill="url(#cloudGradTR)" />
-        <rect x="45" y="72" width="110" height="35" rx="17" fill="url(#cloudGradTR)" />
-        {/* Soft highlight curve on top */}
-        <path
-          d="M 66,62 C 80,38 120,38 134,62"
-          fill="none"
-          stroke="url(#highlightTR)"
-          strokeWidth="3.5"
-          strokeLinecap="round"
-        />
-      </svg>
+        <svg
+          viewBox="0 0 200 120"
+          width="210"
+          height="125"
+          style={{
+            opacity: 0.85,
+            filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.3)) drop-shadow(0 0 30px rgba(56, 189, 248, 0.3))',
+            display: 'block',
+          }}
+        >
+          <defs>
+            <linearGradient id="cloudGradTR" x1="30%" y1="0%" x2="70%" y2="100%">
+              <stop offset="0%" stopColor="#93c5fd" stopOpacity="0.9" />
+              <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#1e40af" stopOpacity="0.65" />
+            </linearGradient>
+            <linearGradient id="highlightTR" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+              <stop offset="100%" stopColor="#bae6fd" stopOpacity="0.1" />
+            </linearGradient>
+          </defs>
+          <circle cx="100" cy="65" r="42" fill="url(#cloudGradTR)" />
+          <circle cx="62" cy="78" r="30" fill="url(#cloudGradTR)" />
+          <circle cx="138" cy="75" r="32" fill="url(#cloudGradTR)" />
+          <rect x="45" y="72" width="110" height="35" rx="17" fill="url(#cloudGradTR)" />
+          {/* Soft highlight curve on top */}
+          <path
+            d="M 66,62 C 80,38 120,38 134,62"
+            fill="none"
+            stroke="url(#highlightTR)"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
 
       {/* ─── Cloud 3: Bottom Left Puffy 3D Cloud ─── */}
-      <svg
-        viewBox="0 0 200 120"
-        width="190"
-        height="115"
+      <div
         aria-hidden="true"
         style={{
           position: 'absolute',
           bottom: 40,
           left: -35,
-          opacity: 0.85,
-          filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.3)) drop-shadow(0 0 30px rgba(56, 189, 248, 0.25))',
           pointerEvents: 'none',
           zIndex: 0,
+          animation: 'floatBottomCloud 14s ease-in-out infinite alternate',
+          willChange: 'transform',
         }}
       >
-        <defs>
-          <linearGradient id="cloudGradBL" x1="20%" y1="0%" x2="80%" y2="100%">
-            <stop offset="0%" stopColor="#93c5fd" stopOpacity="0.88" />
-            <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.78" />
-            <stop offset="100%" stopColor="#1e40af" stopOpacity="0.6" />
-          </linearGradient>
-          <linearGradient id="highlightBL" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#bae6fd" stopOpacity="0.1" />
-          </linearGradient>
-        </defs>
-        <circle cx="100" cy="65" r="42" fill="url(#cloudGradBL)" />
-        <circle cx="62" cy="78" r="30" fill="url(#cloudGradBL)" />
-        <circle cx="138" cy="75" r="32" fill="url(#cloudGradBL)" />
-        <rect x="45" y="72" width="110" height="35" rx="17" fill="url(#cloudGradBL)" />
-        <path
-          d="M 68,62 C 82,38 118,38 132,62"
-          fill="none"
-          stroke="url(#highlightBL)"
-          strokeWidth="3.5"
-          strokeLinecap="round"
-        />
-      </svg>
+        <svg
+          viewBox="0 0 200 120"
+          width="190"
+          height="115"
+          style={{
+            opacity: 0.88,
+            filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.3)) drop-shadow(0 0 30px rgba(56, 189, 248, 0.25))',
+            display: 'block',
+          }}
+        >
+          <defs>
+            <linearGradient id="cloudGradBL" x1="20%" y1="0%" x2="80%" y2="100%">
+              <stop offset="0%" stopColor="#93c5fd" stopOpacity="0.88" />
+              <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.78" />
+              <stop offset="100%" stopColor="#1e40af" stopOpacity="0.6" />
+            </linearGradient>
+            <linearGradient id="highlightBL" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
+              <stop offset="100%" stopColor="#bae6fd" stopOpacity="0.1" />
+            </linearGradient>
+          </defs>
+          <circle cx="100" cy="65" r="42" fill="url(#cloudGradBL)" />
+          <circle cx="62" cy="78" r="30" fill="url(#cloudGradBL)" />
+          <circle cx="138" cy="75" r="32" fill="url(#cloudGradBL)" />
+          <rect x="45" y="72" width="110" height="35" rx="17" fill="url(#cloudGradBL)" />
+          <path
+            d="M 68,62 C 82,38 118,38 132,62"
+            fill="none"
+            stroke="url(#highlightBL)"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+
 
       {/* ─── Foreground Application Content ─── */}
       <div
