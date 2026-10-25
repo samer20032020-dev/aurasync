@@ -1046,12 +1046,22 @@ public class MainActivity extends Activity {
         final boolean isGoogle = !"onedrive".equalsIgnoreCase(provider) && !"microsoft".equalsIgnoreCase(provider);
         final int port = isGoogle ? GOOGLE_PORT : ONEDRIVE_PORT;
 
+        // Acquire high-priority WakeLock so Android OS never throttles the background socket thread
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm != null) {
+                if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AuraSync:OAuthLoopback");
+                wakeLock.acquire(120000); // 2 minutes max
+            }
+        } catch (Exception ignored) {}
+
         oauthServerThread = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
                     // Bind to wildcard (IPv4 + IPv6) so Chrome on modern Android never gets connection refused / offline error
-                    oauthServerSocket = new ServerSocket(port, 5);
+                    oauthServerSocket = new ServerSocket(port, 10);
 
                     // Launch system browser with official OAuth authorization consent URL
                     runOnUiThread(new Runnable() {
@@ -1064,9 +1074,9 @@ public class MainActivity extends Activity {
                                         + "?client_id=" + URLEncoder.encode(getGoogleClientId(), "UTF-8")
                                         + "&redirect_uri=" + URLEncoder.encode("http://localhost:" + GOOGLE_PORT, "UTF-8")
                                         + "&response_type=code"
-                                        + "&scope=" + URLEncoder.encode("https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile", "UTF-8")
+                                        + "&scope=" + URLEncoder.encode("openid email profile https://www.googleapis.com/auth/drive.file", "UTF-8")
                                         + "&access_type=offline"
-                                        + "&prompt=consent";
+                                        + "&prompt=select_account";
                                 } else {
                                     authUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
                                         + "?client_id=" + URLEncoder.encode(ONEDRIVE_CLIENT_ID, "UTF-8")
@@ -1085,121 +1095,183 @@ public class MainActivity extends Activity {
                         }
                     });
 
-                    // Wait for loopback redirect request from browser
-                    Socket clientSocket = oauthServerSocket.accept();
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8));
-                    String requestLine = reader.readLine();
-
-                    String code = null;
-                    String error = null;
-
-                    if (requestLine != null) {
-                        int codeIdx = requestLine.indexOf("code=");
-                        if (codeIdx != -1) {
-                            int end = requestLine.indexOf('&', codeIdx);
-                            int space = requestLine.indexOf(' ', codeIdx);
-                            if (end == -1 || (space != -1 && space < end)) end = space;
-                            if (end != -1) code = requestLine.substring(codeIdx + 5, end);
-                            else code = requestLine.substring(codeIdx + 5);
-                            code = URLDecoder.decode(code, "UTF-8");
+                    // Loop to accept connections resiliently (handles Chrome Private Network Access preflights, favicons, and IPv4/IPv6 probes)
+                    while (oauthServerSocket != null && !oauthServerSocket.isClosed()) {
+                        Socket clientSocket;
+                        try {
+                            clientSocket = oauthServerSocket.accept();
+                        } catch (Exception socketClosed) {
+                            break;
                         }
 
-                        int errIdx = requestLine.indexOf("error=");
-                        if (errIdx != -1) {
-                            int end = requestLine.indexOf('&', errIdx);
-                            int space = requestLine.indexOf(' ', errIdx);
-                            if (end == -1 || (space != -1 && space < end)) end = space;
-                            if (end != -1) error = requestLine.substring(errIdx + 6, end);
-                            else error = requestLine.substring(errIdx + 6);
-                            error = URLDecoder.decode(error, "UTF-8");
-                        }
-                    }
+                        try {
+                            BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8));
+                            String requestLine = reader.readLine();
 
-                    // Return instant auto-redirect HTML with intent URI to bring user back to app immediately!
-                    String responseHtml;
-                    if (code != null) {
-                        // Immediately bring MainActivity back to foreground!
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    Intent reopen = new Intent(MainActivity.this, MainActivity.class);
-                                    reopen.setAction(Intent.ACTION_MAIN);
-                                    reopen.addCategory(Intent.CATEGORY_LAUNCHER);
-                                    reopen.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                                    startActivity(reopen);
-                                } catch (Exception ignored) {}
+                            if (requestLine == null || requestLine.isEmpty()) {
+                                try { clientSocket.close(); } catch (Exception ignored) {}
+                                continue;
                             }
-                        });
 
-                        String intentUri = "intent://auth/complete#Intent;scheme=aurasync;package=com.aurasync.mobile;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end";
-                        String schemeUri = "aurasync://auth/complete";
+                            // 1. Chrome Private Network Access (PNA) Preflight (OPTIONS)
+                            if (requestLine.startsWith("OPTIONS")) {
+                                OutputStream os = clientSocket.getOutputStream();
+                                String pna = "HTTP/1.1 204 No Content\r\n"
+                                    + "Access-Control-Allow-Origin: *\r\n"
+                                    + "Access-Control-Allow-Private-Network: true\r\n"
+                                    + "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                                    + "Access-Control-Allow-Headers: *\r\n"
+                                    + "Connection: close\r\n\r\n";
+                                os.write(pna.getBytes(StandardCharsets.UTF_8));
+                                os.flush();
+                                try { clientSocket.close(); } catch (Exception ignored) {}
+                                continue;
+                            }
 
-                        responseHtml = "<!DOCTYPE html><html dir='rtl' lang='ar'><head><meta charset='utf-8'>"
-                            + "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-                            + "<title>AuraSync</title>"
-                            + "<meta http-equiv='refresh' content='0; url=" + intentUri + "'>"
-                            + "<style>body{background:#040c19;color:#38bdf8;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;text-align:center;}"
-                            + ".card{background:rgba(15,23,42,0.92);border:1px solid rgba(59,130,246,0.35);padding:30px 20px;border-radius:24px;box-shadow:0 20px 50px rgba(0,0,0,0.6);max-width:360px;width:100%;backdrop-filter:blur(20px);}"
-                            + "h2{color:#38bdf8;margin:0 0 10px;font-size:20px;font-weight:900;}"
-                            + "p{color:#94a3b8;font-size:13px;line-height:1.5;margin:0 0 20px;}"
-                            + ".btn{display:inline-flex;align-items:center;justify-content:center;width:100%;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;padding:12px;border-radius:14px;text-decoration:none;font-weight:800;font-size:14px;box-sizing:border-box;box-shadow:0 6px 20px rgba(37,99,235,0.4);}</style>"
-                            + "</head><body><div class='card'>"
-                            + "<h2>✓ تم التحقق بنجاح!</h2>"
-                            + "<p>جاري العودة إلى تطبيق AuraSync فوراً...</p>"
-                            + "<a href='" + intentUri + "' class='btn'>اضغط للعودة إلى التطبيق</a>"
-                            + "<script>"
-                            + "(function(){"
-                            + "  try { window.location.replace('" + intentUri + "'); } catch(e) { window.location.href='" + schemeUri + "'; }"
-                            + "  setTimeout(function(){ window.location.href='" + intentUri + "'; }, 10);"
-                            + "  setTimeout(function(){ window.location.href='" + schemeUri + "'; }, 180);"
-                            + "})();"
-                            + "</script>"
-                            + "</div></body></html>";
-                    } else {
-                        responseHtml = "<!DOCTYPE html><html dir='rtl' lang='ar'><head><meta charset='utf-8'>"
-                            + "<title>AuraSync - خطأ في تسجيل الدخول</title>"
-                            + "<style>body{background:#060814;color:#f8fafc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}"
-                            + ".card{background:rgba(15,23,42,0.9);border:1px solid #ef4444;padding:30px;border-radius:24px;max-width:360px;}</style></head>"
-                            + "<body><div class='card'><h2 style='color:#ef4444;'>لم يكتمل تسجيل الدخول</h2>"
-                            + "<p style='color:#94a3b8;'>تم إلغاء العملية أو حدث خطأ: " + (error != null ? error : "إلغاء المستخدم") + "</p>"
-                            + "<p style='font-size:12px;color:#64748b;'>يمكنك العودة إلى التطبيق والمحاولة مجدداً.</p>"
-                            + "</div></body></html>";
-                    }
+                            // 2. Favicon filter
+                            if (requestLine.contains("/favicon.ico")) {
+                                OutputStream os = clientSocket.getOutputStream();
+                                os.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+                                os.flush();
+                                try { clientSocket.close(); } catch (Exception ignored) {}
+                                continue;
+                            }
 
-                    byte[] bodyBytes = responseHtml.getBytes(StandardCharsets.UTF_8);
-                    OutputStream os = clientSocket.getOutputStream();
-                    os.write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: " + bodyBytes.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-                    os.write(bodyBytes);
-                    os.flush();
-                    try { clientSocket.shutdownOutput(); } catch (Exception ignored) {}
-                    try { Thread.sleep(100); } catch (Exception ignored) {}
-                    try { clientSocket.close(); } catch (Exception ignored) {}
+                            // 3. Parse auth code and error
+                            String code = null;
+                            String error = null;
 
-                    // Gracefully close server after 3 seconds so secondary browser requests do not crash
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            try { Thread.sleep(3000); } catch (Exception ignored) {}
-                            stopOAuthServer();
-                        }
-                    }).start();
+                            int codeIdx = requestLine.indexOf("code=");
+                            if (codeIdx != -1) {
+                                int end = requestLine.indexOf('&', codeIdx);
+                                int space = requestLine.indexOf(' ', codeIdx);
+                                if (end == -1 || (space != -1 && space < end)) end = space;
+                                if (end != -1) code = requestLine.substring(codeIdx + 5, end);
+                                else code = requestLine.substring(codeIdx + 5);
+                                code = URLDecoder.decode(code, "UTF-8");
+                            }
 
-                    if (error != null && code == null) {
-                        final String finalErr = error;
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (webView != null) {
-                                    webView.evaluateJavascript("if (window.onAuraSyncAuthError) window.onAuraSyncAuthError('" + finalErr.replace("'", "\\'") + "');", null);
+                            int errIdx = requestLine.indexOf("error=");
+                            if (errIdx != -1) {
+                                int end = requestLine.indexOf('&', errIdx);
+                                int space = requestLine.indexOf(' ', errIdx);
+                                if (end == -1 || (space != -1 && space < end)) end = space;
+                                if (end != -1) error = requestLine.substring(errIdx + 6, end);
+                                else error = requestLine.substring(errIdx + 6);
+                                error = URLDecoder.decode(error, "UTF-8");
+                            }
+
+                            // 4. Chrome socket warm-up probe without query params
+                            if (code == null && error == null) {
+                                OutputStream os = clientSocket.getOutputStream();
+                                String probeOk = "HTTP/1.1 200 OK\r\n"
+                                    + "Access-Control-Allow-Origin: *\r\n"
+                                    + "Access-Control-Allow-Private-Network: true\r\n"
+                                    + "Content-Type: text/plain\r\n"
+                                    + "Content-Length: 2\r\n"
+                                    + "Connection: close\r\n\r\nOK";
+                                os.write(probeOk.getBytes(StandardCharsets.UTF_8));
+                                os.flush();
+                                try { clientSocket.close(); } catch (Exception ignored) {}
+                                continue;
+                            }
+
+                            // 5. Valid auth response received! Send instant auto-redirect HTML with intent URI
+                            String responseHtml;
+                            if (code != null) {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        try {
+                                            Intent reopen = new Intent(MainActivity.this, MainActivity.class);
+                                            reopen.setAction(Intent.ACTION_MAIN);
+                                            reopen.addCategory(Intent.CATEGORY_LAUNCHER);
+                                            reopen.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                                            startActivity(reopen);
+                                        } catch (Exception ignored) {}
+                                    }
+                                });
+
+                                String intentUri = "intent://auth/complete#Intent;scheme=aurasync;package=com.aurasync.mobile;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end";
+                                String schemeUri = "aurasync://auth/complete";
+
+                                responseHtml = "<!DOCTYPE html><html dir='rtl' lang='ar'><head><meta charset='utf-8'>"
+                                    + "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                                    + "<title>AuraSync</title>"
+                                    + "<meta http-equiv='refresh' content='0; url=" + intentUri + "'>"
+                                    + "<style>body{background:#040c19;color:#38bdf8;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;text-align:center;}"
+                                    + ".card{background:rgba(15,23,42,0.92);border:1px solid rgba(59,130,246,0.35);padding:30px 20px;border-radius:24px;box-shadow:0 20px 50px rgba(0,0,0,0.6);max-width:360px;width:100%;backdrop-filter:blur(20px);}"
+                                    + "h2{color:#38bdf8;margin:0 0 10px;font-size:20px;font-weight:900;}"
+                                    + "p{color:#94a3b8;font-size:13px;line-height:1.5;margin:0 0 20px;}"
+                                    + ".btn{display:inline-flex;align-items:center;justify-content:center;width:100%;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;padding:12px;border-radius:14px;text-decoration:none;font-weight:800;font-size:14px;box-sizing:border-box;box-shadow:0 6px 20px rgba(37,99,235,0.4);}</style>"
+                                    + "</head><body><div class='card'>"
+                                    + "<h2>✓ تم التحقق بنجاح!</h2>"
+                                    + "<p>جاري العودة إلى تطبيق AuraSync فوراً...</p>"
+                                    + "<a href='" + intentUri + "' class='btn'>اضغط للعودة إلى التطبيق</a>"
+                                    + "<script>"
+                                    + "(function(){"
+                                    + "  try { window.location.replace('" + intentUri + "'); } catch(e) { window.location.href='" + schemeUri + "'; }"
+                                    + "  setTimeout(function(){ window.location.href='" + intentUri + "'; }, 10);"
+                                    + "  setTimeout(function(){ window.location.href='" + schemeUri + "'; }, 180);"
+                                    + "})();"
+                                    + "</script>"
+                                    + "</div></body></html>";
+                            } else {
+                                responseHtml = "<!DOCTYPE html><html dir='rtl' lang='ar'><head><meta charset='utf-8'>"
+                                    + "<title>AuraSync - خطأ في تسجيل الدخول</title>"
+                                    + "<style>body{background:#060814;color:#f8fafc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}"
+                                    + ".card{background:rgba(15,23,42,0.9);border:1px solid #ef4444;padding:30px;border-radius:24px;max-width:360px;}</style></head>"
+                                    + "<body><div class='card'><h2 style='color:#ef4444;'>لم يكتمل تسجيل الدخول</h2>"
+                                    + "<p style='color:#94a3b8;'>تم إلغاء العملية أو حدث خطأ: " + (error != null ? error : "إلغاء المستخدم") + "</p>"
+                                    + "<p style='font-size:12px;color:#64748b;'>يمكنك العودة إلى التطبيق والمحاولة مجدداً.</p>"
+                                    + "</div></body></html>";
+                            }
+
+                            byte[] bodyBytes = responseHtml.getBytes(StandardCharsets.UTF_8);
+                            OutputStream os = clientSocket.getOutputStream();
+                            String httpResponse = "HTTP/1.1 200 OK\r\n"
+                                + "Content-Type: text/html; charset=UTF-8\r\n"
+                                + "Access-Control-Allow-Origin: *\r\n"
+                                + "Access-Control-Allow-Private-Network: true\r\n"
+                                + "Cache-Control: no-store, no-cache, must-revalidate\r\n"
+                                + "Content-Length: " + bodyBytes.length + "\r\n"
+                                + "Connection: close\r\n\r\n";
+                            os.write(httpResponse.getBytes(StandardCharsets.UTF_8));
+                            os.write(bodyBytes);
+                            os.flush();
+                            try { clientSocket.shutdownOutput(); } catch (Exception ignored) {}
+                            try { Thread.sleep(60); } catch (Exception ignored) {}
+                            try { clientSocket.close(); } catch (Exception ignored) {}
+
+                            // Gracefully shut down server after 2 seconds
+                            new Thread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try { Thread.sleep(2000); } catch (Exception ignored) {}
+                                    stopOAuthServer();
                                 }
-                            }
-                        });
-                        return;
-                    }
+                            }).start();
 
-                    if (code != null) {
-                        exchangeOAuthCode(isGoogle ? "google" : "onedrive", code, port);
+                            if (error != null && code == null) {
+                                final String finalErr = error;
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (webView != null) {
+                                            webView.evaluateJavascript("if (window.onAuraSyncAuthError) window.onAuraSyncAuthError('" + finalErr.replace("'", "\\'") + "');", null);
+                                        }
+                                    }
+                                });
+                                break;
+                            }
+
+                            if (code != null) {
+                                exchangeOAuthCode(isGoogle ? "google" : "onedrive", code, port);
+                                break;
+                            }
+                        } catch (Exception connEx) {
+                            try { clientSocket.close(); } catch (Exception ignored) {}
+                        }
                     }
 
                 } catch (Exception e) {
