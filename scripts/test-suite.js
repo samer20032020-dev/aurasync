@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.103', 'package.json version is 1.7.103', pkg.version);
+  assert(pkg.version === '1.7.104', 'package.json version is 1.7.104', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1972,7 +1972,7 @@ async function runTests() {
   assert(cleanRelTestSrc.includes('desktopRelDir') && cleanRelTestSrc.includes('mobileRelDir'), 'clean-release.js prunes stale historical binaries in release/desktop and release/mobile');
   assert(cleanRelTestSrc.includes('win-unpacked-old'), 'clean-release.js cleans legacy unpacked staging directories');
 
-  assert(pkgJsonRaw.version === '1.7.103', 'package.json version matches 1.7.103');
+  assert(pkgJsonRaw.version === '1.7.104', 'package.json version matches 1.7.104');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);
