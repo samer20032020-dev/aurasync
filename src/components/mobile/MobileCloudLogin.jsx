@@ -34,7 +34,7 @@ const GoogleIcon = ({ size = 32 }) => (
 
 export default function MobileCloudLogin({
   theme = 'dark',
-  version = '1.0.20',
+  version = '1.0.21',
   onLoginSuccess,
   onShowToast,
 }) {
@@ -112,6 +112,54 @@ export default function MobileCloudLogin({
 
     return unsub;
   }, [activeLoggingProvider, isRtl, onLoginSuccess, onShowToast, triggerHaptic]);
+
+  // Fast-track return: When user returns from Chrome / browser, immediately check and transition
+  useEffect(() => {
+    const checkCompletedLogin = () => {
+      if (mobileEngine.accounts && mobileEngine.accounts.length > 0) {
+        setActiveLoggingProvider(null);
+        setErrorMsg('');
+        setFailedProvider(null);
+        triggerHaptic(40);
+        if (onLoginSuccess) {
+          onLoginSuccess(mobileEngine.accounts[0]);
+        }
+      }
+    };
+
+    // If native deep link returns to app via aurasync://
+    window.onAuraSyncBrowserReturned = () => {
+      checkCompletedLogin();
+      setTimeout(checkCompletedLogin, 150);
+      setTimeout(checkCompletedLogin, 400);
+    };
+
+    window.onAuraSyncAppResumed = () => {
+      checkCompletedLogin();
+      setTimeout(checkCompletedLogin, 200);
+    };
+
+    const handleFocus = () => {
+      checkCompletedLogin();
+      setTimeout(checkCompletedLogin, 300);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkCompletedLogin();
+        setTimeout(checkCompletedLogin, 300);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      delete window.onAuraSyncBrowserReturned;
+      delete window.onAuraSyncAppResumed;
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [onLoginSuccess, triggerHaptic]);
 
   // ─── DIRECT 1-TAP LOGIN FOR ALL 3 PROVIDERS ─────────────────────────────────
   const handleDirectLogin = async (provId) => {
