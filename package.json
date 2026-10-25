@@ -98,5 +98,5 @@
     "@electron/get": "5.1.0",
     "shell-quote": "1.12.0"
   },
-  "mobileVersion": "1.0.21"
+  "mobileVersion": "1.0.22"
 }
