@@ -26,12 +26,12 @@ export default function MobileCloudBackdrop({ isDark = true, children }) {
         aria-hidden="true"
         style={{
           position: 'absolute',
-          top: -60,
+          top: '4%',
           left: '50%',
           transform: 'translateX(-50%)',
           width: '100%',
-          maxWidth: 580,
-          height: 520,
+          maxWidth: 640,
+          height: 580,
           pointerEvents: 'none',
           zIndex: 0,
           display: 'flex',

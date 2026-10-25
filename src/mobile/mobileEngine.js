@@ -138,6 +138,7 @@ class MobileEngine {
     const defaultLabels = {
       google: 'Google Drive',
       onedrive: 'Microsoft OneDrive',
+      mega: 'MEGA Cloud',
       dropbox: 'Dropbox',
       offline: 'الخزنة المحلية (Offline Vault)',
     };

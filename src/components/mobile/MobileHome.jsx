@@ -24,6 +24,16 @@ const DropboxIcon = () => (
   </svg>
 );
 
+const MegaIcon = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22">
+    <circle cx="12" cy="12" r="11" fill="#D9272E" />
+    <path
+      fill="#FFFFFF"
+      d="M6.5 8h2.2l3.3 4 3.3-4h2.2v8h-2.1v-4.8l-2.6 3.2h-1.6l-2.6-3.2V16H6.5V8z"
+    />
+  </svg>
+);
+
 const OfflineVaultIcon = () => (
   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -32,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.17',
+  version = '1.0.18',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -657,6 +667,7 @@ export default function MobileHome({
             {accounts.map(acc => {
               const isGoogle = acc.id === 'google';
               const isOneDrive = acc.id === 'onedrive';
+              const isMega = acc.id === 'mega';
               return (
                 <div key={acc.id} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -671,6 +682,8 @@ export default function MobileHome({
                       <GoogleDriveIcon />
                     ) : isOneDrive ? (
                       <OneDriveIcon />
+                    ) : isMega ? (
+                      <MegaIcon />
                     ) : (
                       <DropboxIcon />
                     )}

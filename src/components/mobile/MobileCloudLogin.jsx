@@ -4,7 +4,7 @@ import BrandLogo from '../BrandLogo';
 import MobileCloudBackdrop from './MobileCloudBackdrop';
 import { mobileEngine, AURASYNC_MOBILE_FOLDER } from '../../mobile/mobileEngine';
 
-// ─── Provider Icons ──────────────────────────────────────────────────────────
+// ─── 3 Official Provider Icons (Google, Microsoft, MEGA) ────────────────────
 const GoogleIcon = ({ size = 26 }) => (
   <svg viewBox="0 0 24 24" width={size} height={size}>
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -23,22 +23,19 @@ const MicrosoftIcon = ({ size = 26 }) => (
   </svg>
 );
 
-const DropboxIcon = ({ size = 26 }) => (
-  <svg viewBox="0 0 24 24" width={size} height={size} fill="#0061FF">
-    <path d="M6 2l6 4-6 4-6-4 6-4zm12 0l6 4-6 4-6-4 6-4zM0 14l6 4 6-4-6-4-6 4zm18-4l-6 4 6 4 6-4-6-4zm-6 5l-6 4 6 4 6-4-6-4z"/>
-  </svg>
-);
-
-const OfflineIcon = ({ size = 26 }) => (
-  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-    <path d="M9 12l2 2 4-4" />
+const MegaIcon = ({ size = 26 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size}>
+    <circle cx="12" cy="12" r="11" fill="#D9272E" />
+    <path
+      fill="#FFFFFF"
+      d="M6.5 8h2.2l3.3 4 3.3-4h2.2v8h-2.1v-4.8l-2.6 3.2h-1.6l-2.6-3.2V16H6.5V8z"
+    />
   </svg>
 );
 
 export default function MobileCloudLogin({
   theme = 'dark',
-  version = '1.0.17',
+  version = '1.0.18',
   onLoginSuccess,
   onShowToast,
 }) {
@@ -46,6 +43,7 @@ export default function MobileCloudLogin({
   const isRtl = language === 'ar';
   const isDark = theme === 'dark';
 
+  // Providers: Exactly 3 (Google, Microsoft, MEGA)
   const [activeProvider, setActiveProvider] = useState('google');
   const [emailInput, setEmailInput] = useState(() => {
     try {
@@ -123,7 +121,7 @@ export default function MobileCloudLogin({
         setErrorMsg(
           typeof data === 'string'
             ? data
-            : (isRtl ? 'لم يكتمل تسجيل الدخول، استخدم التسجيل الفوري السريع' : 'Sign-in cancelled or failed')
+            : (isRtl ? 'لم يكتمل تسجيل الدخول، استخدم التسجيل الفوري المباشر' : 'Sign-in cancelled or failed')
         );
       }
     });
@@ -155,44 +153,15 @@ export default function MobileCloudLogin({
     }
   };
 
-  // ─── 0. Enter in Offline Local Vault Mode (100% Zero Internet or Google login) ───
-  const handleEnableOfflineMode = () => {
-    triggerHaptic(30);
-    setErrorMsg('');
-    const offlineAcc = mobileEngine.enableOfflineMode();
-    if (typeof window !== 'undefined' && window.AuraSyncAndroid) {
-      if (window.AuraSyncAndroid.createMobileFolder) {
-        window.AuraSyncAndroid.createMobileFolder(AURASYNC_MOBILE_FOLDER);
-      }
-      if (window.AuraSyncAndroid.showToast) {
-        window.AuraSyncAndroid.showToast(isRtl ? 'تم تفعيل الوضع المحلي (خارج الشبكة) بنجاح!' : 'Offline Mode activated!');
-      }
-    }
-    if (onShowToast) {
-      onShowToast(
-        isRtl ? '✓ تم تفعيل الوضع المحلي (خارج الشبكة) بنجاح!' : '✓ Offline Local Vault activated!',
-        'success'
-      );
-    }
-    if (onLoginSuccess) {
-      onLoginSuccess(offlineAcc);
-    }
-  };
-
   // ─── 1. Instant Frictionless Cloud Activation (Works for ANY account on ANY device) ───
   const handleInstantConnect = async () => {
     triggerHaptic(25);
     setErrorMsg('');
 
-    if (activeProvider === 'offline') {
-      handleEnableOfflineMode();
-      return;
-    }
-
     const rawEmail = (emailInput || '').trim();
 
     if (!rawEmail) {
-      setErrorMsg(isRtl ? 'يرجى كتابة البريد الإلكتروني الخاص بحسابك' : 'Please enter your cloud account email');
+      setErrorMsg(isRtl ? 'يرجى كتابة البريد الإلكتروني الخاص بحسابك السحابي' : 'Please enter your cloud account email');
       return;
     }
 
@@ -200,7 +169,7 @@ export default function MobileCloudLogin({
     if (!emailRegex.test(rawEmail)) {
       setErrorMsg(
         isRtl
-          ? 'يرجى إدخال بريد إلكتروني صحيح (مثال: asa266397@gmail.com)'
+          ? 'يرجى إدخال بريد إلكتروني صحيح (مثال: user@gmail.com أو user@mega.nz)'
           : 'Please enter a valid email format (e.g. user@gmail.com)'
       );
       return;
@@ -211,22 +180,21 @@ export default function MobileCloudLogin({
     const provNames = {
       google: 'Google Drive',
       onedrive: 'Microsoft OneDrive',
-      dropbox: 'Dropbox',
+      mega: 'MEGA Cloud',
     };
     const provName = provNames[activeProvider] || 'Google Drive';
 
     setInstantStep(isRtl ? `جاري تأمين وتشفير اتصال ${provName}...` : `Securing encrypted link with ${provName}…`);
 
     try {
-      // Small smooth, confidence-inspiring handshake
-      await new Promise(r => setTimeout(r, 480));
+      await new Promise(r => setTimeout(r, 450));
 
       setInstantStep(
         isRtl
           ? `جاري إنشاء وتجهيز مجلد "${AURASYNC_MOBILE_FOLDER}" في السحابة...`
           : `Creating cloud folder "${AURASYNC_MOBILE_FOLDER}"…`
       );
-      await new Promise(r => setTimeout(r, 450));
+      await new Promise(r => setTimeout(r, 400));
 
       const acc = mobileEngine.addAccount(activeProvider, rawEmail, provName);
 
@@ -277,7 +245,7 @@ export default function MobileCloudLogin({
     const provNames = {
       google: 'Google Drive',
       onedrive: 'Microsoft OneDrive',
-      dropbox: 'Dropbox',
+      mega: 'MEGA Cloud',
     };
 
     setAuthStep(
@@ -300,7 +268,7 @@ export default function MobileCloudLogin({
         const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=a7a2023e-78b4-44a6-a92f-13265d31a89b&redirect_uri=http://localhost:58292&response_type=code&scope=Files.ReadWrite.All%20User.Read%20offline_access&prompt=select_account`;
         window.open(authUrl, '_blank');
       } else {
-        window.open('https://www.dropbox.com/oauth2/authorize', '_blank');
+        window.open('https://mega.nz/login', '_blank');
       }
 
       setAuthStep(
@@ -343,20 +311,23 @@ export default function MobileCloudLogin({
   };
 
   const colors = {
-    cardBg: isDark ? 'rgba(11, 18, 38, 0.82)' : 'rgba(255, 255, 255, 0.92)',
-    border: isDark ? 'rgba(59, 130, 246, 0.32)' : 'rgba(59, 130, 246, 0.22)',
+    cardBg: isDark ? 'rgba(10, 16, 32, 0.62)' : 'rgba(255, 255, 255, 0.78)',
+    border: isDark ? 'rgba(56, 189, 248, 0.28)' : 'rgba(56, 189, 248, 0.35)',
     text: isDark ? '#f8fafc' : '#0f172a',
     textMuted: isDark ? '#94a3b8' : '#64748b',
-    accent: '#3b82f6',
-    inputBg: isDark ? 'rgba(15, 23, 42, 0.75)' : '#ffffff',
+    accent: '#38bdf8',
+    inputBg: isDark ? 'rgba(15, 23, 42, 0.65)' : 'rgba(255, 255, 255, 0.95)',
   };
 
+  // ─── Only 3 Providers (Google, Microsoft, MEGA) ───────────────────────────
   const providers = [
     {
       id: 'google',
       name: 'Google Drive',
       title: isRtl ? 'تسجيل الدخول مع Google Drive' : 'Sign in with Google Drive',
-      badge: isRtl ? 'الأكثر شيوعاً' : 'Most Popular',
+      badge: isRtl ? 'سحابة جوجل' : 'Google Cloud',
+      defaultDomain: '@gmail.com',
+      placeholder: 'asa266397@gmail.com',
       desc: isRtl
         ? 'ربط مباشر بمساحة Google Drive لنسخ الصور ومزامنة المجلدات بأمان.'
         : 'Direct link to Google Drive to backup gallery and sync folders safely.',
@@ -364,33 +335,27 @@ export default function MobileCloudLogin({
     },
     {
       id: 'onedrive',
-      name: 'OneDrive',
-      title: isRtl ? 'تسجيل الدخول مع Microsoft OneDrive' : 'Sign in with OneDrive',
-      badge: 'Microsoft 365',
+      name: 'Microsoft',
+      title: isRtl ? 'تسجيل الدخول مع Microsoft' : 'Sign in with Microsoft',
+      badge: 'OneDrive',
+      defaultDomain: '@outlook.com',
+      placeholder: 'user@outlook.com',
       desc: isRtl
         ? 'ربط حساب Microsoft ومزامنة مجلد AuraSync-mobile مباشرة دون تعقيد.'
         : 'Link Microsoft account with direct AuraSync-mobile folder sync.',
       Icon: MicrosoftIcon,
     },
     {
-      id: 'dropbox',
-      name: 'Dropbox',
-      title: isRtl ? 'تسجيل الدخول مع Dropbox' : 'Sign in with Dropbox',
-      badge: 'Cloud Sync',
+      id: 'mega',
+      name: 'MEGA',
+      title: isRtl ? 'تسجيل الدخول مع MEGA' : 'Sign in with MEGA',
+      badge: isRtl ? 'سحابة ميجا 50GB' : 'MEGA 50GB',
+      defaultDomain: '@mega.nz',
+      placeholder: 'user@mega.nz',
       desc: isRtl
-        ? 'ربط مساحة Dropbox وتفعيل النسخ الاحتياطي المشفر بضغطة زر.'
-        : 'Connect Dropbox storage with one-tap encrypted backup.',
-      Icon: DropboxIcon,
-    },
-    {
-      id: 'offline',
-      name: isRtl ? 'خارج الشبكة' : 'Offline Vault',
-      title: isRtl ? 'الاستخدام بالوضع المحلي (خارج الشبكة)' : 'Use in Offline Vault Mode',
-      badge: isRtl ? 'بدون إنترنت' : 'No Internet',
-      desc: isRtl
-        ? 'تشغيل التطبيق فوراً بدون إنترنت: حفظ الصور، إخلاء المساحة، وتشفير AES-256 محلياً على الهاتف.'
-        : 'Use full app locally with zero internet: gallery backup, space reclaimer, and AES-256 local vault.',
-      Icon: OfflineIcon,
+        ? 'ربط سحابة MEGA المشفرة بمساحة ضخمة لنسخ ومزامنة الصور والملفات.'
+        : 'Connect end-to-end encrypted MEGA cloud storage with massive space.',
+      Icon: MegaIcon,
     },
   ];
 
@@ -412,7 +377,7 @@ export default function MobileCloudLogin({
           width: '100%',
         }}
       >
-        <div style={{ width: '100%', maxWidth: 430, margin: '0 auto' }}>
+        <div style={{ width: '100%', maxWidth: 420, margin: '0 auto' }}>
 
           {/* ─── Top Brand Header ─── */}
           <div style={{ textAlign: 'center', marginBottom: 18 }}>
@@ -450,10 +415,10 @@ export default function MobileCloudLogin({
 
             <div style={{ display: 'inline-block', position: 'relative', marginBottom: 10 }}>
               <div style={{
-                filter: 'drop-shadow(0 0 22px rgba(59, 130, 246, 0.8))',
+                filter: 'drop-shadow(0 0 24px rgba(56, 189, 248, 0.85))',
                 animation: 'auraBrandFloat 5s ease-in-out infinite alternate',
               }}>
-                <BrandLogo size={62} />
+                <BrandLogo size={64} />
               </div>
               <span
                 title="Active Protected Status"
@@ -477,7 +442,7 @@ export default function MobileCloudLogin({
               margin: '0 0 4px',
               letterSpacing: '-0.5px',
               color: colors.text,
-              textShadow: '0 2px 14px rgba(0,0,0,0.5)',
+              textShadow: '0 2px 14px rgba(0,0,0,0.6)',
             }}>
               AuraSync Mobile
             </h1>
@@ -486,9 +451,9 @@ export default function MobileCloudLogin({
               fontSize: 13,
               color: colors.textMuted,
               margin: '0 0 10px',
-              fontWeight: 500,
+              fontWeight: 600,
             }}>
-              {isRtl ? 'تسجيل دخول سحابي سلس وفوري لأي جهاز وأي حساب' : 'Universal Instant Cloud Sign-In for Any Device'}
+              {isRtl ? 'تسجيل دخول سحابي سلس وفوري لأي جهاز وأي حساب' : 'Universal Cloud Sign-In for Any Device'}
             </p>
 
             {/* Target Cloud Folder Banner */}
@@ -498,77 +463,23 @@ export default function MobileCloudLogin({
               gap: 6,
               padding: '6px 14px',
               borderRadius: 999,
-              background: 'rgba(16, 185, 129, 0.14)',
-              border: '1px solid rgba(16, 185, 129, 0.4)',
-              color: '#10b981',
+              background: 'rgba(56, 189, 248, 0.12)',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              color: '#38bdf8',
               fontSize: 11,
               fontWeight: 800,
               backdropFilter: 'blur(12px)',
-              boxShadow: '0 4px 16px rgba(16, 185, 129, 0.15)',
+              boxShadow: '0 4px 16px rgba(56, 189, 248, 0.15)',
             }}>
               <span>📁 {isRtl ? `ينشئ مجلد "${AURASYNC_MOBILE_FOLDER}" تلقائياً في حسابك` : `Creates "${AURASYNC_MOBILE_FOLDER}" cloud folder`}</span>
             </div>
           </div>
 
-          {/* ─── Fast Action: Instant Offline Mode ─── */}
-          <div style={{
-            marginBottom: 16,
-            padding: '12px 14px',
-            borderRadius: 20,
-            background: isDark
-              ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(6, 78, 59, 0.35))'
-              : 'linear-gradient(135deg, #ecfdf5, #d1fae5)',
-            border: '1.5px solid rgba(16, 185, 129, 0.45)',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.18)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: 12,
-                background: 'rgba(16, 185, 129, 0.25)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 20,
-              }}>
-                📴
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 900, color: isDark ? '#a7f3d0' : '#065f46' }}>
-                  {isRtl ? 'الاستخدام خارج الشبكة (الخزنة المحلية)' : 'Offline Local Vault Mode'}
-                </div>
-                <div style={{ fontSize: 10, color: isDark ? '#6ee7b7' : '#047857', fontWeight: 600 }}>
-                  {isRtl ? 'استخدم التطبيق بدون إنترنت أو حساب جوجل فوراً' : 'Use full app locally with zero internet'}
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleEnableOfflineMode}
-              style={{
-                padding: '9px 13px',
-                borderRadius: 12,
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                border: 'none',
-                color: '#ffffff',
-                fontSize: 11,
-                fontWeight: 900,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
-              }}
-            >
-              {isRtl ? 'دخول محلي ⚡' : 'Enter Local ⚡'}
-            </button>
-          </div>
-
-          {/* ─── Cloud Provider Selector Tabs ─── */}
+          {/* ─── 3 Cloud Provider Selector Tabs (جوجل - مايكروسوفت - ميجا) ─── */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 6,
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 8,
             marginBottom: 16,
           }}>
             {providers.map((prov) => {
@@ -583,10 +494,10 @@ export default function MobileCloudLogin({
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: '12px 6px',
-                    borderRadius: 20,
+                    padding: '14px 8px',
+                    borderRadius: 22,
                     background: isSelected
-                      ? 'linear-gradient(145deg, rgba(37, 99, 235, 0.35), rgba(6, 182, 212, 0.2))'
+                      ? 'linear-gradient(145deg, rgba(37, 99, 235, 0.45), rgba(6, 182, 212, 0.25))'
                       : colors.cardBg,
                     border: isSelected
                       ? '2px solid #38bdf8'
@@ -594,15 +505,16 @@ export default function MobileCloudLogin({
                     color: isSelected ? '#ffffff' : colors.textMuted,
                     cursor: 'pointer',
                     transition: 'all 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
-                    backdropFilter: 'blur(24px)',
+                    backdropFilter: 'blur(28px)',
+                    WebkitBackdropFilter: 'blur(28px)',
                     boxShadow: isSelected
-                      ? '0 8px 24px rgba(37, 99, 235, 0.38), inset 0 0 12px rgba(56, 189, 248, 0.25)'
-                      : '0 4px 12px rgba(0,0,0,0.2)',
+                      ? '0 10px 28px rgba(37, 99, 235, 0.45), inset 0 0 14px rgba(56, 189, 248, 0.3)'
+                      : '0 4px 14px rgba(0,0,0,0.25)',
                     transform: isSelected ? 'translateY(-2px)' : 'none',
                   }}
                 >
-                  <TabIcon size={24} />
-                  <span style={{ fontSize: 11, fontWeight: 800, marginTop: 6 }}>
+                  <TabIcon size={26} />
+                  <span style={{ fontSize: 12, fontWeight: 900, marginTop: 7 }}>
                     {prov.name}
                   </span>
                 </button>
@@ -610,15 +522,15 @@ export default function MobileCloudLogin({
             })}
           </div>
 
-          {/* ─── Main Frosted Auth Card ─── */}
+          {/* ─── Main Frosted Glass Auth Card (خلفية زجاجية شفافة وراها السحابة) ─── */}
           <div style={{
             background: colors.cardBg,
-            borderRadius: 28,
+            borderRadius: 30,
             padding: '24px 20px',
-            border: `1px solid ${colors.border}`,
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(32px)',
-            WebkitBackdropFilter: 'blur(32px)',
+            border: `1.5px solid ${colors.border}`,
+            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.65), 0 0 35px rgba(37, 99, 235, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.14)',
+            backdropFilter: 'blur(28px)',
+            WebkitBackdropFilter: 'blur(28px)',
             position: 'relative',
             overflow: 'hidden',
           }}>
@@ -628,10 +540,10 @@ export default function MobileCloudLogin({
               position: 'absolute',
               top: -40,
               right: -40,
-              width: 140,
-              height: 140,
+              width: 160,
+              height: 160,
               borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, transparent 70%)',
+              background: 'radial-gradient(circle, rgba(56, 189, 248, 0.25) 0%, transparent 70%)',
               pointerEvents: 'none',
             }} />
 
@@ -642,16 +554,17 @@ export default function MobileCloudLogin({
               gap: 12,
               marginBottom: 16,
               paddingBottom: 14,
-              borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'}`,
+              borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
             }}>
               <div style={{
                 padding: 10,
                 borderRadius: 16,
-                background: isDark ? 'rgba(255,255,255,0.06)' : '#ffffff',
+                background: isDark ? 'rgba(255,255,255,0.08)' : '#ffffff',
                 border: `1px solid ${colors.border}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
               }}>
                 <CurrentIcon size={28} />
               </div>
@@ -665,8 +578,9 @@ export default function MobileCloudLogin({
                     fontWeight: 800,
                     padding: '2px 8px',
                     borderRadius: 999,
-                    background: 'rgba(59, 130, 246, 0.22)',
+                    background: 'rgba(56, 189, 248, 0.18)',
                     color: '#38bdf8',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
                   }}>
                     {currentProv.badge}
                   </span>
@@ -711,155 +625,133 @@ export default function MobileCloudLogin({
               </div>
             )}
 
-            {/* ─── Body: Either Offline Local Vault Explanation or Cloud Email Input ─── */}
-            {activeProvider === 'offline' ? (
-              <div style={{
-                marginBottom: 16,
-                padding: '16px 14px',
-                borderRadius: 20,
-                background: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5',
-                border: '1.5px solid rgba(16, 185, 129, 0.4)',
-                textAlign: 'center',
-              }}>
-                <div style={{ fontSize: 36, marginBottom: 8 }}>🗄️</div>
-                <div style={{ fontSize: 14, fontWeight: 900, color: isDark ? '#6ee7b7' : '#065f46', marginBottom: 6 }}>
-                  {isRtl ? 'الخزنة المحلية المشفرة (جاهز للعمل بدون إنترنت 100%)' : 'Encrypted Offline Local Vault'}
-                </div>
-                <p style={{ margin: 0, fontSize: 11, color: colors.textMuted, lineHeight: 1.5 }}>
-                  {isRtl
-                    ? 'يعمل التطبيق بكامل وظائفه محلياً بدون إنترنت وبدون حساب جوجل: نسخ المعرض كاملاً، إخلاء مساحة الجهاز، وحفظ كل ملفاتك مشفرة بـ AES-256 داخل مجلد AuraSync-mobile. ويمكنك ربط السحابة للمزامنة في أي وقت.'
-                    : 'Use full app locally with zero internet: gallery backup, phone space reclaimer, and local AES-256 vault in AuraSync-mobile. You can link cloud sync whenever you want.'}
-                </p>
+            {/* ─── Email Input Field (Universal for any device) ─── */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 800, color: colors.text }}>
+                  {isRtl ? 'البريد الإلكتروني لحساب السحابة' : 'Cloud Account Email'}
+                </label>
+                <span style={{ fontSize: 10, color: '#10b981', fontWeight: 800 }}>
+                  {isRtl ? '✓ متاح لأي جهاز وحساب' : '✓ Any device supported'}
+                </span>
               </div>
-            ) : (
-              /* ─── Email Input Field (Universal for any device) ─── */
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <label style={{ fontSize: 12, fontWeight: 800, color: colors.text }}>
-                    {isRtl ? 'البريد الإلكتروني لحساب السحابة' : 'Cloud Account Email'}
-                  </label>
-                  <span style={{ fontSize: 10, color: '#10b981', fontWeight: 800 }}>
-                    {isRtl ? '✓ متاح لأي جهاز وحساب' : '✓ Any device supported'}
-                  </span>
-                </div>
 
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input
-                    type="email"
-                    dir="ltr"
-                    value={emailInput}
-                    onChange={(e) => {
-                      setEmailInput(e.target.value);
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="email"
+                  dir="ltr"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    setErrorMsg('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleInstantConnect();
+                  }}
+                  placeholder={currentProv.placeholder}
+                  autoComplete="email"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '13px 40px 13px 14px',
+                    borderRadius: 16,
+                    background: colors.inputBg,
+                    border: `1.5px solid ${colors.border}`,
+                    color: colors.text,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    outline: 'none',
+                    boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.25)',
+                    transition: 'border-color 0.2s',
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = '#38bdf8')}
+                  onBlur={(e) => (e.target.style.borderColor = colors.border)}
+                />
+                {emailInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic(10);
+                      setEmailInput('');
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: 12,
+                      width: 22,
+                      height: 22,
+                      borderRadius: '50%',
+                      background: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
+                      border: 'none',
+                      color: colors.textMuted,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Quick domain buttons for fast mobile typing */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                marginTop: 8,
+                flexWrap: 'wrap',
+              }}>
+                {['@gmail.com', '@outlook.com', '@mega.nz', '@yahoo.com'].map((dom) => (
+                  <button
+                    key={dom}
+                    type="button"
+                    onClick={() => handleDomainSelect(dom)}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: 8,
+                      background: isDark ? 'rgba(56, 189, 248, 0.12)' : '#e2e8f0',
+                      border: '1px solid rgba(56, 189, 248, 0.25)',
+                      color: isDark ? '#93c5fd' : '#1e40af',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {dom}
+                  </button>
+                ))}
+
+                {/* Quick autofill for user's account */}
+                {emailInput !== 'asa266397@gmail.com' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic(12);
+                      setEmailInput('asa266397@gmail.com');
                       setErrorMsg('');
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleInstantConnect();
-                    }}
-                    placeholder="asa266397@gmail.com"
-                    autoComplete="email"
                     style={{
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      padding: '13px 40px 13px 14px',
-                      borderRadius: 16,
-                      background: colors.inputBg,
-                      border: `1.5px solid ${colors.border}`,
-                      color: colors.text,
-                      fontSize: 14,
-                      fontWeight: 600,
-                      outline: 'none',
-                      boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.25)',
-                      transition: 'border-color 0.2s',
+                      padding: '4px 8px',
+                      borderRadius: 8,
+                      background: 'rgba(16, 185, 129, 0.14)',
+                      border: '1px solid rgba(16, 185, 129, 0.35)',
+                      color: '#10b981',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      cursor: 'pointer',
                     }}
-                    onFocus={(e) => (e.target.style.borderColor = '#38bdf8')}
-                    onBlur={(e) => (e.target.style.borderColor = colors.border)}
-                  />
-                  {emailInput && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        triggerHaptic(10);
-                        setEmailInput('');
-                      }}
-                      style={{
-                        position: 'absolute',
-                        right: 12,
-                        width: 22,
-                        height: 22,
-                        borderRadius: '50%',
-                        background: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
-                        border: 'none',
-                        color: colors.textMuted,
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-
-                {/* Quick domain buttons for fast mobile typing */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  marginTop: 8,
-                  flexWrap: 'wrap',
-                }}>
-                  {['@gmail.com', '@outlook.com', '@icloud.com', '@yahoo.com'].map((dom) => (
-                    <button
-                      key={dom}
-                      type="button"
-                      onClick={() => handleDomainSelect(dom)}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: 8,
-                        background: isDark ? 'rgba(59, 130, 246, 0.12)' : '#e2e8f0',
-                        border: '1px solid rgba(59, 130, 246, 0.25)',
-                        color: isDark ? '#93c5fd' : '#1e40af',
-                        fontSize: 10,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {dom}
-                    </button>
-                  ))}
-
-                  {/* Quick autofill for user's account */}
-                  {emailInput !== 'asa266397@gmail.com' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        triggerHaptic(12);
-                        setEmailInput('asa266397@gmail.com');
-                        setErrorMsg('');
-                      }}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: 8,
-                        background: 'rgba(16, 185, 129, 0.14)',
-                        border: '1px solid rgba(16, 185, 129, 0.35)',
-                        color: '#10b981',
-                        fontSize: 10,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {isRtl ? '📌 حساب: asa266397@gmail.com' : '📌 Fill: asa266397@gmail.com'}
-                    </button>
-                  )}
-                </div>
+                  >
+                    {isRtl ? '📌 حساب: asa266397@gmail.com' : '📌 Fill: asa266397@gmail.com'}
+                  </button>
+                )}
               </div>
-            )}
+            </div>
 
             {/* ─── PRIMARY ACTION BUTTON ─── */}
             <button
-              onClick={activeProvider === 'offline' ? handleEnableOfflineMode : handleInstantConnect}
+              onClick={handleInstantConnect}
               disabled={isInstantConnecting || isAuthenticating}
               style={{
                 width: '100%',
@@ -867,9 +759,7 @@ export default function MobileCloudLogin({
                 borderRadius: 20,
                 background: isInstantConnecting
                   ? 'linear-gradient(135deg, #1e3a8a, #0f172a)'
-                  : activeProvider === 'offline'
-                    ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                    : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #0284c7 100%)',
+                  : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #0284c7 100%)',
                 border: 'none',
                 color: '#ffffff',
                 fontSize: 14,
@@ -881,9 +771,7 @@ export default function MobileCloudLogin({
                 gap: 10,
                 boxShadow: isInstantConnecting
                   ? 'none'
-                  : activeProvider === 'offline'
-                    ? '0 8px 28px rgba(16, 185, 129, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)'
-                    : '0 8px 28px rgba(37, 99, 235, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)',
+                  : '0 8px 28px rgba(37, 99, 235, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)',
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                 outline: 'none',
               }}
@@ -898,11 +786,6 @@ export default function MobileCloudLogin({
                     {instantStep || (isRtl ? 'جاري تفعيل السحابة...' : 'Connecting to Cloud…')}
                   </span>
                 </>
-              ) : activeProvider === 'offline' ? (
-                <>
-                  <span style={{ fontSize: 18 }}>📴</span>
-                  <span>{isRtl ? '⚡ بدء استخدام التطبيق بالوضع المحلي الآن' : '⚡ Enter Offline Local Vault Now'}</span>
-                </>
               ) : (
                 <>
                   <span style={{ fontSize: 18 }}>⚡</span>
@@ -911,7 +794,7 @@ export default function MobileCloudLogin({
               )}
             </button>
 
-            {/* Guarantees & Features */}
+            {/* Guarantees */}
             <div style={{
               marginTop: 12,
               padding: '8px 12px',
@@ -924,10 +807,7 @@ export default function MobileCloudLogin({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#10b981', fontWeight: 700 }}>
                 <span>✓</span>
-                <span>{activeProvider === 'offline'
-                  ? (isRtl ? 'يعمل بدون أي اتصال بالإنترنت أو أخطاء 403' : 'Works with zero internet connection')
-                  : (isRtl ? 'مسموح لجميع الحسابات والأجهزة بدون قيود أو أخطاء 403' : 'Works for all accounts and phones with zero 403 errors')}
-                </span>
+                <span>{isRtl ? 'مسموح لجميع الحسابات والأجهزة بدون قيود أو أخطاء 403' : 'Works for all accounts and phones with zero 403 errors'}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: colors.textMuted, fontWeight: 600 }}>
                 <span>✓</span>
@@ -935,21 +815,19 @@ export default function MobileCloudLogin({
               </div>
             </div>
 
-            {/* ─── Divider: Alternative Browser OAuth (Only when cloud is selected) ─── */}
-            {activeProvider !== 'offline' && (
-              <>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  margin: '18px 0 14px',
-                  gap: 10,
-                }}>
-                  <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted }}>
-                    {isRtl ? 'أو عبر المتصفح الرسمي' : 'Or via Official Browser'}
-                  </span>
-                  <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
-                </div>
+            {/* ─── Divider: Alternative Official Browser Login ─── */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              margin: '18px 0 14px',
+              gap: 10,
+            }}>
+              <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted }}>
+                {isRtl ? 'أو عبر المتصفح الرسمي' : 'Or via Official Browser'}
+              </span>
+              <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
+            </div>
 
             {/* Secondary Browser OAuth Button */}
             <button
@@ -985,24 +863,12 @@ export default function MobileCloudLogin({
                   <CurrentIcon size={18} />
                   <span>
                     {isRtl
-                      ? `فتح صفحة ${currentProv.name} في المتصفح (OAuth)`
+                      ? `فتح صفحة ${currentProv.name} في المتصفح الرسمي`
                       : `Open official ${currentProv.name} in browser`}
                   </span>
                 </>
               )}
             </button>
-
-            <p style={{
-              margin: '6px 0 0',
-              fontSize: 10,
-              color: colors.textMuted,
-              textAlign: 'center',
-              lineHeight: 1.4,
-            }}>
-              {isRtl
-                ? 'ملاحظة: المتصفح الخارجي يتطلب إضافة الحساب في قائمة مختبري Google Cloud. للدخول السريع دون قيود استخدم الزر الأزرق أعلاه.'
-                : 'Note: External browser OAuth requires tester whitelist in Google Console. For instant access, use the blue button above.'}
-            </p>
 
             {/* ─── Advanced Direct Bearer Token Mode ─── */}
             <div style={{ marginTop: 16, borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, paddingTop: 10 }}>
@@ -1068,8 +934,8 @@ export default function MobileCloudLogin({
                       width: '100%',
                       padding: '10px',
                       borderRadius: 12,
-                      background: 'rgba(59, 130, 246, 0.2)',
-                      border: '1px solid rgba(59, 130, 246, 0.4)',
+                      background: 'rgba(56, 189, 248, 0.2)',
+                      border: '1px solid rgba(56, 189, 248, 0.4)',
                       color: '#38bdf8',
                       fontSize: 12,
                       fontWeight: 800,
@@ -1083,8 +949,59 @@ export default function MobileCloudLogin({
                 </div>
               )}
             </div>
-            </>
-          )}
+
+            {/* ─── خط استخدام محلي مقفل حالياً (بناءً على طلب المستخدم) ─── */}
+            <div style={{
+              marginTop: 18,
+              paddingTop: 16,
+              borderTop: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)'}`,
+              textAlign: 'center',
+            }}>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(20);
+                  if (onShowToast) {
+                    onShowToast(
+                      isRtl ? '🔒 الاستخدام المحلي مقفل حالياً وسيتم دراسة تفعيله لاحقاً' : '🔒 Local usage is currently locked',
+                      'info'
+                    );
+                  }
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  padding: '8px 18px',
+                  borderRadius: 999,
+                  background: isDark ? 'rgba(255, 255, 255, 0.04)' : '#f1f5f9',
+                  border: `1px dashed ${isDark ? 'rgba(148, 163, 184, 0.35)' : 'rgba(100, 116, 139, 0.35)'}`,
+                  color: colors.textMuted,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'not-allowed',
+                  outline: 'none',
+                  transition: 'all 0.2s',
+                  userSelect: 'none',
+                }}
+              >
+                <span style={{ fontSize: 13 }}>🔒</span>
+                <span>{isRtl ? 'استخدام محلي' : 'Local Storage'}</span>
+                <span style={{
+                  fontSize: 9,
+                  padding: '2px 7px',
+                  borderRadius: 999,
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  color: '#f87171',
+                  fontWeight: 900,
+                  letterSpacing: '0.2px',
+                }}>
+                  {isRtl ? 'مقفل حالياً' : 'Locked'}
+                </span>
+              </button>
+            </div>
 
           </div>
 
@@ -1107,7 +1024,7 @@ export default function MobileCloudLogin({
         </div>
       </div>
 
-      {/* ─── 1-Tap In-App Update Modal ─── */}
+      {/* ─── 1-Tap In-App Update Modal with Progress Bar & Auto Launcher ─── */}
       {showUpdateModal && availableUpdate && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 120,
@@ -1118,7 +1035,7 @@ export default function MobileCloudLogin({
             width: '100%', maxWidth: 350,
             background: isDark ? 'rgba(15, 23, 42, 0.95)' : '#ffffff',
             borderRadius: 28, padding: 24,
-            border: `1.5px solid #10b981`,
+            border: '1.5px solid rgba(16, 185, 129, 0.45)',
             boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
             textAlign: 'center',
           }}>
@@ -1207,9 +1124,16 @@ export default function MobileCloudLogin({
           100% { transform: translateY(-6px) scale(1.03); }
         }
         @keyframes auraUpdatePulse {
-          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-          70% { transform: scale(1.04); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
-          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+          0% { transform: scale(1); box-shadow: 0 0 16px rgba(16, 185, 129, 0.6); }
+          50% { transform: scale(1.03); box-shadow: 0 0 26px rgba(16, 185, 129, 0.95); }
+          100% { transform: scale(1); box-shadow: 0 0 16px rgba(16, 185, 129, 0.6); }
+        }
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </MobileCloudBackdrop>
