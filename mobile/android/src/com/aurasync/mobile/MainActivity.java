@@ -983,6 +983,11 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String getGoogleClientId() {
+            return MainActivity.this.getGoogleClientId();
+        }
+
+        @JavascriptInterface
         public void createMobileFolder(final String folderName) {
             final String name = folderName != null && !folderName.isEmpty() ? folderName : "aurasync-mobile";
             runOnUiThread(new Runnable() {
