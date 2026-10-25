@@ -34,7 +34,7 @@ const GoogleIcon = ({ size = 32 }) => (
 
 export default function MobileCloudLogin({
   theme = 'dark',
-  version = '1.0.25',
+  version = '1.0.26',
   onLoginSuccess,
   onShowToast,
 }) {
@@ -659,16 +659,30 @@ export default function MobileCloudLogin({
                 </button>
                 <button
                   type="button"
-                  onClick={async () => {
+                  onClick={() => {
                     triggerHaptic(30);
                     setIsUpdating(true);
-                    setUpdateProgress(5);
+                    setUpdateProgress(10);
                     setUpdateStatus(isRtl ? 'بدء التنزيل المباشر...' : 'Starting download…');
 
-                    await mobileEngine.startInAppUpdate(availableUpdate, (progress) => {
-                      setUpdateProgress(progress);
-                      setUpdateStatus(isRtl ? `جاري التنزيل: ${progress}%` : `Downloading: ${progress}%`);
-                    });
+                    mobileEngine.triggerUpdateInstallation(
+                      availableUpdate,
+                      (prog) => {
+                        const pct = typeof prog === 'number' ? Math.round(prog) : (prog?.percent != null ? Math.round(prog.percent) : 15);
+                        setUpdateProgress(pct);
+                        const mbText = (prog?.mbRead != null && prog?.mbTotal != null && prog.mbTotal > 0)
+                          ? ` (${prog.mbRead} / ${prog.mbTotal} MB)`
+                          : '';
+                        setUpdateStatus(isRtl ? `جاري التنزيل: ${pct}%${mbText}` : `Downloading: ${pct}%${mbText}`);
+                      },
+                      () => {
+                        setUpdateProgress(100);
+                        setUpdateStatus(isRtl ? '✓ اكتمل التنزيل! جاري فتح التثبيت...' : '✓ Downloaded! Opening installer…');
+                      },
+                      () => {
+                        setUpdateStatus(isRtl ? 'فشل التنزيل، جاري التحويل للمتصفح...' : 'Opening browser download…');
+                      }
+                    );
                   }}
                   style={{
                     flex: 1.6,

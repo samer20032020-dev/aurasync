@@ -593,14 +593,35 @@ class MobileEngine {
     return false;
   }
 
+  startInAppUpdate(updateInfo, onProgress) {
+    return new Promise((resolve, reject) => {
+      this.triggerUpdateInstallation(
+        updateInfo,
+        (prog) => {
+          if (onProgress) {
+            const pct = typeof prog === 'number' ? Math.max(0, Math.min(100, Math.round(prog))) : (prog?.percent != null && prog.percent >= 0 ? Math.max(0, Math.min(100, Math.round(prog.percent))) : 15);
+            onProgress(pct, prog);
+          }
+        },
+        () => resolve(true),
+        (err) => reject(new Error(err || 'Update failed'))
+      );
+    });
+  }
+
   triggerUpdateInstallation(updateInfo, onProgress, onReady, onError) {
-    const url = updateInfo?.apkUrl || 'https://github.com/samer20032020-dev/aurasync/releases/latest/download/AuraSync.apk';
     const ver = updateInfo?.latestVersion || 'latest';
+    const url = updateInfo?.apkUrl || `https://github.com/samer20032020-dev/aurasync/releases/download/v${ver}/AuraSync-v${ver}.apk`;
 
     if (typeof window !== 'undefined') {
       if (onProgress) {
         window.onAuraSyncUpdateProgress = (percent, mbRead, mbTotal) => {
-          try { onProgress({ percent, mbRead, mbTotal }); } catch (_) {}
+          try {
+            const validPercent = (typeof percent === 'number' && percent >= 0)
+              ? Math.max(0, Math.min(100, Math.round(percent)))
+              : (mbTotal > 0 ? Math.max(0, Math.min(100, Math.round((mbRead / mbTotal) * 100))) : 20);
+            onProgress({ percent: validPercent, mbRead, mbTotal });
+          } catch (_) {}
         };
       }
       if (onReady) {
