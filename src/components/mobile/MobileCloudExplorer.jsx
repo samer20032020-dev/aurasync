@@ -57,35 +57,39 @@ export default function MobileCloudExplorer({
 
     triggerHaptic(25);
     setIsUploading(true);
-    setUploadProgress(15);
+    setUploadProgress(5);
+    const fileArray = Array.from(selected);
 
-    let current = 15;
-    const interval = setInterval(() => {
-      current += Math.floor(Math.random() * 20) + 15;
-      if (current >= 100) {
-        clearInterval(interval);
-        setUploadProgress(100);
-
-        const fileArray = Array.from(selected);
-        mobileEngine.addUploadedFiles(fileArray);
-
-        setTimeout(() => {
-          setIsUploading(false);
-          setUploadProgress(0);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-          if (onShowToast) {
-            onShowToast(
-              isRtl
-                ? `✓ تم رفع ${fileArray.length} ملف بنجاح في مجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة`
-                : `✓ Uploaded ${fileArray.length} file(s) to ${AURASYNC_MOBILE_FOLDER} cloud folder`,
-              'success'
-            );
-          }
-        }, 350);
-      } else {
-        setUploadProgress(current);
+    mobileEngine.uploadBatch(fileArray, {
+      account: accounts[0],
+      onProgress: ({ overallPercent }) => {
+        setUploadProgress(overallPercent);
       }
-    }, 180);
+    }).then((result) => {
+      setUploadProgress(100);
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        const successCount = result.successful.length;
+        const targetCloudName = accounts[0]?.label || 'السحابة';
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? `✓ تم رفع ${successCount} ملف بنجاح في مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName}`
+              : `✓ Uploaded ${successCount} file(s) to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName}`,
+            'success'
+          );
+        }
+      }, 350);
+    }).catch((err) => {
+      setIsUploading(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (onShowToast) {
+        onShowToast(isRtl ? `فشل الرفع: ${err.message}` : `Upload failed: ${err.message}`, 'error');
+      }
+    });
   };
 
   const handleDownloadFile = (file) => {

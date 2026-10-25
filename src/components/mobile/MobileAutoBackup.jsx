@@ -138,6 +138,46 @@ export default function MobileAutoBackup({ onShowToast }) {
     );
   };
 
+  const backupInputRef = useRef(null);
+
+  const handleBackupFilesSelected = async (e) => {
+    const selected = e.target.files;
+    if (!selected || selected.length === 0) return;
+
+    const fileArray = Array.from(selected);
+    setIsBackingUp(true);
+    setIsComplete(false);
+    setBackupProgress(5);
+
+    try {
+      const result = await mobileEngine.uploadBatch(fileArray, {
+        onProgress: ({ overallPercent, currentFileName }) => {
+          setBackupProgress(overallPercent);
+          setCurrentFile(currentFileName);
+        }
+      });
+
+      setBackupProgress(100);
+      setCurrentFile(isRtl ? '✓ اكتمل النسخ بنجاح!' : '✓ Backup complete!');
+      triggerHaptic(50);
+      setIsBackingUp(false);
+      setIsComplete(true);
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `✓ تم رفع ${result.successful.length} ملف بنجاح إلى مجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة!`
+            : `✓ Backed up ${result.successful.length} file(s) to ${AURASYNC_MOBILE_FOLDER} in cloud!`,
+          'success'
+        );
+      }
+    } catch (err) {
+      setIsBackingUp(false);
+      if (onShowToast) onShowToast(isRtl ? `فشل النسخ: ${err.message}` : `Backup failed: ${err.message}`, 'error');
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const handleStartBackup = () => {
     if (isBackingUp) return;
     const accounts = mobileEngine.accounts || [];
@@ -154,48 +194,21 @@ export default function MobileAutoBackup({ onShowToast }) {
       return;
     }
 
-    triggerHaptic(30);
-    setIsBackingUp(true);
-    setIsComplete(false);
-    setBackupProgress(3);
-
-    const steps = [
-      isRtl ? 'فحص معرض الكاميرا...' : 'Scanning camera roll…',
-      isRtl ? 'التحقق من التكرار بالسحابة...' : 'Deduplication check…',
-      isRtl ? 'رفع صور الكاميرا (DCIM)...' : 'Uploading DCIM photos…',
-      isRtl ? 'رفع مقاطع الفيديو...' : 'Uploading video clips…',
-      isRtl ? 'رفع الملفات الصوتية...' : 'Uploading voice notes…',
-      isRtl ? 'التحقق من الرفع...' : 'Verifying integrity…',
-    ];
-    let step = 0;
-    let progress = 3;
-
-    const tick = () => {
-      progress += Math.floor(Math.random() * 13) + 11;
-      if (progress >= 100) {
-        setBackupProgress(100);
-        setCurrentFile(isRtl ? 'اكتملت العملية بنجاح!' : 'Backup complete!');
-        triggerHaptic(50);
-        setTimeout(() => {
-          setIsBackingUp(false);
-          setIsComplete(true);
-          if (onShowToast) onShowToast(
-            isRtl ? `✓ تم رفع جميع وسائط الهاتف لمجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة بنجاح!` : `✓ All device media backed up to ${AURASYNC_MOBILE_FOLDER} successfully!`,
-            'success'
-          );
-        }, 800);
-        return;
-      }
-      setBackupProgress(progress);
-      setCurrentFile(steps[Math.min(step, steps.length - 1)]);
-      step++;
-      setTimeout(tick, 300 + Math.random() * 100);
-    };
-    setTimeout(tick, 400);
+    if (backupInputRef.current) {
+      backupInputRef.current.click();
+    }
   };
 
   return (
     <div>
+      <input
+        ref={backupInputRef}
+        type="file"
+        multiple
+        accept="image/*,video/*,audio/*"
+        style={{ display: 'none' }}
+        onChange={handleBackupFilesSelected}
+      />
       {/* ── Hero Backup Card ──────────────────────────────────── */}
       <div style={{
         borderRadius:24, padding:'20px', marginBottom:12,

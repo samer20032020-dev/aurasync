@@ -35,6 +35,7 @@ export default function MobileShareReceiver({ onShowToast, onNavigateTab }) {
   const [uploadedCount, setUploadedCount] = useState(0);
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [actualBlobFiles, setActualBlobFiles] = useState([]);
 
   useEffect(() => {
     return mobileEngine.subscribe((event, data) => {
@@ -53,7 +54,9 @@ export default function MobileShareReceiver({ onShowToast, onNavigateTab }) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     triggerHaptic(25);
-    const newItems = Array.from(files).map((file, idx) => {
+    const fileList = Array.from(files);
+    setActualBlobFiles(fileList);
+    const newItems = fileList.map((file, idx) => {
       const isVid = file.type.startsWith('video');
       const isAud = file.type.startsWith('audio');
       return {
@@ -97,6 +100,39 @@ export default function MobileShareReceiver({ onShowToast, onNavigateTab }) {
   const handleStartUpload = () => {
     if (stagedFiles.length === 0 || isUploading) return;
     triggerHaptic(30);
+
+    if (actualBlobFiles.length > 0) {
+      setIsUploading(true);
+      setUploadProgress(0);
+      setUploadedCount(0);
+      setIsComplete(false);
+
+      mobileEngine.uploadBatch(actualBlobFiles, {
+        onProgress: ({ overallPercent, fileIndex, speedMBps }) => {
+          setUploadProgress(overallPercent);
+          setUploadedCount(fileIndex);
+          if (speedMBps) setUploadSpeed(speedMBps);
+        }
+      }).then(() => {
+        setIsUploading(false);
+        setIsComplete(true);
+        setUploadProgress(100);
+        setUploadedCount(actualBlobFiles.length);
+        setActualBlobFiles([]);
+        mobileEngine.clearStagedShare();
+        setStagedFiles([]);
+        triggerHaptic(60);
+        if (onShowToast) onShowToast(
+          isRtl ? `✓ اكتمل رفع جميع الملفات إلى مجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة بنجاح!` : `✓ Uploaded all files to ${AURASYNC_MOBILE_FOLDER} successfully!`,
+          'success'
+        );
+      }).catch((err) => {
+        setIsUploading(false);
+        if (onShowToast) onShowToast(isRtl ? `فشل الرفع: ${err.message}` : `Upload failed: ${err.message}`, 'error');
+      });
+      return;
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
     setUploadedCount(0);

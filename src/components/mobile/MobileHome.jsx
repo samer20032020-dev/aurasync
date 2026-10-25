@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.26',
+  version = '1.0.27',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -98,11 +98,26 @@ export default function MobileHome({
   }, [uploadedFiles]);
 
   // Execute gallery backup
-  const executeTransfer = useCallback((fileArray, isFreeUpMode = false) => {
-    if (fileArray.length === 0) return;
+  // Execute real gallery backup to cloud
+  const executeTransfer = useCallback(async (fileArray, isFreeUpMode = false) => {
+    if (!fileArray || fileArray.length === 0) return;
 
-    const photos = fileArray.filter(f => f.type.startsWith('image/')).length;
-    const videos = fileArray.filter(f => f.type.startsWith('video/')).length;
+    if (accounts.length === 0) {
+      triggerHaptic(30);
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? '⚠️ يرجى تسجيل الدخول إلى سحابتك أولاً لنقل الملفات إلى مجلد السحابة!'
+            : '⚠️ Please connect a cloud account first to transfer files to cloud!',
+          'warn'
+        );
+      }
+      setShowAddModal(true);
+      return;
+    }
+
+    const photos = fileArray.filter(f => f.type && f.type.startsWith('image/')).length;
+    const videos = fileArray.filter(f => f.type && f.type.startsWith('video/')).length;
     const totalCount = fileArray.length;
 
     // Acquire WakeLock so background execution continues even with screen off
@@ -116,77 +131,65 @@ export default function MobileHome({
       setIsBackingUpGallery(true);
       setGalleryDone(false);
     }
-    setGalleryProgress(3);
+    setGalleryProgress(5);
     setGalleryStats({ photos, videos, total: totalCount });
 
     const totalEstimatedMB = fileArray.reduce((acc, f) => acc + (f.size / (1024 * 1024) || 2.4), 0);
-    const approxFreedGB = Math.max(0.8, Number((totalEstimatedMB / 1024).toFixed(1)));
+    const approxFreedGB = Math.max(0.1, Number((totalEstimatedMB / 1024).toFixed(2)));
 
-    let progress = 3;
-    let index = 0;
-
-    const tick = () => {
-      progress += Math.floor(Math.random() * 8) + 4;
-      if (progress > 98) progress = 98;
-
-      const currentItem = fileArray[Math.min(index, fileArray.length - 1)];
-      const currentName = currentItem ? currentItem.name : `Media_${index + 1}.jpg`;
-      index++;
-
-      const speed = Number((28 + Math.random() * 18).toFixed(1));
-      setGallerySpeed(speed);
-      setGalleryProgress(progress);
-      setGalleryCurrentFile(currentName);
-
-      if (progress >= 98 && index >= totalCount) {
-        setGalleryProgress(100);
-        setGalleryCurrentFile(isRtl ? '✓ اكتمل النقل المشفر بنجاح!' : '✓ Encrypted transfer completed!');
-
-        // Add to mobileEngine uploaded files
-        mobileEngine.addUploadedFiles(fileArray);
-
-        // Ensure cloud folder is created
-        if (accounts.length > 0) {
-          mobileEngine.ensureCloudFolder(accounts[0].id);
+    try {
+      const result = await mobileEngine.uploadBatch(fileArray, {
+        account: accounts[0],
+        onProgress: ({ overallPercent, currentFileName, speedMBps }) => {
+          setGalleryProgress(overallPercent);
+          setGalleryCurrentFile(currentFileName);
+          setGallerySpeed(speedMBps);
         }
+      });
 
-        // Release WakeLock
-        mobileEngine.releaseWakeLock();
+      setGalleryProgress(100);
+      setGalleryCurrentFile(isRtl ? '✓ اكتمل النقل المشفر بنجاح!' : '✓ Encrypted transfer completed!');
+      mobileEngine.releaseWakeLock();
+      triggerHaptic(60);
 
-        triggerHaptic(60);
-        setTimeout(() => {
-          if (isFreeUpMode) {
-            setIsFreeingSpace(false);
-            setFreeSpaceDone(true);
-            setFreedGB(approxFreedGB);
-            if (onShowToast) {
-              onShowToast(
-                isRtl
-                  ? `✓ تم نقل ${totalCount.toLocaleString()} ملف إلى مجلد ${AURASYNC_MOBILE_FOLDER} وتفريغ ${approxFreedGB} GB بنجاح!`
-                  : `✓ Transferred ${totalCount.toLocaleString()} files to ${AURASYNC_MOBILE_FOLDER} & freed ${approxFreedGB} GB!`,
-                'success'
-              );
-            }
-          } else {
-            setIsBackingUpGallery(false);
-            setGalleryDone(true);
-            if (onShowToast) {
-              onShowToast(
-                isRtl
-                  ? `✓ تم نقل ${totalCount.toLocaleString()} ملف من المعرض إلى مجلد ${AURASYNC_MOBILE_FOLDER} في السحابة بنجاح!`
-                  : `✓ Successfully transferred ${totalCount.toLocaleString()} gallery files to ${AURASYNC_MOBILE_FOLDER}!`,
-                'success'
-              );
-            }
+      const targetCloudName = accounts[0].label || 'السحابة';
+      const successCount = result.successful.length;
+
+      setTimeout(() => {
+        if (isFreeUpMode) {
+          setIsFreeingSpace(false);
+          setFreeSpaceDone(true);
+          setFreedGB(approxFreedGB);
+          if (onShowToast) {
+            onShowToast(
+              isRtl
+                ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName} بنجاح!`
+                : `✓ Transferred ${successCount.toLocaleString()} files to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName}!`,
+              'success'
+            );
           }
-        }, 600);
-        return;
+        } else {
+          setIsBackingUpGallery(false);
+          setGalleryDone(true);
+          if (onShowToast) {
+            onShowToast(
+              isRtl
+                ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName} بنجاح!`
+                : `✓ Transferred ${successCount.toLocaleString()} files to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName}!`,
+              'success'
+            );
+          }
+        }
+      }, 500);
+    } catch (err) {
+      mobileEngine.releaseWakeLock();
+      setGalleryCurrentFile(isRtl ? `حدث خطأ: ${err.message}` : `Error: ${err.message}`);
+      if (onShowToast) {
+        onShowToast(isRtl ? `فشل النقل: ${err.message}` : `Transfer failed: ${err.message}`, 'error');
       }
-
-      setTimeout(tick, 140 + Math.random() * 70);
-    };
-
-    setTimeout(tick, 200);
+      setIsBackingUpGallery(false);
+      setIsFreeingSpace(false);
+    }
   }, [accounts, isRtl, onShowToast, triggerHaptic]);
 
   // Gallery file picker change
