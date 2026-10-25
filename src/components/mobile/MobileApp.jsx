@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.15',
+  version = '1.0.16',
   accounts = [],
   storage = {},
   stats = {},
@@ -340,7 +340,11 @@ export default function MobileApp({
                 fontSize: 10, color: activeAccount ? '#10b981' : colors.textMuted,
                 fontWeight: 700, fontFamily: 'monospace',
               }}>
-                {activeAccount ? `● ${activeAccount.label} • ${AURASYNC_MOBILE_FOLDER}` : `📁 ${AURASYNC_MOBILE_FOLDER}`}
+                {activeAccount
+                  ? activeAccount.isOffline
+                    ? `📴 ${activeAccount.label} • ${AURASYNC_MOBILE_FOLDER}`
+                    : `● ${activeAccount.label} • ${AURASYNC_MOBILE_FOLDER}`
+                  : `📁 ${AURASYNC_MOBILE_FOLDER}`}
               </span>
             </div>
           </div>

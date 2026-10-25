@@ -1,11 +1,11 @@
 {
   "version": "1.7.103",
   "desktopVersion": "1.7.103",
-  "mobileVersion": "1.0.15",
+  "mobileVersion": "1.0.16",
   "independentPlatforms": true,
-  "name": "AuraSync Desktop v1.7.103 / Mobile v1.0.15",
-  "updated_at": "2026-10-25T08:27:51.558Z",
+  "name": "AuraSync Desktop v1.7.103 / Mobile v1.0.16",
+  "updated_at": "2026-10-25T11:04:26.198Z",
   "downloadUrl": "https://github.com/samer20032020-dev/aurasync/releases/download/v1.7.103/AuraSync-Setup-v1.7.103.exe",
   "portableUrl": "https://github.com/samer20032020-dev/aurasync/releases/download/v1.7.103/AuraSync-Portable-v1.7.103.exe",
-  "apkUrl": "https://github.com/samer20032020-dev/aurasync/releases/download/v1.0.15/AuraSync-v1.0.15.apk"
+  "apkUrl": "https://github.com/samer20032020-dev/aurasync/releases/download/v1.0.16/AuraSync-v1.0.16.apk"
 }

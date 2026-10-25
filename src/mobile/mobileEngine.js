@@ -132,19 +132,29 @@ class MobileEngine {
   addOrUpdateAccount(accountObj) {
     if (!accountObj || !accountObj.provider) return null;
     const providerId = accountObj.provider;
+    const isOffline = providerId === 'offline' || Boolean(accountObj.isOffline);
     const existingIndex = this.accounts.findIndex(a => a.id === providerId);
+    
+    const defaultLabels = {
+      google: 'Google Drive',
+      onedrive: 'Microsoft OneDrive',
+      dropbox: 'Dropbox',
+      offline: 'الخزنة المحلية (Offline Vault)',
+    };
+
     const merged = {
       id:           providerId,
       provider:     providerId,
-      label:        accountObj.label || (providerId === 'google' ? 'Google Drive' : providerId === 'onedrive' ? 'Microsoft OneDrive' : 'Dropbox'),
-      email:        accountObj.email || `${providerId}_user@cloud.auth`,
-      name:         accountObj.name || accountObj.email || `${providerId} User`,
+      label:        accountObj.label || defaultLabels[providerId] || 'Cloud Storage',
+      email:        accountObj.email || (isOffline ? 'offline@aurasync.local' : `${providerId}_user@cloud.auth`),
+      name:         accountObj.name || (isOffline ? 'خزنة الهاتف المحلية' : accountObj.email || `${providerId} User`),
       picture:      accountObj.picture || null,
       accessToken:  accountObj.accessToken || null,
       refreshToken: accountObj.refreshToken || null,
       connectedAt:  accountObj.connectedAt || Date.now(),
       targetFolder: MOBILE_FOLDER_NAME,
-      status:       'connected'
+      status:       'connected',
+      isOffline:    isOffline,
     };
 
     let updated;
@@ -165,6 +175,17 @@ class MobileEngine {
       provider: providerId,
       email: email,
       label: label
+    });
+  }
+
+  enableOfflineMode() {
+    return this.addOrUpdateAccount({
+      provider: 'offline',
+      label: 'الخزنة المحلية (Offline Vault)',
+      name: 'خزنة الهاتف المحلية',
+      email: 'offline@aurasync.local',
+      isOffline: true,
+      targetFolder: MOBILE_FOLDER_NAME,
     });
   }
 

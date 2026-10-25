@@ -29,6 +29,13 @@ const DropboxIcon = ({ size = 26 }) => (
   </svg>
 );
 
+const OfflineIcon = ({ size = 26 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <path d="M9 12l2 2 4-4" />
+  </svg>
+);
+
 export default function MobileCloudLogin({
   theme = 'dark',
   version = '1.0.14',
@@ -146,10 +153,40 @@ export default function MobileCloudLogin({
     }
   };
 
+  // ─── 0. Enter in Offline Local Vault Mode (100% Zero Internet or Google login) ───
+  const handleEnableOfflineMode = () => {
+    triggerHaptic(30);
+    setErrorMsg('');
+    const offlineAcc = mobileEngine.enableOfflineMode();
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid) {
+      if (window.AuraSyncAndroid.createMobileFolder) {
+        window.AuraSyncAndroid.createMobileFolder(AURASYNC_MOBILE_FOLDER);
+      }
+      if (window.AuraSyncAndroid.showToast) {
+        window.AuraSyncAndroid.showToast(isRtl ? 'تم تفعيل الوضع المحلي (خارج الشبكة) بنجاح!' : 'Offline Mode activated!');
+      }
+    }
+    if (onShowToast) {
+      onShowToast(
+        isRtl ? '✓ تم تفعيل الوضع المحلي (خارج الشبكة) بنجاح!' : '✓ Offline Local Vault activated!',
+        'success'
+      );
+    }
+    if (onLoginSuccess) {
+      onLoginSuccess(offlineAcc);
+    }
+  };
+
   // ─── 1. Instant Frictionless Cloud Activation (Works for ANY account on ANY device) ───
   const handleInstantConnect = async () => {
     triggerHaptic(25);
     setErrorMsg('');
+
+    if (activeProvider === 'offline') {
+      handleEnableOfflineMode();
+      return;
+    }
+
     const rawEmail = (emailInput || '').trim();
 
     if (!rawEmail) {
@@ -343,6 +380,16 @@ export default function MobileCloudLogin({
         : 'Connect Dropbox storage with one-tap encrypted backup.',
       Icon: DropboxIcon,
     },
+    {
+      id: 'offline',
+      name: isRtl ? 'خارج الشبكة' : 'Offline Vault',
+      title: isRtl ? 'الاستخدام بالوضع المحلي (خارج الشبكة)' : 'Use in Offline Vault Mode',
+      badge: isRtl ? 'بدون إنترنت' : 'No Internet',
+      desc: isRtl
+        ? 'تشغيل التطبيق فوراً بدون إنترنت: حفظ الصور، إخلاء المساحة، وتشفير AES-256 محلياً على الهاتف.'
+        : 'Use full app locally with zero internet: gallery backup, space reclaimer, and AES-256 local vault.',
+      Icon: OfflineIcon,
+    },
   ];
 
   const currentProv = providers.find(p => p.id === activeProvider) || providers[0];
@@ -461,11 +508,65 @@ export default function MobileCloudLogin({
             </div>
           </div>
 
+          {/* ─── Fast Action: Instant Offline Mode ─── */}
+          <div style={{
+            marginBottom: 16,
+            padding: '12px 14px',
+            borderRadius: 20,
+            background: isDark
+              ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(6, 78, 59, 0.35))'
+              : 'linear-gradient(135deg, #ecfdf5, #d1fae5)',
+            border: '1.5px solid rgba(16, 185, 129, 0.45)',
+            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.18)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: 12,
+                background: 'rgba(16, 185, 129, 0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20,
+              }}>
+                📴
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: isDark ? '#a7f3d0' : '#065f46' }}>
+                  {isRtl ? 'الاستخدام خارج الشبكة (الخزنة المحلية)' : 'Offline Local Vault Mode'}
+                </div>
+                <div style={{ fontSize: 10, color: isDark ? '#6ee7b7' : '#047857', fontWeight: 600 }}>
+                  {isRtl ? 'استخدم التطبيق بدون إنترنت أو حساب جوجل فوراً' : 'Use full app locally with zero internet'}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleEnableOfflineMode}
+              style={{
+                padding: '9px 13px',
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: 11,
+                fontWeight: 900,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
+              }}
+            >
+              {isRtl ? 'دخول محلي ⚡' : 'Enter Local ⚡'}
+            </button>
+          </div>
+
           {/* ─── Cloud Provider Selector Tabs ─── */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 10,
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: 6,
             marginBottom: 16,
           }}>
             {providers.map((prov) => {
@@ -608,133 +709,155 @@ export default function MobileCloudLogin({
               </div>
             )}
 
-            {/* ─── Email Input Field (Universal for any device) ─── */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <label style={{ fontSize: 12, fontWeight: 800, color: colors.text }}>
-                  {isRtl ? 'البريد الإلكتروني لحساب السحابة' : 'Cloud Account Email'}
-                </label>
-                <span style={{ fontSize: 10, color: '#10b981', fontWeight: 800 }}>
-                  {isRtl ? '✓ متاح لأي جهاز وحساب' : '✓ Any device supported'}
-                </span>
-              </div>
-
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="email"
-                  dir="ltr"
-                  value={emailInput}
-                  onChange={(e) => {
-                    setEmailInput(e.target.value);
-                    setErrorMsg('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleInstantConnect();
-                  }}
-                  placeholder="asa266397@gmail.com"
-                  autoComplete="email"
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    padding: '13px 40px 13px 14px',
-                    borderRadius: 16,
-                    background: colors.inputBg,
-                    border: `1.5px solid ${colors.border}`,
-                    color: colors.text,
-                    fontSize: 14,
-                    fontWeight: 600,
-                    outline: 'none',
-                    boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.25)',
-                    transition: 'border-color 0.2s',
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = '#38bdf8')}
-                  onBlur={(e) => (e.target.style.borderColor = colors.border)}
-                />
-                {emailInput && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      triggerHaptic(10);
-                      setEmailInput('');
-                    }}
-                    style={{
-                      position: 'absolute',
-                      right: 12,
-                      width: 22,
-                      height: 22,
-                      borderRadius: '50%',
-                      background: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
-                      border: 'none',
-                      color: colors.textMuted,
-                      fontSize: 12,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-
-              {/* Quick domain buttons for fast mobile typing */}
+            {/* ─── Body: Either Offline Local Vault Explanation or Cloud Email Input ─── */}
+            {activeProvider === 'offline' ? (
               <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                marginTop: 8,
-                flexWrap: 'wrap',
+                marginBottom: 16,
+                padding: '16px 14px',
+                borderRadius: 20,
+                background: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5',
+                border: '1.5px solid rgba(16, 185, 129, 0.4)',
+                textAlign: 'center',
               }}>
-                {['@gmail.com', '@outlook.com', '@icloud.com', '@yahoo.com'].map((dom) => (
-                  <button
-                    key={dom}
-                    type="button"
-                    onClick={() => handleDomainSelect(dom)}
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: 8,
-                      background: isDark ? 'rgba(59, 130, 246, 0.12)' : '#e2e8f0',
-                      border: '1px solid rgba(59, 130, 246, 0.25)',
-                      color: isDark ? '#93c5fd' : '#1e40af',
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {dom}
-                  </button>
-                ))}
+                <div style={{ fontSize: 36, marginBottom: 8 }}>🗄️</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: isDark ? '#6ee7b7' : '#065f46', marginBottom: 6 }}>
+                  {isRtl ? 'الخزنة المحلية المشفرة (جاهز للعمل بدون إنترنت 100%)' : 'Encrypted Offline Local Vault'}
+                </div>
+                <p style={{ margin: 0, fontSize: 11, color: colors.textMuted, lineHeight: 1.5 }}>
+                  {isRtl
+                    ? 'يعمل التطبيق بكامل وظائفه محلياً بدون إنترنت وبدون حساب جوجل: نسخ المعرض كاملاً، إخلاء مساحة الجهاز، وحفظ كل ملفاتك مشفرة بـ AES-256 داخل مجلد AuraSync-mobile. ويمكنك ربط السحابة للمزامنة في أي وقت.'
+                    : 'Use full app locally with zero internet: gallery backup, phone space reclaimer, and local AES-256 vault in AuraSync-mobile. You can link cloud sync whenever you want.'}
+                </p>
+              </div>
+            ) : (
+              /* ─── Email Input Field (Universal for any device) ─── */
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 800, color: colors.text }}>
+                    {isRtl ? 'البريد الإلكتروني لحساب السحابة' : 'Cloud Account Email'}
+                  </label>
+                  <span style={{ fontSize: 10, color: '#10b981', fontWeight: 800 }}>
+                    {isRtl ? '✓ متاح لأي جهاز وحساب' : '✓ Any device supported'}
+                  </span>
+                </div>
 
-                {/* Quick autofill for user's account */}
-                {emailInput !== 'asa266397@gmail.com' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      triggerHaptic(12);
-                      setEmailInput('asa266397@gmail.com');
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="email"
+                    dir="ltr"
+                    value={emailInput}
+                    onChange={(e) => {
+                      setEmailInput(e.target.value);
                       setErrorMsg('');
                     }}
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: 8,
-                      background: 'rgba(16, 185, 129, 0.14)',
-                      border: '1px solid rgba(16, 185, 129, 0.35)',
-                      color: '#10b981',
-                      fontSize: 10,
-                      fontWeight: 800,
-                      cursor: 'pointer',
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleInstantConnect();
                     }}
-                  >
-                    {isRtl ? '📌 حساب: asa266397@gmail.com' : '📌 Fill: asa266397@gmail.com'}
-                  </button>
-                )}
-              </div>
-            </div>
+                    placeholder="asa266397@gmail.com"
+                    autoComplete="email"
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '13px 40px 13px 14px',
+                      borderRadius: 16,
+                      background: colors.inputBg,
+                      border: `1.5px solid ${colors.border}`,
+                      color: colors.text,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      outline: 'none',
+                      boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.25)',
+                      transition: 'border-color 0.2s',
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = '#38bdf8')}
+                    onBlur={(e) => (e.target.style.borderColor = colors.border)}
+                  />
+                  {emailInput && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic(10);
+                        setEmailInput('');
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: 12,
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        background: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
+                        border: 'none',
+                        color: colors.textMuted,
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
 
-            {/* ─── PRIMARY ACTION: Universal Instant Cloud Activation ─── */}
+                {/* Quick domain buttons for fast mobile typing */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginTop: 8,
+                  flexWrap: 'wrap',
+                }}>
+                  {['@gmail.com', '@outlook.com', '@icloud.com', '@yahoo.com'].map((dom) => (
+                    <button
+                      key={dom}
+                      type="button"
+                      onClick={() => handleDomainSelect(dom)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 8,
+                        background: isDark ? 'rgba(59, 130, 246, 0.12)' : '#e2e8f0',
+                        border: '1px solid rgba(59, 130, 246, 0.25)',
+                        color: isDark ? '#93c5fd' : '#1e40af',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {dom}
+                    </button>
+                  ))}
+
+                  {/* Quick autofill for user's account */}
+                  {emailInput !== 'asa266397@gmail.com' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic(12);
+                        setEmailInput('asa266397@gmail.com');
+                        setErrorMsg('');
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 8,
+                        background: 'rgba(16, 185, 129, 0.14)',
+                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        color: '#10b981',
+                        fontSize: 10,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {isRtl ? '📌 حساب: asa266397@gmail.com' : '📌 Fill: asa266397@gmail.com'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ─── PRIMARY ACTION BUTTON ─── */}
             <button
-              onClick={handleInstantConnect}
+              onClick={activeProvider === 'offline' ? handleEnableOfflineMode : handleInstantConnect}
               disabled={isInstantConnecting || isAuthenticating}
               style={{
                 width: '100%',
@@ -742,7 +865,9 @@ export default function MobileCloudLogin({
                 borderRadius: 20,
                 background: isInstantConnecting
                   ? 'linear-gradient(135deg, #1e3a8a, #0f172a)'
-                  : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #0284c7 100%)',
+                  : activeProvider === 'offline'
+                    ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                    : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #0284c7 100%)',
                 border: 'none',
                 color: '#ffffff',
                 fontSize: 14,
@@ -754,7 +879,9 @@ export default function MobileCloudLogin({
                 gap: 10,
                 boxShadow: isInstantConnecting
                   ? 'none'
-                  : '0 8px 28px rgba(37, 99, 235, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)',
+                  : activeProvider === 'offline'
+                    ? '0 8px 28px rgba(16, 185, 129, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)'
+                    : '0 8px 28px rgba(37, 99, 235, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)',
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                 outline: 'none',
               }}
@@ -768,6 +895,11 @@ export default function MobileCloudLogin({
                   <span style={{ fontSize: 13, fontWeight: 800 }}>
                     {instantStep || (isRtl ? 'جاري تفعيل السحابة...' : 'Connecting to Cloud…')}
                   </span>
+                </>
+              ) : activeProvider === 'offline' ? (
+                <>
+                  <span style={{ fontSize: 18 }}>📴</span>
+                  <span>{isRtl ? '⚡ بدء استخدام التطبيق بالوضع المحلي الآن' : '⚡ Enter Offline Local Vault Now'}</span>
                 </>
               ) : (
                 <>
@@ -790,27 +922,32 @@ export default function MobileCloudLogin({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#10b981', fontWeight: 700 }}>
                 <span>✓</span>
-                <span>{isRtl ? 'مسموح لجميع الحسابات والأجهزة بدون قيود أو أخطاء 403' : 'Works for all accounts and phones with zero 403 errors'}</span>
+                <span>{activeProvider === 'offline'
+                  ? (isRtl ? 'يعمل بدون أي اتصال بالإنترنت أو أخطاء 403' : 'Works with zero internet connection')
+                  : (isRtl ? 'مسموح لجميع الحسابات والأجهزة بدون قيود أو أخطاء 403' : 'Works for all accounts and phones with zero 403 errors')}
+                </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: colors.textMuted, fontWeight: 600 }}>
                 <span>✓</span>
-                <span>{isRtl ? `تجهيز تلقائي لمجلد "${AURASYNC_MOBILE_FOLDER}" بالكامل` : `Automatic "${AURASYNC_MOBILE_FOLDER}" cloud folder sync`}</span>
+                <span>{isRtl ? `تجهيز تلقائي لمجلد "${AURASYNC_MOBILE_FOLDER}" بالكامل` : `Automatic "${AURASYNC_MOBILE_FOLDER}" folder sync`}</span>
               </div>
             </div>
 
-            {/* ─── Divider: Alternative Browser OAuth ─── */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              margin: '18px 0 14px',
-              gap: 10,
-            }}>
-              <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted }}>
-                {isRtl ? 'أو عبر المتصفح الرسمي' : 'Or via Official Browser'}
-              </span>
-              <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
-            </div>
+            {/* ─── Divider: Alternative Browser OAuth (Only when cloud is selected) ─── */}
+            {activeProvider !== 'offline' && (
+              <>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  margin: '18px 0 14px',
+                  gap: 10,
+                }}>
+                  <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: colors.textMuted }}>
+                    {isRtl ? 'أو عبر المتصفح الرسمي' : 'Or via Official Browser'}
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
+                </div>
 
             {/* Secondary Browser OAuth Button */}
             <button
@@ -944,6 +1081,8 @@ export default function MobileCloudLogin({
                 </div>
               )}
             </div>
+            </>
+          )}
 
           </div>
 

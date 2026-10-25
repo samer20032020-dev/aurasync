@@ -24,8 +24,15 @@ const DropboxIcon = () => (
   </svg>
 );
 
+const OfflineVaultIcon = () => (
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <path d="M9 12l2 2 4-4" />
+  </svg>
+);
+
 export default function MobileHome({
-  version = '1.0.15',
+  version = '1.0.16',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -658,13 +665,23 @@ export default function MobileHome({
                   border: `1px solid ${colors.cardBorder}`,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {isGoogle ? <GoogleDriveIcon /> : isOneDrive ? <OneDriveIcon /> : <DropboxIcon />}
+                    {acc.isOffline || acc.id === 'offline' ? (
+                      <OfflineVaultIcon />
+                    ) : isGoogle ? (
+                      <GoogleDriveIcon />
+                    ) : isOneDrive ? (
+                      <OneDriveIcon />
+                    ) : (
+                      <DropboxIcon />
+                    )}
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 800, color: colors.text }}>
                         {acc.label}
                       </div>
                       <div style={{ fontSize: 10, color: colors.textMuted }}>
-                        {acc.email} • <span style={{ color: '#10b981', fontWeight: 700 }}>✓ {AURASYNC_MOBILE_FOLDER}</span>
+                        {acc.isOffline
+                          ? (isRtl ? 'خارج الشبكة • تشفير AES-256' : 'Offline • AES-256')
+                          : acc.email} • <span style={{ color: '#10b981', fontWeight: 700 }}>✓ {AURASYNC_MOBILE_FOLDER}</span>
                       </div>
                     </div>
                   </div>

@@ -71,7 +71,7 @@ function Section({ title, children, colors }) {
 }
 
 export default function MobileSettings({
-  version = '1.0.15',
+  version = '1.0.16',
   theme = 'dark',
   onToggleTheme,
   onShowToast,
@@ -339,11 +339,11 @@ export default function MobileSettings({
           ) : (
             <div style={{
               width: 44, height: 44, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #2563eb, #38bdf8)',
+              background: accounts[0].isOffline ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #2563eb, #38bdf8)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#fff', fontSize: 18, fontWeight: 900,
             }}>
-              {accounts[0].name ? accounts[0].name.charAt(0).toUpperCase() : '☁️'}
+              {accounts[0].isOffline ? '📴' : accounts[0].name ? accounts[0].name.charAt(0).toUpperCase() : '☁️'}
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -353,10 +353,11 @@ export default function MobileSettings({
               </span>
               <span style={{
                 fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 999,
-                background: 'rgba(16, 185, 129, 0.15)', color: '#10b981',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
+                background: accounts[0].isOffline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.15)',
+                color: accounts[0].isOffline ? '#10b981' : '#38bdf8',
+                border: `1px solid ${accounts[0].isOffline ? 'rgba(16, 185, 129, 0.4)' : 'rgba(59, 130, 246, 0.3)'}`,
               }}>
-                ✓ {accounts[0].label}
+                ✓ {accounts[0].isOffline ? (isRtl ? 'جاهز للعمل بدون إنترنت' : 'Offline Mode') : accounts[0].label}
               </span>
             </div>
             <div style={{
@@ -364,7 +365,9 @@ export default function MobileSettings({
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               fontFamily: 'monospace',
             }}>
-              {accounts[0].email}
+              {accounts[0].isOffline
+                ? (isRtl ? 'خزنة الهاتف المشفرة محلياً • AES-256' : 'Local Encrypted Vault • AES-256')
+                : accounts[0].email}
             </div>
           </div>
         </div>
