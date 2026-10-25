@@ -29,6 +29,9 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
 
+    <!-- In-App Auto-Update & Package Installer Permission -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -59,20 +62,53 @@
                 <data android:scheme="aurasync" />
             </intent-filter>
 
-            <!-- Share Target Intent Filter: Share Single File to AuraSync -->
-            <intent-filter>
+            <!-- Native Share Target: Share Single Image/Video/File to AuraSync Cloud -->
+            <intent-filter android:label="AuraSync - رفع للسحابة">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter android:label="AuraSync - رفع للسحابة">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter android:label="AuraSync - رفع للسحابة">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter android:label="AuraSync - رفع للسحابة">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
 
-            <!-- Share Target Intent Filter: Share Hundreds (e.g. 900) Files to AuraSync -->
-            <intent-filter>
+            <!-- Native Share Target: Share Multiple (Bulk) Images/Videos/Files to AuraSync -->
+            <intent-filter android:label="AuraSync - رفع للسحابة">
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter android:label="AuraSync - رفع للسحابة">
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter android:label="AuraSync - رفع للسحابة">
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
 
         </activity>
+
+        <!-- Native ContentProvider for instant in-app update installation -->
+        <provider
+            android:name=".AuraSyncFileProvider"
+            android:authorities="com.aurasync.mobile.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
     </application>
 </manifest>

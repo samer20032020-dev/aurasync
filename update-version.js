@@ -143,6 +143,14 @@ if (updateMobile) {
     fs.writeFileSync(mobileHomePath, mobileHomeContent, 'utf8');
     console.log('Updated src/components/mobile/MobileHome.jsx');
   }
+
+  const mobileLoginPath = path.join(rootDir, 'src', 'components', 'mobile', 'MobileCloudLogin.jsx');
+  if (fs.existsSync(mobileLoginPath)) {
+    let mobileLoginContent = fs.readFileSync(mobileLoginPath, 'utf8');
+    mobileLoginContent = mobileLoginContent.replace(/version = ['"].*?['"]/, `version = '${targetMobile}'`);
+    fs.writeFileSync(mobileLoginPath, mobileLoginContent, 'utf8');
+    console.log('Updated src/components/mobile/MobileCloudLogin.jsx');
+  }
 }
 
 // 7. website/index.html

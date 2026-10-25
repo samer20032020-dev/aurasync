@@ -32,14 +32,65 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.URL;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
+import android.os.PowerManager;
 import java.util.Map;
 
 public class MainActivity extends Activity {
+    private static final int GOOGLE_PORT = 58291;
+    private static final String ONEDRIVE_CLIENT_ID = "a7a2023e-78b4-44a6-a92f-13265d31a89b";
+    private static final int ONEDRIVE_PORT = 58292;
+
+    private String getGoogleClientId() {
+        try {
+            InputStream is = getAssets().open("credentials.json");
+            byte[] buf = new byte[is.available()];
+            is.read(buf);
+            is.close();
+            JSONObject json = new JSONObject(new String(buf, StandardCharsets.UTF_8));
+            JSONObject installed = json.optJSONObject("installed");
+            if (installed != null) return installed.optString("client_id", "");
+            return json.optString("client_id", "");
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private String getGoogleClientSecret() {
+        try {
+            InputStream is = getAssets().open("credentials.json");
+            byte[] buf = new byte[is.available()];
+            is.read(buf);
+            is.close();
+            JSONObject json = new JSONObject(new String(buf, StandardCharsets.UTF_8));
+            JSONObject installed = json.optJSONObject("installed");
+            if (installed != null) return installed.optString("client_secret", "");
+            return json.optString("client_secret", "");
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private ServerSocket oauthServerSocket = null;
+    private Thread oauthServerThread = null;
     private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
     private static final int PERMISSION_REQUEST_CODE = 1002;
 
@@ -47,10 +98,124 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private String pendingSharedFilesJson = "[]";
     private boolean pageLoaded = false;
+    private PowerManager.WakeLock wakeLock = null;
+
+    private File pendingInstallApk = null;
+    private BroadcastReceiver downloadReceiver = null;
+    private long activeDownloadManagerId = -1;
+
+    private void setupDownloadReceiver() {
+        try {
+            downloadReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (intent == null) return;
+                    long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                    if (id != -1 && (id == activeDownloadManagerId || activeDownloadManagerId == -1)) {
+                        try {
+                            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                            if (dm != null) {
+                                Uri downloadUri = dm.getUriForDownloadedFile(id);
+                                if (downloadUri != null) {
+                                    Intent installIntent = new Intent(Intent.ACTION_VIEW);
+                                    installIntent.setDataAndType(downloadUri, "application/vnd.android.package-archive");
+                                    installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                    startActivity(installIntent);
+                                }
+                            }
+                        } catch (Exception e) {
+                            android.util.Log.w("AuraSyncDownload", "Receiver install error: " + e.getMessage());
+                        }
+                    }
+                }
+            };
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(downloadReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED);
+            } else {
+                registerReceiver(downloadReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+            }
+        } catch (Exception e) {
+            android.util.Log.w("AuraSyncDownload", "Failed to register download receiver: " + e.getMessage());
+        }
+    }
+
+    public void launchApkInstall(final File apkFile) {
+        if (apkFile == null || !apkFile.exists()) {
+            showToast("تعذر العثور على ملف التحديث");
+            return;
+        }
+
+        // Android 8.0+ (Oreo, API 26+) check for unknown sources permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!getPackageManager().canRequestPackageInstalls()) {
+                pendingInstallApk = apkFile;
+                showToast("يرجى تفعيل (السماح بتثبيت التطبيقات) للبرنامج ثم الرجوع لتثبيت التحديث");
+                try {
+                    Intent settingsIntent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+                    settingsIntent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(settingsIntent);
+                } catch (Exception e) {
+                    try {
+                        Intent genericIntent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+                        startActivity(genericIntent);
+                    } catch (Exception ignored) {}
+                }
+                return;
+            }
+        }
+
+        try {
+            Uri apkUri = Uri.parse("content://" + getPackageName() + ".fileprovider/" + apkFile.getName());
+            Intent installIntent = new Intent(Intent.ACTION_VIEW);
+            installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            List<android.content.pm.ResolveInfo> resolveInfos = getPackageManager().queryIntentActivities(installIntent, PackageManager.MATCH_DEFAULT_ONLY);
+            if (resolveInfos != null) {
+                for (android.content.pm.ResolveInfo info : resolveInfos) {
+                    if (info != null && info.activityInfo != null) {
+                        grantUriPermission(info.activityInfo.packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    }
+                }
+            }
+
+            startActivity(installIntent);
+        } catch (Exception e) {
+            android.util.Log.e("AuraSyncInstall", "ContentProvider install error: " + e.getMessage());
+            try {
+                Intent fallbackIntent = new Intent(Intent.ACTION_VIEW);
+                fallbackIntent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
+                fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(fallbackIntent);
+            } catch (Exception ex) {
+                showToast("حدث خطأ أثناء فتح مثبت الحزم: " + ex.getMessage());
+            }
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (pendingInstallApk != null && pendingInstallApk.exists()) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || getPackageManager().canRequestPackageInstalls()) {
+                File apk = pendingInstallApk;
+                pendingInstallApk = null;
+                launchApkInstall(apk);
+            }
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Allow file URI exposure via reflection for legacy Android fallback
+        try {
+            java.lang.reflect.Method m = android.os.StrictMode.class.getMethod("disableDeathOnFileUriExposure");
+            m.invoke(null);
+        } catch (Exception ignored) {}
 
         // Configure edge-to-edge dark display
         configureWindowStyle();
@@ -59,6 +224,9 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         setupWebView();
         setContentView(webView);
+
+        // Auto-install completed downloads from DownloadManager if triggered
+        setupDownloadReceiver();
 
         // Handle incoming share intent (e.g. 900 files from Gallery)
         handleIncomingIntent(getIntent());
@@ -101,6 +269,7 @@ public class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         settings.setSupportZoom(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setUserAgentString("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36");
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
@@ -319,6 +488,19 @@ public class MainActivity extends Activity {
             if (uris != null && !uris.isEmpty()) {
                 parseAndStageUris(uris);
             }
+        } else if (Intent.ACTION_VIEW.equals(action) && intent.getData() != null) {
+            Uri data = intent.getData();
+            if ("aurasync".equalsIgnoreCase(data.getScheme())) {
+                final String uriStr = data.toString();
+                if (webView != null) {
+                    webView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            webView.evaluateJavascript("if (window.onAuraSyncAuthCallback) window.onAuraSyncAuthCallback('" + uriStr.replace("'", "\\'") + "');", null);
+                        }
+                    });
+                }
+            }
         }
     }
 
@@ -514,20 +696,174 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void downloadAndInstallUpdate(final String apkUrl, final String versionName) {
+            vibrate(30);
+            showToast("جاري تنزيل التحديث وتجهيز التثبيت تلقائياً...");
+
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    HttpURLConnection conn = null;
+                    InputStream in = null;
+                    FileOutputStream out = null;
+                    File updateFile = null;
+
+                    try {
+                        String rawTarget = (apkUrl != null && !apkUrl.trim().isEmpty())
+                                ? apkUrl.trim()
+                                : "https://github.com/samer20032020-dev/aurasync/releases/latest/download/AuraSync.apk";
+
+                        URL targetUrl = new URL(rawTarget);
+                        int redirects = 0;
+
+                        // Follow GitHub redirects (301, 302, 303, 307, 308) to final S3/CDN URL
+                        while (redirects < 10) {
+                            conn = (HttpURLConnection) targetUrl.openConnection();
+                            conn.setConnectTimeout(25000);
+                            conn.setReadTimeout(45000);
+                            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AuraSyncMobile/1.0");
+                            conn.setInstanceFollowRedirects(true);
+
+                            int status = conn.getResponseCode();
+                            if (status == HttpURLConnection.HTTP_MOVED_PERM ||
+                                status == HttpURLConnection.HTTP_MOVED_TEMP ||
+                                status == HttpURLConnection.HTTP_SEE_OTHER ||
+                                status == 307 || status == 308) {
+                                String loc = conn.getHeaderField("Location");
+                                conn.disconnect();
+                                if (loc == null || loc.isEmpty()) break;
+                                targetUrl = new URL(loc);
+                                redirects++;
+                                continue;
+                            }
+                            break;
+                        }
+
+                        int responseCode = conn.getResponseCode();
+                        if (responseCode != HttpURLConnection.HTTP_OK) {
+                            throw new Exception("HTTP status " + responseCode);
+                        }
+
+                        final long totalBytes = conn.getContentLength();
+                        in = conn.getInputStream();
+
+                        // Write to internal cache directory
+                        updateFile = new File(getCacheDir(), "AuraSync-update.apk");
+                        if (updateFile.exists()) {
+                            updateFile.delete();
+                        }
+
+                        out = new FileOutputStream(updateFile);
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        long totalRead = 0;
+                        long lastReportTime = 0;
+
+                        while ((bytesRead = in.read(buffer)) != -1) {
+                            out.write(buffer, 0, bytesRead);
+                            totalRead += bytesRead;
+
+                            long now = System.currentTimeMillis();
+                            if (now - lastReportTime > 150 || totalRead == totalBytes) {
+                                lastReportTime = now;
+                                final int percent = totalBytes > 0 ? (int) ((totalRead * 100) / totalBytes) : -1;
+                                final double mbRead = Math.round((totalRead / (1024.0 * 1024.0)) * 10.0) / 10.0;
+                                final double mbTotal = totalBytes > 0 ? Math.round((totalBytes / (1024.0 * 1024.0)) * 10.0) / 10.0 : 0;
+
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (webView != null) {
+                                            webView.evaluateJavascript(
+                                                "if (window.onAuraSyncUpdateProgress) window.onAuraSyncUpdateProgress(" +
+                                                percent + ", " + mbRead + ", " + mbTotal + ");", null);
+                                        }
+                                    }
+                                });
+                            }
+                        }
+
+                        out.flush();
+                        out.close();
+                        out = null;
+                        in.close();
+                        in = null;
+                        conn.disconnect();
+                        conn = null;
+
+                        // Ensure readable permissions
+                        updateFile.setReadable(true, false);
+
+                        final File finalApk = updateFile;
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (webView != null) {
+                                    webView.evaluateJavascript("if (window.onAuraSyncUpdateReady) window.onAuraSyncUpdateReady();", null);
+                                }
+                                showToast("اكتمل التحميل بنجاح! جاري فتح نافذة التثبيت...");
+                                launchApkInstall(finalApk);
+                            }
+                        });
+
+                    } catch (final Exception e) {
+                        e.printStackTrace();
+                        if (out != null) { try { out.close(); } catch (Exception ignored) {} }
+                        if (in != null) { try { in.close(); } catch (Exception ignored) {} }
+                        if (conn != null) { try { conn.disconnect(); } catch (Exception ignored) {} }
+
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                showToast("جاري التنزيل المباشر كحل بديل...");
+                                if (webView != null) {
+                                    webView.evaluateJavascript("if (window.onAuraSyncUpdateError) window.onAuraSyncUpdateError('" + e.getMessage() + "');", null);
+                                }
+
+                                // Fallback to DownloadManager
+                                try {
+                                    DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                                    if (dm != null) {
+                                        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
+                                        request.setTitle("AuraSync Update");
+                                        request.setDescription("تنزيل وتثبيت تحديث AuraSync");
+                                        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                                        request.setMimeType("application/vnd.android.package-archive");
+                                        request.setDestinationInExternalFilesDir(MainActivity.this, android.os.Environment.DIRECTORY_DOWNLOADS, "AuraSync-update.apk");
+                                        activeDownloadManagerId = dm.enqueue(request);
+                                        return;
+                                    }
+                                } catch (Exception ignored) {}
+
+                                // Ultimate fallback: open download URL in external browser/downloader
+                                try {
+                                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl));
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    startActivity(intent);
+                                } catch (Exception ignored) {}
+                            }
+                        });
+                    }
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void startRealOAuth(final String provider) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    startOAuthFlow(provider);
+                }
+            });
+        }
+
+        @JavascriptInterface
         public void openCloudLogin(final String provider) {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    String url = "https://accounts.google.com";
-                    if ("onedrive".equalsIgnoreCase(provider) || "microsoft".equalsIgnoreCase(provider)) {
-                        url = "https://login.live.com";
-                    } else if ("dropbox".equalsIgnoreCase(provider)) {
-                        url = "https://www.dropbox.com/login";
-                    }
-                    try {
-                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                        startActivity(browserIntent);
-                    } catch (Exception ignored) {}
+                    startOAuthFlow(provider);
                 }
             });
         }
@@ -646,15 +982,481 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void downloadCloudFile(final String fileName) {
-            final String name = fileName != null && !fileName.isEmpty() ? fileName : "ملف سحابي";
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    vibrate(25);
-                    showToast("جاري حفظ الملف في ذاكرة الهاتف: " + name);
+        public void acquireWakeLock(final long timeoutMs) {
+            try {
+                PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                if (pm != null) {
+                    if (wakeLock != null && wakeLock.isHeld()) {
+                        wakeLock.release();
+                    }
+                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AuraSync:BackgroundTransfer");
+                    wakeLock.setReferenceCounted(false);
+                    long duration = timeoutMs > 0 ? timeoutMs : (30 * 60 * 1000L); // 30 mins default
+                    wakeLock.acquire(duration);
                 }
-            });
+            } catch (Exception ignored) {}
         }
+
+        @JavascriptInterface
+        public void releaseWakeLock() {
+            try {
+                if (wakeLock != null && wakeLock.isHeld()) {
+                    wakeLock.release();
+                    wakeLock = null;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void downloadCloudFile(String fileName, String base64Data, String mimeType) {
+            try {
+                showToast("جاري تنزيل " + fileName);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    // ─── Real Android OAuth 2.0 Loopback Engine ──────────────────────────────
+    public void showToast(final String message) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    public synchronized void stopOAuthServer() {
+        try {
+            if (oauthServerSocket != null && !oauthServerSocket.isClosed()) {
+                oauthServerSocket.close();
+            }
+        } catch (Exception ignored) {}
+        oauthServerSocket = null;
+        if (oauthServerThread != null) {
+            try {
+                oauthServerThread.interrupt();
+            } catch (Exception ignored) {}
+            oauthServerThread = null;
+        }
+    }
+
+    public synchronized void startOAuthFlow(final String provider) {
+        stopOAuthServer();
+
+        final boolean isGoogle = !"onedrive".equalsIgnoreCase(provider) && !"microsoft".equalsIgnoreCase(provider);
+        final int port = isGoogle ? GOOGLE_PORT : ONEDRIVE_PORT;
+
+        oauthServerThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    // Bind to wildcard (IPv4 + IPv6) so Chrome on modern Android never gets connection refused / offline error
+                    oauthServerSocket = new ServerSocket(port, 5);
+
+                    // Launch system browser with official OAuth authorization consent URL
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            String authUrl;
+                            try {
+                                if (isGoogle) {
+                                    authUrl = "https://accounts.google.com/o/oauth2/v2/auth"
+                                        + "?client_id=" + URLEncoder.encode(getGoogleClientId(), "UTF-8")
+                                        + "&redirect_uri=" + URLEncoder.encode("http://localhost:" + GOOGLE_PORT, "UTF-8")
+                                        + "&response_type=code"
+                                        + "&scope=" + URLEncoder.encode("https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile", "UTF-8")
+                                        + "&access_type=offline"
+                                        + "&prompt=consent";
+                                } else {
+                                    authUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+                                        + "?client_id=" + URLEncoder.encode(ONEDRIVE_CLIENT_ID, "UTF-8")
+                                        + "&redirect_uri=" + URLEncoder.encode("http://localhost:" + ONEDRIVE_PORT, "UTF-8")
+                                        + "&response_type=code"
+                                        + "&scope=" + URLEncoder.encode("Files.ReadWrite.All User.Read offline_access", "UTF-8")
+                                        + "&prompt=select_account";
+                                }
+
+                                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(authUrl));
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                startActivity(intent);
+                            } catch (Exception e) {
+                                showToast("تعذر فتح المتصفح للمصادقة: " + e.getMessage());
+                            }
+                        }
+                    });
+
+                    // Wait for loopback redirect request from browser
+                    Socket clientSocket = oauthServerSocket.accept();
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8));
+                    String requestLine = reader.readLine();
+
+                    String code = null;
+                    String error = null;
+
+                    if (requestLine != null) {
+                        int codeIdx = requestLine.indexOf("code=");
+                        if (codeIdx != -1) {
+                            int end = requestLine.indexOf('&', codeIdx);
+                            int space = requestLine.indexOf(' ', codeIdx);
+                            if (end == -1 || (space != -1 && space < end)) end = space;
+                            if (end != -1) code = requestLine.substring(codeIdx + 5, end);
+                            else code = requestLine.substring(codeIdx + 5);
+                            code = URLDecoder.decode(code, "UTF-8");
+                        }
+
+                        int errIdx = requestLine.indexOf("error=");
+                        if (errIdx != -1) {
+                            int end = requestLine.indexOf('&', errIdx);
+                            int space = requestLine.indexOf(' ', errIdx);
+                            if (end == -1 || (space != -1 && space < end)) end = space;
+                            if (end != -1) error = requestLine.substring(errIdx + 6, end);
+                            else error = requestLine.substring(errIdx + 6);
+                            error = URLDecoder.decode(error, "UTF-8");
+                        }
+                    }
+
+                    // Return instant auto-redirect HTML with intent URI to bring user back to app immediately!
+                    String responseHtml;
+                    if (code != null) {
+                        // Immediately bring MainActivity back to foreground!
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    Intent reopen = new Intent(MainActivity.this, MainActivity.class);
+                                    reopen.setAction(Intent.ACTION_MAIN);
+                                    reopen.addCategory(Intent.CATEGORY_LAUNCHER);
+                                    reopen.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                                    startActivity(reopen);
+                                } catch (Exception ignored) {}
+                            }
+                        });
+
+                        String intentUri = "intent://auth/complete#Intent;scheme=aurasync;package=com.aurasync.mobile;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end";
+                        String schemeUri = "aurasync://auth/complete";
+
+                        responseHtml = "<!DOCTYPE html><html dir='rtl' lang='ar'><head><meta charset='utf-8'>"
+                            + "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                            + "<title>AuraSync</title>"
+                            + "<meta http-equiv='refresh' content='0; url=" + intentUri + "'>"
+                            + "<style>body{background:#040c19;color:#38bdf8;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;box-sizing:border-box;text-align:center;}"
+                            + ".card{background:rgba(15,23,42,0.92);border:1px solid rgba(59,130,246,0.35);padding:30px 20px;border-radius:24px;box-shadow:0 20px 50px rgba(0,0,0,0.6);max-width:360px;width:100%;backdrop-filter:blur(20px);}"
+                            + "h2{color:#38bdf8;margin:0 0 10px;font-size:20px;font-weight:900;}"
+                            + "p{color:#94a3b8;font-size:13px;line-height:1.5;margin:0 0 20px;}"
+                            + ".btn{display:inline-flex;align-items:center;justify-content:center;width:100%;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;padding:12px;border-radius:14px;text-decoration:none;font-weight:800;font-size:14px;box-sizing:border-box;box-shadow:0 6px 20px rgba(37,99,235,0.4);}</style>"
+                            + "</head><body><div class='card'>"
+                            + "<h2>✓ تم التحقق بنجاح!</h2>"
+                            + "<p>جاري العودة إلى تطبيق AuraSync فوراً...</p>"
+                            + "<a href='" + intentUri + "' class='btn'>اضغط للعودة إلى التطبيق</a>"
+                            + "<script>"
+                            + "(function(){"
+                            + "  try { window.location.replace('" + intentUri + "'); } catch(e) { window.location.href='" + schemeUri + "'; }"
+                            + "  setTimeout(function(){ window.location.href='" + intentUri + "'; }, 10);"
+                            + "  setTimeout(function(){ window.location.href='" + schemeUri + "'; }, 180);"
+                            + "})();"
+                            + "</script>"
+                            + "</div></body></html>";
+                    } else {
+                        responseHtml = "<!DOCTYPE html><html dir='rtl' lang='ar'><head><meta charset='utf-8'>"
+                            + "<title>AuraSync - خطأ في تسجيل الدخول</title>"
+                            + "<style>body{background:#060814;color:#f8fafc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}"
+                            + ".card{background:rgba(15,23,42,0.9);border:1px solid #ef4444;padding:30px;border-radius:24px;max-width:360px;}</style></head>"
+                            + "<body><div class='card'><h2 style='color:#ef4444;'>لم يكتمل تسجيل الدخول</h2>"
+                            + "<p style='color:#94a3b8;'>تم إلغاء العملية أو حدث خطأ: " + (error != null ? error : "إلغاء المستخدم") + "</p>"
+                            + "<p style='font-size:12px;color:#64748b;'>يمكنك العودة إلى التطبيق والمحاولة مجدداً.</p>"
+                            + "</div></body></html>";
+                    }
+
+                    byte[] bodyBytes = responseHtml.getBytes(StandardCharsets.UTF_8);
+                    OutputStream os = clientSocket.getOutputStream();
+                    os.write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: " + bodyBytes.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    os.write(bodyBytes);
+                    os.flush();
+                    try { clientSocket.shutdownOutput(); } catch (Exception ignored) {}
+                    try { Thread.sleep(100); } catch (Exception ignored) {}
+                    try { clientSocket.close(); } catch (Exception ignored) {}
+
+                    // Gracefully close server after 3 seconds so secondary browser requests do not crash
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try { Thread.sleep(3000); } catch (Exception ignored) {}
+                            stopOAuthServer();
+                        }
+                    }).start();
+
+                    if (error != null && code == null) {
+                        final String finalErr = error;
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (webView != null) {
+                                    webView.evaluateJavascript("if (window.onAuraSyncAuthError) window.onAuraSyncAuthError('" + finalErr.replace("'", "\\'") + "');", null);
+                                }
+                            }
+                        });
+                        return;
+                    }
+
+                    if (code != null) {
+                        exchangeOAuthCode(isGoogle ? "google" : "onedrive", code, port);
+                    }
+
+                } catch (Exception e) {
+                    android.util.Log.e("AuraSyncOAuth", "Loopback server exception: " + e.getMessage());
+                }
+            }
+        });
+
+        oauthServerThread.start();
+    }
+
+    private void exchangeOAuthCode(final String provider, final String code, final int port) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String accessToken = null;
+                    String refreshToken = null;
+                    String userEmail = null;
+                    String userName = null;
+                    String userPicture = null;
+
+                    if ("google".equalsIgnoreCase(provider)) {
+                        URL tokenUrl = new URL("https://oauth2.googleapis.com/token");
+                        HttpURLConnection conn = (HttpURLConnection) tokenUrl.openConnection();
+                        conn.setRequestMethod("POST");
+                        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                        conn.setDoOutput(true);
+                        conn.setConnectTimeout(15000);
+                        conn.setReadTimeout(15000);
+
+                        String postData = "code=" + URLEncoder.encode(code, "UTF-8")
+                            + "&client_id=" + URLEncoder.encode(getGoogleClientId(), "UTF-8")
+                            + "&client_secret=" + URLEncoder.encode(getGoogleClientSecret(), "UTF-8")
+                            + "&redirect_uri=" + URLEncoder.encode("http://localhost:" + port, "UTF-8")
+                            + "&grant_type=authorization_code";
+
+                        OutputStream os = conn.getOutputStream();
+                        os.write(postData.getBytes(StandardCharsets.UTF_8));
+                        os.flush();
+                        os.close();
+
+                        int respCode = conn.getResponseCode();
+                        InputStream is = (respCode >= 200 && respCode < 300) ? conn.getInputStream() : conn.getErrorStream();
+                        BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+                        StringBuilder sb = new StringBuilder();
+                        String l;
+                        while ((l = br.readLine()) != null) sb.append(l);
+                        br.close();
+
+                        JSONObject tokenJson = new JSONObject(sb.toString());
+                        accessToken = tokenJson.optString("access_token", null);
+                        refreshToken = tokenJson.optString("refresh_token", null);
+
+                        if (accessToken != null) {
+                            URL userUrl = new URL("https://www.googleapis.com/oauth2/v3/userinfo");
+                            HttpURLConnection userConn = (HttpURLConnection) userUrl.openConnection();
+                            userConn.setRequestProperty("Authorization", "Bearer " + accessToken);
+                            userConn.setConnectTimeout(10000);
+                            userConn.setReadTimeout(10000);
+
+                            if (userConn.getResponseCode() == 200) {
+                                BufferedReader ubr = new BufferedReader(new InputStreamReader(userConn.getInputStream(), StandardCharsets.UTF_8));
+                                StringBuilder usb = new StringBuilder();
+                                while ((l = ubr.readLine()) != null) usb.append(l);
+                                ubr.close();
+
+                                JSONObject userObj = new JSONObject(usb.toString());
+                                userEmail = userObj.optString("email", "google_user@gmail.com");
+                                userName = userObj.optString("name", userEmail);
+                                userPicture = userObj.optString("picture", "");
+                            }
+
+                            // Automatically ensure "aurasync-mobile" folder exists in Google Drive root
+                            try {
+                                URL searchUrl = new URL("https://www.googleapis.com/drive/v3/files?q=" + URLEncoder.encode("mimeType='application/vnd.google-apps.folder' and name='aurasync-mobile' and trashed=false and 'root' in parents", "UTF-8") + "&fields=files(id,name)");
+                                HttpURLConnection sConn = (HttpURLConnection) searchUrl.openConnection();
+                                sConn.setRequestProperty("Authorization", "Bearer " + accessToken);
+                                sConn.setConnectTimeout(8000);
+                                sConn.setReadTimeout(8000);
+                                if (sConn.getResponseCode() == 200) {
+                                    BufferedReader sr = new BufferedReader(new InputStreamReader(sConn.getInputStream(), StandardCharsets.UTF_8));
+                                    StringBuilder sbSearch = new StringBuilder();
+                                    String sl;
+                                    while ((sl = sr.readLine()) != null) sbSearch.append(sl);
+                                    sr.close();
+                                    JSONObject searchRes = new JSONObject(sbSearch.toString());
+                                    JSONArray filesArr = searchRes.optJSONArray("files");
+                                    if (filesArr == null || filesArr.length() == 0) {
+                                        URL createUrl = new URL("https://www.googleapis.com/drive/v3/files");
+                                        HttpURLConnection cConn = (HttpURLConnection) createUrl.openConnection();
+                                        cConn.setRequestMethod("POST");
+                                        cConn.setRequestProperty("Authorization", "Bearer " + accessToken);
+                                        cConn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                                        cConn.setDoOutput(true);
+                                        cConn.setConnectTimeout(8000);
+                                        cConn.setReadTimeout(8000);
+                                        JSONObject createBody = new JSONObject();
+                                        createBody.put("name", "aurasync-mobile");
+                                        createBody.put("mimeType", "application/vnd.google-apps.folder");
+                                        createBody.put("description", "AuraSync Mobile media & gallery cloud storage");
+                                        OutputStream cos = cConn.getOutputStream();
+                                        cos.write(createBody.toString().getBytes(StandardCharsets.UTF_8));
+                                        cos.flush();
+                                        cos.close();
+                                        cConn.getResponseCode();
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                    } else if ("onedrive".equalsIgnoreCase(provider)) {
+                        URL tokenUrl = new URL("https://login.microsoftonline.com/common/oauth2/v2.0/token");
+                        HttpURLConnection conn = (HttpURLConnection) tokenUrl.openConnection();
+                        conn.setRequestMethod("POST");
+                        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                        conn.setDoOutput(true);
+                        conn.setConnectTimeout(15000);
+                        conn.setReadTimeout(15000);
+
+                        String postData = "code=" + URLEncoder.encode(code, "UTF-8")
+                            + "&client_id=" + URLEncoder.encode(ONEDRIVE_CLIENT_ID, "UTF-8")
+                            + "&redirect_uri=" + URLEncoder.encode("http://localhost:" + port, "UTF-8")
+                            + "&grant_type=authorization_code";
+
+                        OutputStream os = conn.getOutputStream();
+                        os.write(postData.getBytes(StandardCharsets.UTF_8));
+                        os.flush();
+                        os.close();
+
+                        int respCode = conn.getResponseCode();
+                        InputStream is = (respCode >= 200 && respCode < 300) ? conn.getInputStream() : conn.getErrorStream();
+                        BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+                        StringBuilder sb = new StringBuilder();
+                        String l;
+                        while ((l = br.readLine()) != null) sb.append(l);
+                        br.close();
+
+                        JSONObject tokenJson = new JSONObject(sb.toString());
+                        accessToken = tokenJson.optString("access_token", null);
+                        refreshToken = tokenJson.optString("refresh_token", null);
+
+                        if (accessToken != null) {
+                            URL meUrl = new URL("https://graph.microsoft.com/v1.0/me");
+                            HttpURLConnection meConn = (HttpURLConnection) meUrl.openConnection();
+                            meConn.setRequestProperty("Authorization", "Bearer " + accessToken);
+                            meConn.setConnectTimeout(10000);
+                            meConn.setReadTimeout(10000);
+
+                            if (meConn.getResponseCode() == 200) {
+                                BufferedReader mbr = new BufferedReader(new InputStreamReader(meConn.getInputStream(), StandardCharsets.UTF_8));
+                                StringBuilder msb = new StringBuilder();
+                                while ((l = mbr.readLine()) != null) msb.append(l);
+                                mbr.close();
+
+                                JSONObject meObj = new JSONObject(msb.toString());
+                                userName = meObj.optString("displayName", "OneDrive User");
+                                userEmail = meObj.optString("mail", meObj.optString("userPrincipalName", "user@outlook.com"));
+                            }
+
+                            // Automatically ensure "aurasync-mobile" folder exists in OneDrive root
+                            try {
+                                URL createUrl = new URL("https://graph.microsoft.com/v1.0/me/drive/root/children");
+                                HttpURLConnection cConn = (HttpURLConnection) createUrl.openConnection();
+                                cConn.setRequestMethod("POST");
+                                cConn.setRequestProperty("Authorization", "Bearer " + accessToken);
+                                cConn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                                cConn.setDoOutput(true);
+                                cConn.setConnectTimeout(8000);
+                                cConn.setReadTimeout(8000);
+                                JSONObject createBody = new JSONObject();
+                                createBody.put("name", "aurasync-mobile");
+                                createBody.put("folder", new JSONObject());
+                                createBody.put("@microsoft.graph.conflictBehavior", "replace");
+                                OutputStream cos = cConn.getOutputStream();
+                                cos.write(createBody.toString().getBytes(StandardCharsets.UTF_8));
+                                cos.flush();
+                                cos.close();
+                                cConn.getResponseCode();
+                            } catch (Exception ignored) {}
+                        }
+                    }
+
+
+                    if (accessToken != null && userEmail != null) {
+                        final JSONObject accountObj = new JSONObject();
+                        accountObj.put("id", provider);
+                        accountObj.put("provider", provider);
+                        accountObj.put("label", "google".equalsIgnoreCase(provider) ? "Google Drive" : "Microsoft OneDrive");
+                        accountObj.put("email", userEmail);
+                        accountObj.put("name", userName != null ? userName : userEmail);
+                        if (userPicture != null) accountObj.put("picture", userPicture);
+                        accountObj.put("accessToken", accessToken);
+                        if (refreshToken != null) accountObj.put("refreshToken", refreshToken);
+                        accountObj.put("targetFolder", "aurasync-mobile");
+                        accountObj.put("connectedAt", System.currentTimeMillis());
+                        accountObj.put("status", "connected");
+
+                        final String finalEmail = userEmail;
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (webView != null) {
+                                    webView.evaluateJavascript("if (window.onAuraSyncAuthSuccess) window.onAuraSyncAuthSuccess(" + accountObj.toString() + ");", null);
+                                }
+                                showToast("✓ تم تسجيل الدخول بنجاح: " + finalEmail);
+                                try {
+                                    Intent reopen = new Intent(MainActivity.this, MainActivity.class);
+                                    reopen.setAction(Intent.ACTION_MAIN);
+                                    reopen.addCategory(Intent.CATEGORY_LAUNCHER);
+                                    reopen.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                                    startActivity(reopen);
+                                } catch (Exception ignored) {}
+                            }
+                        });
+                    } else {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (webView != null) {
+                                    webView.evaluateJavascript("if (window.onAuraSyncAuthError) window.onAuraSyncAuthError('تعذر الحصول على رمز الوصول من خوادم السحابة');", null);
+                                }
+                                showToast("فشل استخراج بيانات الدخول");
+                            }
+                        });
+                    }
+
+                } catch (Exception e) {
+                    android.util.Log.e("AuraSyncOAuth", "Token exchange failed: " + e.getMessage());
+                    final String err = e.getMessage();
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (webView != null) {
+                                webView.evaluateJavascript("if (window.onAuraSyncAuthError) window.onAuraSyncAuthError('" + (err != null ? err.replace("'", "\\'") : "Unknown error") + "');", null);
+                            }
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopOAuthServer();
+        if (downloadReceiver != null) {
+            try {
+                unregisterReceiver(downloadReceiver);
+                downloadReceiver = null;
+            } catch (Exception ignored) {}
+        }
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+                wakeLock = null;
+            }
+        } catch (Exception ignored) {}
+        super.onDestroy();
     }
 }

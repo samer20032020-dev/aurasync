@@ -31,12 +31,22 @@ function safeRemoveDir(dir) {
           safeRemoveDir(fullPath);
           try { fs.rmdirSync(fullPath); } catch {}
         } else {
-          try { fs.unlinkSync(fullPath); } catch {}
+          try {
+            fs.chmodSync(fullPath, 0o666);
+            fs.unlinkSync(fullPath);
+          } catch {}
         }
       } catch {}
     }
     try { fs.rmdirSync(dir); } catch {}
   } catch {}
+  if (fs.existsSync(dir)) {
+    try {
+      const os = require('os');
+      const tempDest = path.join(os.tmpdir(), `aurasync-prune-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+      fs.renameSync(dir, tempDest);
+    } catch (_) {}
+  }
 }
 
 // 1. Remove temporary files (.blockmap, .yml, .log, .7z)
@@ -58,9 +68,12 @@ try {
 }
 
 // 2. Clean temporary staging directories if present
-const winUnpackedTmp = path.join(releaseDir, 'win-unpacked.tmp');
-if (fs.existsSync(winUnpackedTmp)) {
-  safeRemoveDir(winUnpackedTmp);
+const legacyStagingDirs = ['win-unpacked.tmp', 'win-unpacked-old'];
+for (const ld of legacyStagingDirs) {
+  const fullLd = path.join(releaseDir, ld);
+  if (fs.existsSync(fullLd)) {
+    safeRemoveDir(fullLd);
+  }
 }
 
 // 3. Remove stale archived binaries from older versions in release/
@@ -88,6 +101,45 @@ try {
   }
 } catch (e) {
   console.warn('Notice checking stale binaries:', e.message);
+}
+
+// 3b. Prune stale older versions from dedicated desktop release folder
+const desktopRelDir = path.join(releaseDir, 'desktop');
+if (fs.existsSync(desktopRelDir)) {
+  try {
+    const df = fs.readdirSync(desktopRelDir);
+    for (const f of df) {
+      if (f.endsWith('.exe')) {
+        const match = f.match(/v(\d+\.\d+\.\d+)/i);
+        if (match && match[1] !== expectedVersion) {
+          try {
+            fs.unlinkSync(path.join(desktopRelDir, f));
+            console.log(`Purged stale older desktop binary: ${f}`);
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+// 3c. Prune stale older versions from dedicated mobile release folder
+const mobileRelDir = path.join(releaseDir, 'mobile');
+if (fs.existsSync(mobileRelDir)) {
+  try {
+    const mf = fs.readdirSync(mobileRelDir);
+    const mobileVer = pkg.mobileVersion || '1.0.5';
+    for (const f of mf) {
+      if (f.endsWith('.apk')) {
+        const match = f.match(/v(\d+\.\d+\.\d+)/i);
+        if (match && match[1] !== mobileVer) {
+          try {
+            fs.unlinkSync(path.join(mobileRelDir, f));
+            console.log(`Purged stale older mobile APK: ${f}`);
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {}
 }
 
 // 4. Locate the newly compiled portable executable
@@ -131,7 +183,15 @@ try {
       } catch (dErr) {
         console.warn(`[Clean-Release] Notice importing ${outSub}:`, dErr.message);
       }
+      // Prune temporary build directory after importing compiled executables
+      safeRemoveDir(outDir);
+      console.log(`[Clean-Release] Pruned temporary build dir: ${outSub}`);
     }
+  }
+  // Also clean up any lingering mobile staging directory
+  const mobileBuildStage = path.join(rootDir, 'mobile-build-stage');
+  if (fs.existsSync(mobileBuildStage)) {
+    safeRemoveDir(mobileBuildStage);
   }
 } catch (_) {}
 

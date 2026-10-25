@@ -222,12 +222,22 @@ function copyRecursive(src, dst) {
   }
 }
 copyRecursive(distDir, path.join(STAGING, 'assets', 'www'));
+const credsSrc = path.join(ROOT_DIR, 'credentials.json');
+if (fs.existsSync(credsSrc)) {
+  fs.copyFileSync(credsSrc, path.join(STAGING, 'assets', 'credentials.json'));
+}
 console.log('Injected Vite web app distribution into Android assets/www.');
 
 // 7. Copy Java source files
-const mainActivitySrc = path.join(ROOT_DIR, 'mobile', 'android', 'src', 'com', 'aurasync', 'mobile', 'MainActivity.java');
-const mainActivityDst = path.join(STAGING, 'src', 'com', 'aurasync', 'mobile', 'MainActivity.java');
-fs.copyFileSync(mainActivitySrc, mainActivityDst);
+const srcJavaDir = path.join(ROOT_DIR, 'mobile', 'android', 'src', 'com', 'aurasync', 'mobile');
+const stagingJavaDir = path.join(STAGING, 'src', 'com', 'aurasync', 'mobile');
+const javaSourceFiles = fs.readdirSync(srcJavaDir)
+  .filter((f) => f.endsWith('.java'))
+  .map((f) => {
+    const dst = path.join(stagingJavaDir, f);
+    fs.copyFileSync(path.join(srcJavaDir, f), dst);
+    return dst;
+  });
 
 // 8. Compile Java sources with javac
 console.log('Compiling Java native source code with javac...');
@@ -237,7 +247,7 @@ execFileSync(javaTools.javac, [
   '-encoding', 'UTF-8',
   '-source', '1.8',
   '-target', '1.8',
-  mainActivityDst
+  ...javaSourceFiles
 ], { stdio: 'inherit', env: ENV });
 
 // 9. Convert compiled .class files to DEX bytecode with d8

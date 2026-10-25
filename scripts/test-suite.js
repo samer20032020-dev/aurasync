@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.102', 'package.json version is 1.7.102', pkg.version);
+  assert(pkg.version === '1.7.103', 'package.json version is 1.7.103', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1964,7 +1964,15 @@ async function runTests() {
   const projectMcpSrc = fs.readFileSync(path.join(rootDir, '.mcp.json'), 'utf8');
   assert(projectMcpSrc.includes('"swarm-code"'), '.mcp.json in workspace includes swarm-code server');
 
-  assert(pkgJsonRaw.version === '1.7.102', 'package.json version matches 1.7.102');
+  // Test: Deep Workspace Sanitization, Pruning & Clean Release Architecture
+  console.log('\n--- 41. Deep Workspace Sanitization, Pruning & Clean Release Architecture ---');
+  assert(fs.existsSync(path.join(rootDir, 'scripts', 'clean-workspace.js')), 'scripts/clean-workspace.js exists and is available');
+  assert(pkgJsonRaw.scripts && pkgJsonRaw.scripts.clean === 'node scripts/clean-workspace.js', 'package.json includes clean script');
+  const cleanRelTestSrc = fs.readFileSync(path.join(rootDir, 'scripts', 'clean-release.js'), 'utf8');
+  assert(cleanRelTestSrc.includes('desktopRelDir') && cleanRelTestSrc.includes('mobileRelDir'), 'clean-release.js prunes stale historical binaries in release/desktop and release/mobile');
+  assert(cleanRelTestSrc.includes('win-unpacked-old'), 'clean-release.js cleans legacy unpacked staging directories');
+
+  assert(pkgJsonRaw.version === '1.7.103', 'package.json version matches 1.7.103');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);
