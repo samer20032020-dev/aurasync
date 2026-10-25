@@ -34,7 +34,7 @@ const GoogleIcon = ({ size = 32 }) => (
 
 export default function MobileCloudLogin({
   theme = 'dark',
-  version = '1.0.24',
+  version = '1.0.25',
   onLoginSuccess,
   onShowToast,
 }) {
@@ -185,7 +185,7 @@ export default function MobileCloudLogin({
       } else {
         // Fallback for web preview / non-native testing
         window.open(
-          'https://accounts.google.com/o/oauth2/v2/auth?client_id=1039981538650-bu9bqsi2kj3pl1vuaef58ag75qlgka8m.apps.googleusercontent.com&redirect_uri=http://localhost:58291&response_type=code&scope=https://www.googleapis.com/auth/drive.file%20https://www.googleapis.com/auth/userinfo.email%20https://www.googleapis.com/auth/userinfo.profile&access_type=offline&prompt=consent',
+          'https://accounts.google.com/o/oauth2/v2/auth?client_id=1039981538650-bu9bqsi2kj3pl1vuaef58ag75qlgka8m.apps.googleusercontent.com&redirect_uri=http://localhost:58291&response_type=code&scope=openid%20email%20profile%20https://www.googleapis.com/auth/drive.file&access_type=offline&prompt=select_account',
           '_blank'
         );
       }
