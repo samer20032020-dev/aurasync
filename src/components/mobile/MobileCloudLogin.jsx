@@ -38,7 +38,7 @@ const OfflineIcon = ({ size = 26 }) => (
 
 export default function MobileCloudLogin({
   theme = 'dark',
-  version = '1.0.14',
+  version = '1.0.17',
   onLoginSuccess,
   onShowToast,
 }) {
@@ -71,6 +71,8 @@ export default function MobileCloudLogin({
   const [availableUpdate, setAvailableUpdate] = useState(() => mobileEngine.cachedUpdate || null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(null);
+  const [updateStatus, setUpdateStatus] = useState('');
 
   const triggerHaptic = useCallback((ms = 18) => {
     try {
@@ -1128,15 +1130,46 @@ export default function MobileCloudLogin({
               {isRtl ? `إصدار الهاتف الجديد: v${availableUpdate.latestVersion}` : `New Version: v${availableUpdate.latestVersion}`}
             </p>
 
+            {isUpdating && updateProgress && (
+              <div style={{ margin: '12px 0 16px', textAlign: 'center' }}>
+                <div style={{
+                  height: 8, width: '100%', background: 'rgba(255,255,255,0.08)',
+                  borderRadius: 999, overflow: 'hidden', marginBottom: 8,
+                }}>
+                  <div style={{
+                    height: '100%', width: `${Math.max(5, updateProgress.percent >= 0 ? updateProgress.percent : 15)}%`,
+                    background: 'linear-gradient(90deg, #10b981, #38bdf8)',
+                    transition: 'width 0.2s ease', borderRadius: 999,
+                  }} />
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#38bdf8' }}>
+                  {updateProgress.percent >= 0 ? `${updateProgress.percent}%` : '...'}
+                  {updateProgress.mbTotal > 0 && ` (${updateProgress.mbRead} / ${updateProgress.mbTotal} MB)`}
+                </div>
+                <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
+                  {isRtl ? '⚡ سيتم فتح نافذة التثبيت تلقائياً، فقط اضغط تثبيت فور ظهورها' : '⚡ Package installer will open automatically upon completion'}
+                </div>
+              </div>
+            )}
+
             <button
               onClick={() => {
                 triggerHaptic(35);
                 setIsUpdating(true);
-                mobileEngine.triggerUpdateInstallation(availableUpdate);
-                setTimeout(() => {
-                  setIsUpdating(false);
-                  setShowUpdateModal(false);
-                }, 4000);
+                setUpdateStatus(isRtl ? 'جاري بدء التنزيل تلقائياً...' : 'Starting download…');
+                mobileEngine.triggerUpdateInstallation(
+                  availableUpdate,
+                  (prog) => {
+                    setUpdateProgress(prog);
+                    setUpdateStatus(isRtl ? `جاري التنزيل: ${prog.percent}%` : `Downloading: ${prog.percent}%`);
+                  },
+                  () => {
+                    setUpdateStatus(isRtl ? '✓ اكتمل التنزيل! جاري فتح التثبيت...' : '✓ Downloaded! Launching installer…');
+                  },
+                  () => {
+                    setUpdateStatus(isRtl ? 'فشل التنزيل المباشر، جاري التحويل...' : 'Opening browser download…');
+                  }
+                );
               }}
               disabled={isUpdating}
               style={{
@@ -1149,8 +1182,8 @@ export default function MobileCloudLogin({
               }}
             >
               {isUpdating
-                ? (isRtl ? 'جاري بدء تحميل التحديث...' : 'Starting download…')
-                : (isRtl ? '⬇️ تحديث وتثبيت الإصدار الآن' : '⬇️ Update & Install Now')}
+                ? (updateStatus || (isRtl ? 'جاري تنزيل التحديث تلقائياً...' : 'Downloading…'))
+                : (isRtl ? '⚡ تحديث وتثبيت الإصدار الآن تلقائياً' : '⚡ Update & Install Automatically')}
             </button>
 
             <button

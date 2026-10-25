@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.16',
+  version = '1.0.17',
   accounts = [],
   storage = {},
   stats = {},
@@ -99,6 +99,8 @@ export default function MobileApp({
   const [availableUpdate, setAvailableUpdate] = useState(() => mobileEngine.cachedUpdate || null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(null);
+  const [updateStatus, setUpdateStatus] = useState('');
 
   // Check for updates on app mount
   useEffect(() => {
@@ -774,27 +776,52 @@ export default function MobileApp({
               <span style={{ color: '#38bdf8' }}>v{availableUpdate.latestVersion}</span>
             </div>
 
-            <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 18px', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 16px', lineHeight: 1.6 }}>
               {isRtl
-                ? 'اضغط على زر التحديث أدناه لتنزيل التحديث وتثبيته فوراً بضغطة زر واحدة دون الحاجة لتنزيل نسخ يدوية مجدداً.'
-                : 'Tap update below to download and install instantly without manual downloads.'}
+                ? 'اضغط أدناه لتنزيل التحديث وتثبيته تلقائياً بضغطة زر واحدة دون الحاجة لتنزيل أي نسخ يدوية.'
+                : 'Tap below to download and install update automatically without manual downloads.'}
             </p>
+
+            {isUpdating && updateProgress && (
+              <div style={{ margin: '12px 0 16px', textAlign: 'center' }}>
+                <div style={{
+                  height: 8, width: '100%', background: 'rgba(255,255,255,0.08)',
+                  borderRadius: 999, overflow: 'hidden', marginBottom: 8,
+                }}>
+                  <div style={{
+                    height: '100%', width: `${Math.max(5, updateProgress.percent >= 0 ? updateProgress.percent : 15)}%`,
+                    background: 'linear-gradient(90deg, #10b981, #38bdf8)',
+                    transition: 'width 0.2s ease', borderRadius: 999,
+                  }} />
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#38bdf8' }}>
+                  {updateProgress.percent >= 0 ? `${updateProgress.percent}%` : '...'}
+                  {updateProgress.mbTotal > 0 && ` (${updateProgress.mbRead} / ${updateProgress.mbTotal} MB)`}
+                </div>
+                <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
+                  {isRtl ? '⚡ سيتم فتح نافذة التثبيت تلقائياً، فقط اضغط تثبيت فور ظهورها' : '⚡ Package installer will open automatically upon completion'}
+                </div>
+              </div>
+            )}
 
             <button
               onClick={() => {
                 triggerHaptic(40);
                 setIsUpdating(true);
-                mobileEngine.triggerUpdateInstallation(availableUpdate);
-                showToast(
-                  isRtl
-                    ? '✓ جاري تنزيل التحديث في شريط الإشعارات! اضغط عليه فور اكتماله للتثبيت'
-                    : '✓ Downloading update in notifications! Tap when done to install',
-                  'success'
+                setUpdateStatus(isRtl ? 'جاري بدء التنزيل تلقائياً...' : 'Starting download…');
+                mobileEngine.triggerUpdateInstallation(
+                  availableUpdate,
+                  (prog) => {
+                    setUpdateProgress(prog);
+                    setUpdateStatus(isRtl ? `جاري التنزيل: ${prog.percent}%` : `Downloading: ${prog.percent}%`);
+                  },
+                  () => {
+                    setUpdateStatus(isRtl ? '✓ اكتمل التنزيل! جاري فتح التثبيت...' : '✓ Downloaded! Launching installer…');
+                  },
+                  () => {
+                    setUpdateStatus(isRtl ? 'فشل التنزيل المباشر، جاري التحويل...' : 'Opening browser download…');
+                  }
                 );
-                setTimeout(() => {
-                  setIsUpdating(false);
-                  setShowUpdateModal(false);
-                }, 2000);
               }}
               disabled={isUpdating}
               style={{
@@ -808,9 +835,9 @@ export default function MobileApp({
               }}
             >
               {isUpdating ? (
-                <span>{isRtl ? 'جاري بدء التنزيل...' : 'Starting download…'}</span>
+                <span>{updateStatus || (isRtl ? 'جاري تنزيل التحديث تلقائياً...' : 'Downloading…')}</span>
               ) : (
-                <span>⚡ {isRtl ? 'تحديث وتثبيت النسخة الجديدة الآن' : 'Install Update Now'}</span>
+                <span>⚡ {isRtl ? 'تحديث وتثبيت النسخة الجديدة تلقائياً' : 'Update & Install Automatically'}</span>
               )}
             </button>
 

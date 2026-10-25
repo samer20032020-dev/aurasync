@@ -592,13 +592,32 @@ class MobileEngine {
     return false;
   }
 
-  triggerUpdateInstallation(updateInfo) {
-    const url = updateInfo?.apkUrl || 'https://github.com/samer20032020-dev/aurasync/releases/latest';
+  triggerUpdateInstallation(updateInfo, onProgress, onReady, onError) {
+    const url = updateInfo?.apkUrl || 'https://github.com/samer20032020-dev/aurasync/releases/latest/download/AuraSync.apk';
     const ver = updateInfo?.latestVersion || 'latest';
-    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.downloadAndInstallUpdate) {
-      window.AuraSyncAndroid.downloadAndInstallUpdate(url, ver);
-    } else if (typeof window !== 'undefined') {
-      window.open(url, '_blank');
+
+    if (typeof window !== 'undefined') {
+      if (onProgress) {
+        window.onAuraSyncUpdateProgress = (percent, mbRead, mbTotal) => {
+          try { onProgress({ percent, mbRead, mbTotal }); } catch (_) {}
+        };
+      }
+      if (onReady) {
+        window.onAuraSyncUpdateReady = () => {
+          try { onReady(); } catch (_) {}
+        };
+      }
+      if (onError) {
+        window.onAuraSyncUpdateError = (err) => {
+          try { onError(err); } catch (_) {}
+        };
+      }
+
+      if (window.AuraSyncAndroid?.downloadAndInstallUpdate) {
+        window.AuraSyncAndroid.downloadAndInstallUpdate(url, ver);
+      } else {
+        window.open(url, '_blank');
+      }
     }
   }
 
