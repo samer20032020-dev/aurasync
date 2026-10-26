@@ -71,7 +71,7 @@ function Section({ title, children, colors }) {
 }
 
 export default function MobileSettings({
-  version = '1.0.30',
+  version = '1.0.31',
   theme = 'dark',
   onToggleTheme,
   onShowToast,
@@ -498,29 +498,8 @@ export default function MobileSettings({
       </Section>
 
       {/* ── 3. SECURITY & BIOMETRIC LOCK ───────────────────────────────── */}
-      <Section title={isRtl ? '🔒 الأمان والتشفير الحيوي' : '🔒 Security & Biometrics'} colors={colors}>
+      <Section title={isRtl ? '🔒 قفل التطبيق والأمان' : '🔒 App Lock & Security'} colors={colors}>
         
-        {/* AES-256 Encryption Status */}
-        <SettingRow
-          icon={
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#6366f1" strokeWidth="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-          }
-          iconColor="#6366f1"
-          title={isRtl ? 'تشفير AES-256 للرفع' : 'AES-256 Upload Encryption'}
-          subtitle={isRtl ? 'كافة الصور والفيديوهات والملفات مشفرة بالكامل' : 'End-to-end encrypted cloud transfers'}
-          border={colors.border}
-        >
-          <span style={{
-            fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
-            background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
-          }}>
-            {isRtl ? 'نشط دائماً ✓' : 'Active ✓'}
-          </span>
-        </SettingRow>
-
         {/* Biometric Lock Toggle */}
         <SettingRow
           icon={
@@ -531,7 +510,8 @@ export default function MobileSettings({
           iconColor="#a855f7"
           title={isRtl ? 'قفل البصمة أو الوجه (Face ID)' : 'Biometric / Face ID Lock'}
           subtitle={isRtl ? 'يطلب بصمة الإصبع أو الوجه لفتح التطبيق' : 'Requires biometrics to unlock app'}
-          border={colors.border}
+          border={settings.biometricLock ? colors.border : undefined}
+          last={!settings.biometricLock}
         >
           <Toggle
             value={Boolean(settings.biometricLock)}
@@ -540,46 +520,50 @@ export default function MobileSettings({
           />
         </SettingRow>
 
-        {/* Change Backup PIN */}
-        <SettingRow
-          icon={
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#3b82f6" strokeWidth="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-          }
-          iconColor="#3b82f6"
-          title={isRtl ? 'رمز PIN الاحتياطي للقفل' : 'Backup Security PIN'}
-          subtitle={isRtl ? `الرمز الحالي: ${settings.securityPin || '1234'}` : `Current PIN: ${settings.securityPin || '1234'}`}
-          last
-        >
-          <button
-            onClick={() => { triggerHaptic(15); setShowPinModal(true); }}
-            style={{
-              padding: '6px 12px', borderRadius: 10,
-              background: 'rgba(59, 130, 246, 0.12)',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              color: '#3b82f6', fontSize: 11, fontWeight: 700, cursor: 'pointer',
-            }}
-          >
-            {isRtl ? 'تغيير' : 'Change'}
-          </button>
-        </SettingRow>
+        {/* Dynamic PIN Option & Test (Only shown when biometric lock is ON) */}
+        {Boolean(settings.biometricLock) && (
+          <>
+            <SettingRow
+              icon={
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#3b82f6" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              }
+              iconColor="#3b82f6"
+              title={isRtl ? 'رمز PIN' : 'PIN Code'}
+              subtitle={isRtl ? `الرمز الحالي: ${settings.securityPin || '1234'} • في حال تعذر البصمة` : `Current PIN: ${settings.securityPin || '1234'} • Fallback for biometrics`}
+              last
+            >
+              <button
+                onClick={() => { triggerHaptic(15); setShowPinModal(true); }}
+                style={{
+                  padding: '6px 12px', borderRadius: 10,
+                  background: 'rgba(59, 130, 246, 0.12)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  color: '#3b82f6', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                {isRtl ? 'تغيير' : 'Change'}
+              </button>
+            </SettingRow>
 
-        {/* Test Biometric Button */}
-        <div style={{ padding: '8px 0 10px' }}>
-          <button
-            onClick={handleTestBiometric}
-            style={{
-              width: '100%', padding: '10px', borderRadius: 12,
-              background: 'rgba(168, 85, 247, 0.12)',
-              border: '1px solid rgba(168, 85, 247, 0.3)',
-              color: '#c084fc', fontSize: 12, fontWeight: 700,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}
-          >
-            <span>اختبار التحقق من البصمة / Face ID الآن</span>
-          </button>
-        </div>
+            {/* Test Biometric Button */}
+            <div style={{ padding: '8px 0 10px' }}>
+              <button
+                onClick={handleTestBiometric}
+                style={{
+                  width: '100%', padding: '10px', borderRadius: 12,
+                  background: 'rgba(168, 85, 247, 0.12)',
+                  border: '1px solid rgba(168, 85, 247, 0.3)',
+                  color: '#c084fc', fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <span>{isRtl ? 'اختبار التحقق من البصمة / Face ID الآن' : 'Test Biometrics / Face ID Now'}</span>
+              </button>
+            </div>
+          </>
+        )}
       </Section>
 
       {/* ── 4. APPEARANCE, LANGUAGE & APP VERSION ─────────────────────── */}
