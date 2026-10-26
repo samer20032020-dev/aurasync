@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.27',
+  version = '1.0.28',
   accounts = [],
   storage = {},
   stats = {},
@@ -321,34 +321,9 @@ export default function MobileApp({
             }}/>
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 16, fontWeight: 900, color: colors.text, letterSpacing: '-0.3px' }}>
-                AuraSync
-              </span>
-              <span style={{
-                fontSize: 9, fontWeight: 800, letterSpacing: 1.2,
-                padding: '2px 7px', borderRadius: 999,
-                background: colors.accentLight,
-                color: colors.accent,
-                border: `1px solid ${colors.accent}40`,
-              }}>
-                MOBILE
-              </span>
-            </div>
-
-            {/* Target Folder Pill */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
-              <span style={{
-                fontSize: 10, color: activeAccount ? '#10b981' : colors.textMuted,
-                fontWeight: 700, fontFamily: 'monospace',
-              }}>
-                {activeAccount
-                  ? activeAccount.isOffline
-                    ? `📴 ${activeAccount.label} • ${AURASYNC_MOBILE_FOLDER}`
-                    : `● ${activeAccount.label} • ${AURASYNC_MOBILE_FOLDER}`
-                  : `📁 ${AURASYNC_MOBILE_FOLDER}`}
-              </span>
-            </div>
+            <span style={{ fontSize: 16, fontWeight: 800, color: colors.text, letterSpacing: '-0.3px' }}>
+              AuraSync
+            </span>
           </div>
         </div>
 

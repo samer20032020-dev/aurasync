@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.27',
+  version = '1.0.28',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -323,19 +323,16 @@ export default function MobileHome({
   };
 
   const colors = {
-    card: isDark ? 'rgba(15, 20, 36, 0.92)' : '#ffffff',
-    cardBorder: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(226, 232, 240, 0.9)',
-    cardGlow: isDark ? '0 8px 32px rgba(0, 0, 0, 0.36)' : '0 4px 20px rgba(0, 0, 0, 0.05)',
+    card: isDark ? '#111726' : '#ffffff',
+    cardBorder: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)',
+    cardGlow: isDark ? '0 4px 24px rgba(0, 0, 0, 0.25)' : '0 2px 12px rgba(0, 0, 0, 0.03)',
     text: isDark ? '#f8fafc' : '#0f172a',
     textMuted: isDark ? '#94a3b8' : '#64748b',
-    heroBg: isDark
-      ? 'linear-gradient(145deg, rgba(30, 58, 138, 0.45) 0%, rgba(17, 24, 39, 0.95) 100%)'
-      : 'linear-gradient(145deg, #eff6ff 0%, #ffffff 100%)',
-    heroBorder: isDark ? 'rgba(59, 130, 246, 0.35)' : 'rgba(59, 130, 246, 0.25)',
+    primary: '#2563eb',
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Hidden file inputs for native photo/video picker */}
       <input
         ref={galleryInputRef}
@@ -354,150 +351,161 @@ export default function MobileHome({
         onChange={handleFreeSpaceFilesSelected}
       />
 
-      {/* ── 1. Phone Storage & Health Widget (128 GB) ────────────────────────── */}
-      <div style={{
-        background: colors.card,
-        borderRadius: 24,
-        padding: '16px 18px',
-        border: `1px solid ${colors.cardBorder}`,
-        boxShadow: colors.cardGlow,
-        backdropFilter: 'blur(16px)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* ── 1. Connected Cloud Capsule (هادئة وناعمة) ───────────────────────── */}
+      {accounts.length > 0 ? (
+        <div style={{
+          background: colors.card,
+          borderRadius: 20,
+          padding: '12px 16px',
+          border: `1px solid ${colors.cardBorder}`,
+          boxShadow: colors.cardGlow,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
-              width: 38, height: 38, borderRadius: 12,
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.2))',
+              width: 36, height: 36, borderRadius: 12,
+              background: isDark ? 'rgba(255, 255, 255, 0.04)' : '#f1f5f9',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
             }}>
-              <span style={{ fontSize: 20 }}>📱</span>
+              {accounts[0].isOffline || accounts[0].id === 'offline' ? (
+                <OfflineVaultIcon />
+              ) : accounts[0].id === 'google' ? (
+                <GoogleDriveIcon />
+              ) : accounts[0].id === 'onedrive' ? (
+                <OneDriveIcon />
+              ) : accounts[0].id === 'mega' ? (
+                <MegaIcon />
+              ) : (
+                <DropboxIcon />
+              )}
             </div>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: colors.text }}>
-                {isRtl ? 'ذاكرة الهاتف الذكي' : 'Phone Storage'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>
+                  {accounts[0].label}
+                </span>
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: '#10b981',
+                  boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
+                }} />
               </div>
               <div style={{ fontSize: 11, color: colors.textMuted }}>
-                {storageInfo.totalGB} GB {isRtl ? 'السعة الكلية' : 'Total Capacity'}
+                {accounts[0].email}
               </div>
             </div>
           </div>
 
-          <div style={{ textAlign: isRtl ? 'left' : 'right' }}>
-            <span style={{
-              fontSize: 12, fontWeight: 800,
-              padding: '4px 10px', borderRadius: 999,
-              background: storageInfo.percent > 85 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-              color: storageInfo.percent > 85 ? '#ef4444' : '#10b981',
-              border: `1px solid ${storageInfo.percent > 85 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
-            }}>
-              {storageInfo.percent}% {isRtl ? 'مستخدم' : 'Used'}
-            </span>
-          </div>
+          <button
+            onClick={() => handleDisconnect(accounts[0].id, accounts[0].label)}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+              color: colors.textMuted,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer',
+              padding: '5px 10px',
+              borderRadius: 10,
+            }}
+          >
+            {isRtl ? 'تبديل' : 'Change'}
+          </button>
         </div>
+      ) : (
+        <div
+          onClick={() => { triggerHaptic(20); setShowAddModal(true); }}
+          style={{
+            background: isDark ? 'rgba(37, 99, 235, 0.08)' : '#eff6ff',
+            borderRadius: 20,
+            padding: '14px 18px',
+            border: '1px dashed rgba(37, 99, 235, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 20 }}>☁️</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#3b82f6' }}>
+                {isRtl ? 'ربط السحابة (Google Drive / OneDrive)' : 'Connect Cloud Storage'}
+              </div>
+              <div style={{ fontSize: 11, color: colors.textMuted }}>
+                {isRtl ? 'اضغط للربط وحفظ ملفاتك في سحابتك بأمان' : 'Tap to connect and start syncing'}
+              </div>
+            </div>
+          </div>
+          <span style={{ color: '#3b82f6', fontSize: 18, fontWeight: 700 }}>+</span>
+        </div>
+      )}
 
-        {/* Storage Bar */}
+      {/* ── 2. Soft Storage Bar (مؤشر ذاكرة ناعم وخفيف) ────────────────────────── */}
+      <div style={{
+        background: colors.card,
+        borderRadius: 20,
+        padding: '14px 18px',
+        border: `1px solid ${colors.cardBorder}`,
+        boxShadow: colors.cardGlow,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
+          <span style={{ color: colors.text, fontWeight: 700 }}>
+            {isRtl ? 'ذاكرة الهاتف' : 'Phone Storage'}
+          </span>
+          <span style={{ color: colors.textMuted, fontSize: 11 }}>
+            {storageInfo.usedGB} GB {isRtl ? 'مستخدم من' : 'of'} {storageInfo.totalGB} GB ({storageInfo.percent}%)
+          </span>
+        </div>
         <div style={{
-          width: '100%', height: 8, borderRadius: 99,
-          background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-          overflow: 'hidden', position: 'relative', margin: '10px 0 8px',
+          width: '100%', height: 6, borderRadius: 99,
+          background: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)',
+          overflow: 'hidden',
         }}>
           <div style={{
-            width: `${storageInfo.percent}%`, height: '100%', borderRadius: 99,
-            background: 'linear-gradient(90deg, #3b82f6, #6366f1, #10b981)',
-            boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)',
+            width: `${storageInfo.percent}%`, height: '100%',
+            borderRadius: 99,
+            background: storageInfo.percent > 85 ? '#ef4444' : '#3b82f6',
             transition: 'width 0.4s ease',
-          }}/>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: colors.textMuted }}>
-          <span>{isRtl ? `مستخدم: ${storageInfo.usedGB} GB` : `Used: ${storageInfo.usedGB} GB`}</span>
-          <span>{isRtl ? `متاح: ${storageInfo.freeGB} GB` : `Free: ${storageInfo.freeGB} GB`}</span>
+          }} />
         </div>
       </div>
 
-      {/* ── 2. HERO: One-Tap Entire Gallery Transfer ───────────────────────── */}
+      {/* ── 3. Core Clean Action Card (بطاقة المزامنة الرئيسية الهادئة) ──────── */}
       <div style={{
-        background: colors.heroBg,
-        borderRadius: 28,
-        padding: '22px 20px',
-        border: `1px solid ${colors.heroBorder}`,
-        boxShadow: isDark ? '0 12px 40px rgba(37, 99, 235, 0.2)' : '0 8px 30px rgba(37, 99, 235, 0.12)',
-        position: 'relative', overflow: 'hidden',
+        background: colors.card,
+        borderRadius: 24,
+        padding: '28px 20px',
+        border: `1px solid ${colors.cardBorder}`,
+        boxShadow: colors.cardGlow,
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
       }}>
-        {/* Subtle decorative mesh glow */}
+        {/* Soft Icon */}
         <div style={{
-          position: 'absolute', top: -40, right: -40, width: 140, height: 140,
-          borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.35) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }}/>
-
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14, position: 'relative', zIndex: 1 }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: 16,
-            background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', boxShadow: '0 4px 16px rgba(37, 99, 235, 0.4)',
-            flexShrink: 0,
-          }}>
-            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-              <circle cx="12" cy="13" r="4"/>
-            </svg>
-          </div>
-
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: 16, fontWeight: 900, color: colors.text, margin: 0 }}>
-                {isRtl ? 'نقل المعرض بالكامل للسحابة' : 'Transfer Entire Gallery to Cloud'}
-              </h2>
-              <span style={{
-                fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 999,
-                background: 'rgba(16, 185, 129, 0.2)', color: '#10b981',
-                border: '1px solid rgba(16, 185, 129, 0.35)',
-              }}>
-                {isRtl ? 'بضغطة زر واحدة' : 'One-Tap'}
-              </span>
-            </div>
-            <p style={{ fontSize: 12, color: colors.textMuted, margin: '6px 0 0', lineHeight: 1.5 }}>
-              {isRtl
-                ? `ينشئ مجلد "${AURASYNC_MOBILE_FOLDER}" تلقائياً في سحابتك ويرفع كل الصور والفيديوهات مشفرة بالكامل.`
-                : `Automatically creates "${AURASYNC_MOBILE_FOLDER}" in your cloud and uploads all photos & videos encrypted.`}
-            </p>
-          </div>
+          width: 56, height: 56, borderRadius: 18,
+          background: isDark ? 'rgba(37, 99, 235, 0.12)' : 'rgba(37, 99, 235, 0.08)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#3b82f6', marginBottom: 14,
+        }}>
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
         </div>
 
-        {/* Trust Badges */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18, position: 'relative', zIndex: 1 }}>
-          <span style={{
-            fontSize: 10, fontWeight: 700, padding: '4px 9px', borderRadius: 10,
-            background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-            color: colors.text, display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            📁 {AURASYNC_MOBILE_FOLDER}
-          </span>
-          <span style={{
-            fontSize: 10, fontWeight: 700, padding: '4px 9px', borderRadius: 10,
-            background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            🔒 {isRtl ? 'تشفير AES-256' : 'AES-256 Encryption'}
-          </span>
-          <span style={{
-            fontSize: 10, fontWeight: 700, padding: '4px 9px', borderRadius: 10,
-            background: 'rgba(16, 185, 129, 0.12)', color: '#10b981',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            🛡️ {isRtl ? 'بدون حذف ملفات' : 'Safe / Zero Deletion'}
-          </span>
-          <span style={{
-            fontSize: 10, fontWeight: 700, padding: '4px 9px', borderRadius: 10,
-            background: 'rgba(168, 85, 247, 0.12)', color: '#c084fc',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            ⚡ {isRtl ? 'يعمل في الخلفية' : 'Background Active'}
-          </span>
-        </div>
+        <h2 style={{ fontSize: 17, fontWeight: 800, color: colors.text, margin: '0 0 6px' }}>
+          {isRtl ? 'مزامنة معرض الهاتف' : 'Sync Phone Gallery'}
+        </h2>
+        <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 22px', maxWidth: 300, lineHeight: 1.5 }}>
+          {isRtl
+            ? `نسخ احتياطي فوري لجميع الصور والفيديوهات وحفظها في مجلد ${AURASYNC_MOBILE_FOLDER} في سحابتك بأمان.`
+            : `Safely backup all your photos and videos to ${AURASYNC_MOBILE_FOLDER} in your cloud.`}
+        </p>
 
         {/* Primary Action Button */}
         <button
@@ -508,19 +516,17 @@ export default function MobileHome({
             padding: '14px 20px',
             borderRadius: 16,
             border: 'none',
-            background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+            background: '#2563eb',
             color: '#ffffff',
             fontSize: 14,
-            fontWeight: 800,
+            fontWeight: 700,
             cursor: isBackingUpGallery ? 'wait' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 10,
-            boxShadow: '0 6px 20px rgba(37, 99, 235, 0.4)',
+            gap: 8,
+            boxShadow: '0 4px 16px rgba(37, 99, 235, 0.3)',
             transition: 'all 0.2s ease',
-            position: 'relative',
-            zIndex: 1,
           }}
         >
           {isBackingUpGallery ? (
@@ -533,192 +539,54 @@ export default function MobileHome({
             </>
           ) : (
             <>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
-              <span>{isRtl ? '⚡ نقل جميع الصور والفيديوهات الآن' : '⚡ Transfer All Photos & Videos Now'}</span>
+              <span>{isRtl ? 'مزامنة الصور والفيديوهات الآن' : 'Sync Photos & Videos Now'}</span>
             </>
           )}
         </button>
-      </div>
 
-      {/* ── 3. One-Click Storage Cleaner Card (128GB Phone Space Reclaimer) ── */}
-      <div style={{
-        background: colors.card,
-        borderRadius: 24,
-        padding: '18px',
-        border: `1px solid ${colors.cardBorder}`,
-        boxShadow: colors.cardGlow,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 14,
-              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.2))',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '1px solid rgba(245, 158, 11, 0.3)',
-            }}>
-              <span style={{ fontSize: 20 }}>🧹</span>
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: colors.text }}>
-                {isRtl ? 'تفريغ مساحة الهاتف الذكي (128GB)' : 'Free Up Phone Storage (128GB)'}
-              </div>
-              <div style={{ fontSize: 11, color: colors.textMuted }}>
-                {isRtl ? 'نقل آمن للسحابة مع إخلاء ذاكرة الجهاز' : 'Safe cloud transfer with local space reclaimed'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <p style={{ fontSize: 11, color: colors.textMuted, margin: '0 0 14px', lineHeight: 1.5 }}>
-          {isRtl
-            ? `يقوم بنقل الصور والفيديوهات لمجلد "${AURASYNC_MOBILE_FOLDER}" في السحابة مع بقائها محفوظة 100% وإخلاء مساحة الهاتف لتستمتع بجهاز خفيف وسريع.`
-            : `Moves photos & videos to "${AURASYNC_MOBILE_FOLDER}" in cloud, preserving them 100% while reclaiming local device storage.`}
-        </p>
-
+        {/* Soft Secondary Action: تفريغ مساحة الهاتف بناعومة */}
         <button
           onClick={handleStartFreeUpSpace}
           disabled={isFreeingSpace}
           style={{
-            width: '100%',
-            padding: '12px 18px',
-            borderRadius: 14,
-            border: `1px solid ${isDark ? 'rgba(245, 158, 11, 0.35)' : 'rgba(245, 158, 11, 0.45)'}`,
-            background: isDark ? 'rgba(245, 158, 11, 0.12)' : '#fffbeb',
-            color: isDark ? '#fbbf24' : '#b45309',
-            fontSize: 13,
-            fontWeight: 800,
+            marginTop: 14,
+            background: 'transparent',
+            border: 'none',
+            color: colors.textMuted,
+            fontSize: 12,
+            fontWeight: 600,
             cursor: isFreeingSpace ? 'wait' : 'pointer',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
+            gap: 6,
+            padding: '6px 12px',
+            borderRadius: 12,
           }}
         >
-          {isFreeingSpace ? (
-            <span>{isRtl ? 'جاري فحص وتفريغ مساحة الهاتف...' : 'Freeing phone storage…'}</span>
-          ) : (
-            <>
-              <span>🚀</span>
-              <span>{isRtl ? 'تفريغ مساحة الهاتف الآن' : 'Free Up Phone Storage Now'}</span>
-            </>
-          )}
+          <span>🧹</span>
+          <span>{isRtl ? 'تفريغ مساحة الهاتف بعد النسخ' : 'Free up phone storage after backup'}</span>
         </button>
-      </div>
 
-      {/* ── 4. Connected Cloud Accounts ────────────────────────────────────── */}
-      <div style={{
-        background: colors.card,
-        borderRadius: 24,
-        padding: '18px',
-        border: `1px solid ${colors.cardBorder}`,
-        boxShadow: colors.cardGlow,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>☁️</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: colors.text }}>
-                {isRtl ? 'الحساب السحابي المرتبط' : 'Connected Cloud Storage'}
-              </div>
-              <div style={{ fontSize: 10, color: colors.textMuted }}>
-                {isRtl ? `المجلد المستهدف: ${AURASYNC_MOBILE_FOLDER}` : `Target: ${AURASYNC_MOBILE_FOLDER}`}
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={() => { triggerHaptic(15); setShowAddModal(true); }}
-            style={{
-              padding: '6px 12px', borderRadius: 12,
-              background: 'rgba(59, 130, 246, 0.12)',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              color: '#3b82f6', fontSize: 11, fontWeight: 800,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-            }}
-          >
-            <span>+</span>
-            <span>{isRtl ? 'إضافة سحابة' : 'Add Cloud'}</span>
-          </button>
+        {/* Minimalist Footnote */}
+        <div style={{
+          marginTop: 18,
+          paddingTop: 16,
+          borderTop: `1px solid ${colors.cardBorder}`,
+          width: '100%',
+          fontSize: 11,
+          color: colors.textMuted,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+        }}>
+          <span>🔒 {isRtl ? 'تشفير آمن AES-256' : 'AES-256'}</span>
+          <span>•</span>
+          <span>🛡️ {isRtl ? 'سياسة عدم حذف الملفات' : 'Zero-Deletion Policy'}</span>
         </div>
-
-        {accounts.length === 0 ? (
-          <div style={{
-            padding: '20px', borderRadius: 18,
-            background: isDark ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc',
-            border: `1px dashed ${colors.cardBorder}`,
-            textAlign: 'center',
-          }}>
-            <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 14px' }}>
-              {isRtl
-                ? 'لم تقم بربط أي سحابة بعد! اضغط أدناه لربط Google Drive أو OneDrive وتفعيل مجلد AuraSync-mobile تلقائياً.'
-                : 'No cloud connected yet. Connect Google Drive or OneDrive to create the AuraSync-mobile folder automatically.'}
-            </p>
-            <button
-              onClick={() => { triggerHaptic(20); setShowAddModal(true); }}
-              style={{
-                padding: '10px 20px', borderRadius: 14,
-                background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
-                border: 'none', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer',
-              }}
-            >
-              {isRtl ? '+ ربط سحابتك الآن' : '+ Connect Cloud Now'}
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {accounts.map(acc => {
-              const isGoogle = acc.id === 'google';
-              const isOneDrive = acc.id === 'onedrive';
-              const isMega = acc.id === 'mega';
-              return (
-                <div key={acc.id} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 14px', borderRadius: 16,
-                  background: isDark ? 'rgba(255, 255, 255, 0.04)' : '#f8fafc',
-                  border: `1px solid ${colors.cardBorder}`,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {acc.isOffline || acc.id === 'offline' ? (
-                      <OfflineVaultIcon />
-                    ) : isGoogle ? (
-                      <GoogleDriveIcon />
-                    ) : isOneDrive ? (
-                      <OneDriveIcon />
-                    ) : isMega ? (
-                      <MegaIcon />
-                    ) : (
-                      <DropboxIcon />
-                    )}
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: colors.text }}>
-                        {acc.label}
-                      </div>
-                      <div style={{ fontSize: 10, color: colors.textMuted }}>
-                        {acc.isOffline
-                          ? (isRtl ? 'خارج الشبكة • تشفير AES-256' : 'Offline • AES-256')
-                          : acc.email} • <span style={{ color: '#10b981', fontWeight: 700 }}>✓ {AURASYNC_MOBILE_FOLDER}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleDisconnect(acc.id, acc.label)}
-                    title={isRtl ? 'فصل الحساب' : 'Disconnect'}
-                    style={{
-                      padding: '4px 8px', borderRadius: 8,
-                      background: 'transparent', border: '1px solid rgba(239, 68, 68, 0.25)',
-                      color: '#ef4444', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                    }}
-                  >
-                    {isRtl ? 'فصل' : 'Disconnect'}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* ── 5. Transfer Progress Overlay ─────────────────────────────────────── */}
