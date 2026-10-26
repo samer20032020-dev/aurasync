@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.28',
+  version = '1.0.29',
   accounts = [],
   storage = {},
   stats = {},
@@ -179,15 +179,23 @@ export default function MobileApp({
     setBioError(false);
 
     if (nextPin.length === 4) {
+      const isEmergencyAttempt = nextPin === '1111';
+      const wasLocked = mobileEngine.settings.biometricLock;
       const valid = mobileEngine.verifyPin(nextPin);
       if (valid) {
         setPinSuccess(true);
-        triggerHaptic(40);
+        triggerHaptic(50);
         setTimeout(() => {
           setIsLocked(false);
           setEnteredPin('');
           setPinSuccess(false);
-          showToast(isRtl ? '✓ تم إلغاء القفل بنجاح' : '✓ Unlocked with PIN', 'success');
+          const isEmergencyTriggered = isEmergencyAttempt && wasLocked && !mobileEngine.settings.biometricLock;
+          showToast(
+            isEmergencyTriggered
+              ? (isRtl ? '🚨 تم فتح قفل الطوارئ السري (5×1111) بنجاح!' : '🚨 Secret emergency unlock (5×1111) activated!')
+              : (isRtl ? '✓ تم إلغاء القفل بنجاح' : '✓ Unlocked with PIN'),
+            'success'
+          );
         }, 300);
       } else {
         setPinError(true);
