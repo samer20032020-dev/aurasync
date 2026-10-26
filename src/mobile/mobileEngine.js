@@ -43,6 +43,7 @@ class MobileEngine {
       // Listen for native shared files from Android intent
       window.AuraSyncMobileReceiveShared = (incoming) => {
         if (Array.isArray(incoming) && incoming.length > 0) {
+          this.notifyListeners('native_files_selected', incoming);
           this.addUploadedFiles(incoming);
         }
       };
@@ -473,8 +474,8 @@ class MobileEngine {
     const cleanSub = subFolder ? String(subFolder).trim().replace(/^\/+|\/+$/g, '') : '';
     const destFolder = cleanSub ? `${MOBILE_FOLDER_NAME}/${cleanSub}` : MOBILE_FOLDER_NAME;
 
-    // Offline mode: store locally
-    if (account.isOffline || !account.accessToken) {
+    // Offline vault mode: store locally
+    if (account.isOffline || account.provider === 'offline') {
       return {
         cloudId: `local_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         name: file.name || `File_${Date.now()}`,
@@ -482,6 +483,13 @@ class MobileEngine {
         status: 'synced',
         cloudFolder: destFolder
       };
+    }
+
+    // Live cloud mode: strictly require valid accessToken
+    if (!account.accessToken) {
+      throw new Error(
+        `حساب ${account.label || account.provider} غير مصادق برمز وصول نشط. يرجى تسجيل الدخول إلى السحابة أولاً لرفع الملفات إليها.`
+      );
     }
 
     // 1. Google Drive Multipart Upload (Direct to aurasync-mobile or aurasync-mobile/galary)
@@ -524,7 +532,18 @@ class MobileEngine {
               cloudFolder: destFolder
             });
           } else {
-            reject(new Error(`Google Drive upload failed (${xhr.status})`));
+            let detail = '';
+            try {
+              const errObj = JSON.parse(xhr.responseText);
+              if (errObj && errObj.error && errObj.error.message) {
+                detail = ` - ${errObj.error.message}`;
+              }
+            } catch (_) {}
+            if (xhr.status === 401) {
+              reject(new Error(`Google Drive (401): انتهت صلاحية تسجيل الدخول. يرجى تسجيل الدخول مجدداً.`));
+            } else {
+              reject(new Error(`فشل الرفع إلى Google Drive (${xhr.status})${detail}`));
+            }
           }
         };
 

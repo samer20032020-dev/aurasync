@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.34',
+  version = '1.0.35',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -79,12 +79,44 @@ export default function MobileHome({
   // Automatic initial and periodic cross-device cloud sync
   useEffect(() => {
     mobileEngine.syncCloudFiles().catch(() => {});
-    const unsub = mobileEngine.subscribe((event, data) => {
+    const unsub = mobileEngine.subscribe(async (event, data) => {
       if (event === 'accounts_updated') setAccounts(data || []);
       if (event === 'files_updated') setUploadedFiles(data || []);
+      if (event === 'auth_success' && data) {
+        setAccounts([data]);
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? `✓ تم تسجيل الدخول وتفعيل الربط المباشر مع ${data.label}: ${data.email}`
+              : `✓ Live cloud connection active: ${data.email}`,
+            'success'
+          );
+        }
+      }
+      if (event === 'native_files_selected' && Array.isArray(data) && data.length > 0) {
+        const sub = transferMode === 'gallery' ? 'galary' : '';
+        const filesToUpload = [];
+        for (const item of data) {
+          try {
+            if (item.uri) {
+              const res = await fetch('/api/contenturi/' + encodeURIComponent(item.uri));
+              if (res.ok) {
+                const blob = await res.blob();
+                const file = new File([blob], item.name, { type: item.mimeType || blob.type });
+                filesToUpload.push(file);
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to resolve content uri:', item.uri, e);
+          }
+        }
+        if (filesToUpload.length > 0) {
+          executeTransfer(filesToUpload, sub);
+        }
+      }
     });
     return unsub;
-  }, []);
+  }, [executeTransfer, isRtl, onShowToast, transferMode]);
 
   // Manual Cross-Device Sync Trigger
   const handleManualSync = useCallback(async () => {
@@ -203,11 +235,30 @@ export default function MobileHome({
       setShowAddModal(true);
       return;
     }
+
+    const currentAcc = accounts[0];
+    if (!currentAcc.isOffline && !currentAcc.accessToken) {
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `⚠️ يجب تسجيل الدخول إلى ${currentAcc.label || 'Google Drive'} أولاً لرفع الملفات إلى حسابك الفعلي`
+            : `⚠️ Please sign in to ${currentAcc.label || 'Google Drive'} first to upload files`,
+          'warn'
+        );
+      }
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+        window.AuraSyncAndroid.startRealOAuth(currentAcc.provider || 'google');
+      }
+      return;
+    }
+
     setTransferMode('files');
-    if (filesInputRef.current) {
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.launchNativeMediaPicker) {
+      window.AuraSyncAndroid.launchNativeMediaPicker('all');
+    } else if (filesInputRef.current) {
       filesInputRef.current.click();
     }
-  }, [accounts.length, isRtl, onShowToast, triggerHaptic]);
+  }, [accounts, isRtl, onShowToast, triggerHaptic]);
 
   const handleGeneralFilesSelected = useCallback((e) => {
     const selected = e.target.files;
@@ -234,25 +285,60 @@ export default function MobileHome({
       return;
     }
 
+    const currentAcc = accounts[0];
+    if (!currentAcc.isOffline && !currentAcc.accessToken) {
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `⚠️ يجب تسجيل الدخول إلى ${currentAcc.label || 'Google Drive'} أولاً لرفع المعرض إلى حسابك الفعلي`
+            : `⚠️ Please sign in to ${currentAcc.label || 'Google Drive'} first to upload gallery`,
+          'warn'
+        );
+      }
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+        window.AuraSyncAndroid.startRealOAuth(currentAcc.provider || 'google');
+      }
+      return;
+    }
+
     setTransferMode('gallery');
 
     // 1. Android Native automatic media pull (fetches all photos & videos from MediaStore)
-    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.getGalleryMediaTotalCount) {
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid) {
+      // Permission verification
+      if (window.AuraSyncAndroid.hasStoragePermissions && !window.AuraSyncAndroid.hasStoragePermissions()) {
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? '📸 يرجى السماح للتطبيق بالوصول إلى المعرض (الصور والفيديوهات) لسحبها بالكامل'
+              : '📸 Please grant gallery permission to transfer your media',
+            'info'
+          );
+        }
+        window.AuraSyncAndroid.requestStoragePermissions();
+        return;
+      }
+
       let nativeCount = 0;
       try {
         nativeCount = window.AuraSyncAndroid.getGalleryMediaTotalCount();
       } catch (_) {}
+
+      if (nativeCount === -1) {
+        // Permission requested by native method
+        return;
+      }
 
       if (nativeCount > 0) {
         setIsBackingUpGallery(true);
         setGalleryDone(false);
         setGalleryProgress(1);
         setGalleryStats({ photos: nativeCount, videos: 0, total: nativeCount });
-        setGalleryCurrentFile(isRtl ? `جاري فحص وسحب ${nativeCount} ملف من المعرض...` : `Scanning ${nativeCount} gallery items…`);
+        setGalleryCurrentFile(isRtl ? `جاري فحص وسحب ${nativeCount.toLocaleString()} ملف من المعرض...` : `Scanning ${nativeCount.toLocaleString()} gallery items…`);
 
         try {
           const res = await mobileEngine.pullEntireGalleryNative({
-            account: accounts[0],
+            account: currentAcc,
             onStatus: (st) => setGalleryCurrentFile(st),
             onProgress: ({ overallPercent, currentFileName, speedMBps, fileIndex, totalFiles }) => {
               setGalleryProgress(overallPercent);
@@ -270,7 +356,7 @@ export default function MobileHome({
             if (onShowToast) {
               onShowToast(
                 isRtl
-                  ? `✓ تم سحب ونقل المعرض بالكامل (${res.successful.length.toLocaleString()} ملف) إلى مجلد ${AURASYNC_MOBILE_FOLDER}/galary بنجاح ومزامنته!`
+                  ? `✓ تم سحب ونقل المعرض بالكامل (${res.successful.length.toLocaleString()} ملف) إلى مجلد ${AURASYNC_MOBILE_FOLDER}/galary في ${currentAcc.label || 'السحابة'} بنجاح ومزامنته!`
                   : `✓ Pulled and synced ${res.successful.length.toLocaleString()} items to ${AURASYNC_MOBILE_FOLDER}/galary!`,
                 'success'
               );
@@ -284,6 +370,20 @@ export default function MobileHome({
           }
           return;
         }
+      } else {
+        // nativeCount === 0: Fallback to direct native picker launcher
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? 'ℹ️ لم يتم العثور على صور بالمعرض أو جاري فتح منتقي الوسائط...'
+              : 'ℹ️ No media in scan, opening media picker…',
+            'info'
+          );
+        }
+        if (window.AuraSyncAndroid.launchNativeMediaPicker) {
+          window.AuraSyncAndroid.launchNativeMediaPicker('gallery');
+          return;
+        }
       }
     }
 
@@ -292,6 +392,35 @@ export default function MobileHome({
       galleryInputRef.current.click();
     }
   }, [accounts, isRtl, onShowToast, triggerHaptic]);
+
+  // Hook into native permissions result callback
+  useEffect(() => {
+    window.onAuraSyncPermissionsResult = (granted) => {
+      if (granted) {
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? '✓ تم تفعيل إذن المعرض بنجاح! جاري سحب المعرض الآن...'
+              : '✓ Gallery permission granted! Starting transfer…',
+            'success'
+          );
+        }
+        handleStartGalleryTransfer();
+      } else {
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? '⚠️ لم يتم منح إذن الوصول إلى الصور والفيديوهات من إعدادات الهاتف'
+              : '⚠️ Media permission was not granted',
+            'warn'
+          );
+        }
+      }
+    };
+    return () => {
+      delete window.onAuraSyncPermissionsResult;
+    };
+  }, [handleStartGalleryTransfer, isRtl, onShowToast]);
 
   const handleGalleryFilesSelected = useCallback((e) => {
     const selected = e.target.files;
@@ -324,32 +453,46 @@ export default function MobileHome({
     }
   }, [accounts.length, isRtl, onShowToast, triggerHaptic]);
 
-  // Connect cloud provider smoothly without Google 403 test-user blocks
+  // Connect cloud provider with real OAuth
   const handleConnectCloud = (providerId) => {
     triggerHaptic(30);
     setShowAddModal(false);
-
-    let savedEmail = 'asa266397@gmail.com';
-    try {
-      savedEmail = localStorage.getItem('aurasync_last_login_email') || (accounts[0] && accounts[0].email) || 'asa266397@gmail.com';
-    } catch (_) {}
 
     const provNames = {
       google: 'Google Drive',
       onedrive: 'Microsoft OneDrive',
       dropbox: 'Dropbox',
+      offline: 'الخزنة المحلية',
     };
     const provName = provNames[providerId] || 'Cloud Storage';
 
-    const acc = mobileEngine.addAccount(providerId, savedEmail, provName);
-    if (onShowToast) {
-      onShowToast(
-        isRtl
-          ? `✓ تم ربط وتفعيل ${provName} بنجاح: ${savedEmail}`
-          : `✓ Successfully connected ${provName}: ${savedEmail}`,
-        'success'
-      );
+    if (providerId === 'offline') {
+      const acc = mobileEngine.enableOfflineMode();
+      setAccounts([acc]);
+      if (onShowToast) onShowToast(isRtl ? '✓ تم تفعيل الخزنة المحلية' : '✓ Offline Vault enabled', 'success');
+      return;
     }
+
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+      window.AuraSyncAndroid.startRealOAuth(providerId);
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `جاري فتح متصفح الهاتف لتسجيل الدخول الفعلي في ${provName}...`
+            : `Opening browser for real ${provName} sign-in…`,
+          'info'
+        );
+      }
+      return;
+    }
+
+    // Browser fallback
+    let savedEmail = 'asa266397@gmail.com';
+    try {
+      savedEmail = localStorage.getItem('aurasync_last_login_email') || 'asa266397@gmail.com';
+    } catch (_) {}
+    const acc = mobileEngine.addAccount(providerId, savedEmail, provName);
+    setAccounts([acc]);
   };
 
   const handleDisconnect = (providerId, label) => {
@@ -395,66 +538,124 @@ export default function MobileHome({
 
       {/* ── 1. Connected Cloud Capsule (هادئة وناعمة) ───────────────────────── */}
       {accounts.length > 0 ? (
-        <div style={{
-          background: colors.card,
-          borderRadius: 20,
-          padding: '12px 16px',
-          border: `1px solid ${colors.cardBorder}`,
-          boxShadow: colors.cardGlow,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 12,
-              background: isDark ? 'rgba(255, 255, 255, 0.04)' : '#f1f5f9',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              {accounts[0].isOffline || accounts[0].id === 'offline' ? (
-                <OfflineVaultIcon />
-              ) : accounts[0].id === 'google' ? (
-                <GoogleDriveIcon />
-              ) : accounts[0].id === 'onedrive' ? (
-                <OneDriveIcon />
-              ) : accounts[0].id === 'mega' ? (
-                <MegaIcon />
-              ) : (
-                <DropboxIcon />
-              )}
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>
-                  {accounts[0].label}
-                </span>
-                <span style={{
-                  width: 6, height: 6, borderRadius: '50%',
-                  background: '#10b981',
-                  boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
-                }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{
+            background: colors.card,
+            borderRadius: 20,
+            padding: '12px 16px',
+            border: `1px solid ${colors.cardBorder}`,
+            boxShadow: colors.cardGlow,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 12,
+                background: isDark ? 'rgba(255, 255, 255, 0.04)' : '#f1f5f9',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {accounts[0].isOffline || accounts[0].id === 'offline' ? (
+                  <OfflineVaultIcon />
+                ) : accounts[0].id === 'google' ? (
+                  <GoogleDriveIcon />
+                ) : accounts[0].id === 'onedrive' ? (
+                  <OneDriveIcon />
+                ) : accounts[0].id === 'mega' ? (
+                  <MegaIcon />
+                ) : (
+                  <DropboxIcon />
+                )}
               </div>
-              <div style={{ fontSize: 11, color: colors.textMuted }}>
-                {accounts[0].email}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>
+                    {accounts[0].label}
+                  </span>
+                  <span
+                    title={
+                      accounts[0].isOffline
+                        ? 'الخزنة المحلية (أوفلاين)'
+                        : accounts[0].accessToken
+                          ? 'متصل بالسحابة (نشط)'
+                          : 'غير مسجل الدخول'
+                    }
+                    style={{
+                      width: 7, height: 7, borderRadius: '50%',
+                      background: accounts[0].isOffline
+                        ? '#64748b'
+                        : accounts[0].accessToken
+                          ? '#10b981'
+                          : '#f59e0b',
+                      boxShadow: accounts[0].accessToken
+                        ? '0 0 8px rgba(16, 185, 129, 0.7)'
+                        : '0 0 8px rgba(245, 158, 11, 0.7)',
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: 11, color: colors.textMuted }}>
+                  {accounts[0].email}
+                </div>
               </div>
             </div>
+
+            <button
+              onClick={() => handleDisconnect(accounts[0].id, accounts[0].label)}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
+                color: colors.textMuted,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+                padding: '5px 10px',
+                borderRadius: 10,
+              }}
+            >
+              {isRtl ? 'تبديل' : 'Change'}
+            </button>
           </div>
 
-          <button
-            onClick={() => handleDisconnect(accounts[0].id, accounts[0].label)}
-            style={{
-              background: 'transparent',
-              border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-              color: colors.textMuted,
-              fontSize: 11,
-              fontWeight: 600,
-              cursor: 'pointer',
-              padding: '5px 10px',
-              borderRadius: 10,
-            }}
-          >
-            {isRtl ? 'تبديل' : 'Change'}
-          </button>
+          {/* Re-authentication banner if token is missing */}
+          {!accounts[0].isOffline && !accounts[0].accessToken && (
+            <div
+              onClick={() => {
+                triggerHaptic(25);
+                if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+                  window.AuraSyncAndroid.startRealOAuth(accounts[0].provider || 'google');
+                }
+              }}
+              style={{
+                padding: '11px 14px',
+                borderRadius: 16,
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.12))',
+                border: '1.5px solid rgba(245, 158, 11, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                boxShadow: '0 4px 16px rgba(245, 158, 11, 0.15)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 18 }}>🔑</span>
+                <div style={{ textAlign: isRtl ? 'right' : 'left' }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: '#f59e0b' }}>
+                    {isRtl ? 'تسجيل الدخول الفعلي مطلوب للرفع إلى السحابة' : 'Sign-in required for cloud upload'}
+                  </div>
+                  <div style={{ fontSize: 10, color: colors.textMuted }}>
+                    {isRtl ? 'اضغط هنا للربط مع Google Drive وتفعيل ظهور الملفات بسحابتك' : 'Tap to sign in with Google Drive'}
+                  </div>
+                </div>
+              </div>
+              <span style={{
+                fontSize: 10, fontWeight: 900, padding: '5px 11px', borderRadius: 8,
+                background: '#f59e0b', color: '#000',
+              }}>
+                {isRtl ? 'تسجيل الآن' : 'Sign In'}
+              </span>
+            </div>
+          )}
         </div>
       ) : (
         <div
