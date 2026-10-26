@@ -186,6 +186,21 @@ class MobileEngine {
     this.saveAccounts(updated);
     this.ensureCloudFolder(providerId);
     this.syncCloudFiles().catch(() => {});
+
+    // Only show "تم إنشاء مجلد aurasync-mobile تلقائياً في السحابة ✓" strictly ONCE when signing in to any cloud
+    if (!isOffline) {
+      try {
+        const toastKey = `aurasync_folder_toast_shown_${providerId}`;
+        const alreadyShown = localStorage.getItem(toastKey) === 'true';
+        if (!alreadyShown) {
+          localStorage.setItem(toastKey, 'true');
+          if (typeof window !== 'undefined' && window.AuraSyncAndroid?.createMobileFolder) {
+            window.AuraSyncAndroid.createMobileFolder(MOBILE_FOLDER_NAME);
+          }
+        }
+      } catch (_) {}
+    }
+
     return merged;
   }
 
@@ -268,6 +283,9 @@ class MobileEngine {
   removeAccount(providerId) {
     const updated = this.accounts.filter(a => a.id !== providerId);
     this.saveAccounts(updated);
+    try {
+      localStorage.removeItem(`aurasync_folder_toast_shown_${providerId}`);
+    } catch (_) {}
   }
 
   getPrimaryAccount() {
@@ -379,12 +397,6 @@ class MobileEngine {
     if (typeof window !== 'undefined' && window.electronAPI?.ensureMobileFolder) {
       try {
         await window.electronAPI.ensureMobileFolder(providerId);
-      } catch (_) {}
-    }
-    // 5. Android native bridge
-    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.createMobileFolder) {
-      try {
-        window.AuraSyncAndroid.createMobileFolder(MOBILE_FOLDER_NAME);
       } catch (_) {}
     }
     this.notifyListeners('cloud_folder_created', { folder: MOBILE_FOLDER_NAME, providerId });
