@@ -945,7 +945,7 @@ public class MainActivity extends Activity {
                         in = new BufferedInputStream(conn.getInputStream(), 32768);
 
                         // Write to internal cache directory
-                        updateFile = new File(getCacheDir(), "AuraSync-update.apk");
+                        updateFile = new File(MainActivity.this.getCacheDir(), "AuraSync-update.apk");
                         if (updateFile.exists()) {
                             updateFile.delete();
                         }
@@ -1119,7 +1119,7 @@ public class MainActivity extends Activity {
                             Executor executor = new Executor() {
                                 @Override
                                 public void execute(Runnable command) {
-                                    runOnUiThread(command);
+                                    MainActivity.this.runOnUiThread(command);
                                 }
                             };
 
