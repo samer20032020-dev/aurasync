@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.36',
+  version = '1.0.37',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -52,6 +52,7 @@ export default function MobileHome({
   const isDark = theme === 'dark';
   const galleryInputRef = useRef(null);
   const filesInputRef = useRef(null);
+  const freeSpaceInputRef = useRef(null);
   const [transferMode, setTransferMode] = useState('gallery'); // 'files' | 'gallery'
 
   const [accounts, setAccounts] = useState(() => mobileEngine.accounts || []);
@@ -76,73 +77,7 @@ export default function MobileHome({
     } catch (_) {}
   }, []);
 
-  // Automatic initial and periodic cross-device cloud sync
-  useEffect(() => {
-    mobileEngine.syncCloudFiles().catch(() => {});
-    const unsub = mobileEngine.subscribe(async (event, data) => {
-      if (event === 'accounts_updated') setAccounts(data || []);
-      if (event === 'files_updated') setUploadedFiles(data || []);
-      if (event === 'auth_success' && data) {
-        setAccounts([data]);
-        if (onShowToast) {
-          onShowToast(
-            isRtl
-              ? `✓ تم تسجيل الدخول وتفعيل الربط المباشر مع ${data.label}: ${data.email}`
-              : `✓ Live cloud connection active: ${data.email}`,
-            'success'
-          );
-        }
-      }
-      if (event === 'native_files_selected' && Array.isArray(data) && data.length > 0) {
-        const sub = transferMode === 'gallery' ? 'galary' : '';
-        const filesToUpload = [];
-        for (const item of data) {
-          try {
-            if (item.uri) {
-              const res = await fetch('/api/contenturi/' + encodeURIComponent(item.uri));
-              if (res.ok) {
-                const blob = await res.blob();
-                const file = new File([blob], item.name, { type: item.mimeType || blob.type });
-                filesToUpload.push(file);
-              }
-            }
-          } catch (e) {
-            console.warn('Failed to resolve content uri:', item.uri, e);
-          }
-        }
-        if (filesToUpload.length > 0) {
-          executeTransfer(filesToUpload, sub);
-        }
-      }
-    });
-    return unsub;
-  }, [executeTransfer, isRtl, onShowToast, transferMode]);
-
-  // Manual Cross-Device Sync Trigger
-  const handleManualSync = useCallback(async () => {
-    if (isManualSyncing) return;
-    setIsManualSyncing(true);
-    triggerHaptic(20);
-    try {
-      const files = await mobileEngine.syncCloudFiles();
-      if (onShowToast) {
-        onShowToast(
-          isRtl
-            ? `✓ تم تحديث المزامنة مع كافة الأجهزة (${(files || []).length} ملف متزامن)`
-            : `✓ Synced with all devices (${(files || []).length} files)`,
-          'success'
-        );
-      }
-    } catch (err) {
-      if (onShowToast) {
-        onShowToast(isRtl ? `خطأ أثناء المزامنة: ${err.message}` : `Sync error: ${err.message}`, 'error');
-      }
-    } finally {
-      setIsManualSyncing(false);
-    }
-  }, [isManualSyncing, isRtl, onShowToast, triggerHaptic]);
-
-  // Execute real backup to cloud and sync across devices
+  // Execute real backup to cloud and sync across devices (Defined before useEffect to avoid TDZ)
   const executeTransfer = useCallback(async (fileArray, subFolder = '') => {
     if (!fileArray || fileArray.length === 0) return;
 
@@ -236,6 +171,72 @@ export default function MobileHome({
       setIsBackingUpGallery(false);
     }
   }, [accounts, isRtl, onShowToast, triggerHaptic]);
+
+  // Manual Cross-Device Sync Trigger
+  const handleManualSync = useCallback(async () => {
+    if (isManualSyncing) return;
+    setIsManualSyncing(true);
+    triggerHaptic(20);
+    try {
+      const files = await mobileEngine.syncCloudFiles();
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `✓ تم تحديث المزامنة مع كافة الأجهزة (${(files || []).length} ملف متزامن)`
+            : `✓ Synced with all devices (${(files || []).length} files)`,
+          'success'
+        );
+      }
+    } catch (err) {
+      if (onShowToast) {
+        onShowToast(isRtl ? `خطأ أثناء المزامنة: ${err.message}` : `Sync error: ${err.message}`, 'error');
+      }
+    } finally {
+      setIsManualSyncing(false);
+    }
+  }, [isManualSyncing, isRtl, onShowToast, triggerHaptic]);
+
+  // Automatic initial and periodic cross-device cloud sync
+  useEffect(() => {
+    mobileEngine.syncCloudFiles().catch(() => {});
+    const unsub = mobileEngine.subscribe(async (event, data) => {
+      if (event === 'accounts_updated') setAccounts(data || []);
+      if (event === 'files_updated') setUploadedFiles(data || []);
+      if (event === 'auth_success' && data) {
+        setAccounts([data]);
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? `✓ تم تسجيل الدخول وتفعيل الربط المباشر مع ${data.label}: ${data.email}`
+              : `✓ Live cloud connection active: ${data.email}`,
+            'success'
+          );
+        }
+      }
+      if (event === 'native_files_selected' && Array.isArray(data) && data.length > 0) {
+        const sub = transferMode === 'gallery' ? 'galary' : '';
+        const filesToUpload = [];
+        for (const item of data) {
+          try {
+            if (item.uri) {
+              const res = await fetch('/api/contenturi/' + encodeURIComponent(item.uri));
+              if (res.ok) {
+                const blob = await res.blob();
+                const file = new File([blob], item.name, { type: item.mimeType || blob.type });
+                filesToUpload.push(file);
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to resolve content uri:', item.uri, e);
+          }
+        }
+        if (filesToUpload.length > 0) {
+          executeTransfer(filesToUpload, sub);
+        }
+      }
+    });
+    return unsub;
+  }, [executeTransfer, isRtl, onShowToast, transferMode]);
 
   // Option 1: مزامنة ملفات (حفظ أي ملفات في aurasync-mobile مباشرة)
   const handleStartFilesSync = useCallback(() => {
@@ -551,6 +552,15 @@ export default function MobileHome({
         accept="image/*,video/*"
         style={{ display: 'none' }}
         onChange={handleGalleryFilesSelected}
+      />
+
+      {/* Hidden file input for free space backup */}
+      <input
+        ref={freeSpaceInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleGeneralFilesSelected}
       />
 
       {/* ── 1. Connected Cloud Capsule (هادئة وناعمة) ───────────────────────── */}

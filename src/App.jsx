@@ -17,6 +17,7 @@ import UpdateModal from './components/UpdateModal';
 import DisasterRecoveryModal from './components/DisasterRecoveryModal';
 import versionData from '../version.json';
 import { I18nProvider, translate } from './i18n';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Info, CheckCircle2, AlertCircle, ShieldCheck, ArrowLeftRight, X, Trash2, Cloud, CloudCog, CloudOff, Loader2, Check, FolderCog, Flame } from 'lucide-react';
 
 export default function App() {
@@ -860,20 +861,22 @@ export default function App() {
     const mobileVersion = versionData.mobileVersion || '1.0.10';
     return (
       <I18nProvider lang={settings.language || 'ar'}>
-        <Suspense fallback={<div className="p-8 text-center text-white bg-black min-h-screen flex items-center justify-center">Loading AuraSync Mobile...</div>}>
-          <MobileApp
-            version={mobileVersion}
-            accounts={providers}
-            storage={{
-              google: providers.find((p) => p.id === 'google')?.storage,
-              onedrive: providers.find((p) => p.id === 'onedrive')?.storage
-            }}
-            stats={stats}
-            files={[]}
-            onTriggerSync={handleSyncAll}
-            isSyncing={isSyncing}
-          />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="p-8 text-center text-white bg-black min-h-screen flex items-center justify-center">Loading AuraSync Mobile...</div>}>
+            <MobileApp
+              version={mobileVersion}
+              accounts={providers}
+              storage={{
+                google: providers.find((p) => p.id === 'google')?.storage,
+                onedrive: providers.find((p) => p.id === 'onedrive')?.storage
+              }}
+              stats={stats}
+              files={[]}
+              onTriggerSync={handleSyncAll}
+              isSyncing={isSyncing}
+            />
+          </Suspense>
+        </ErrorBoundary>
       </I18nProvider>
     );
   }

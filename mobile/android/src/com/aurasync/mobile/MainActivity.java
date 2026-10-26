@@ -3,6 +3,7 @@ package com.aurasync.mobile;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -13,6 +14,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.view.View;
 import android.view.Window;
@@ -95,6 +97,7 @@ public class MainActivity extends Activity {
     private Thread oauthServerThread = null;
     private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
     private static final int PERMISSION_REQUEST_CODE = 1002;
+    private static final int NATIVE_MEDIA_PICKER_REQUEST_CODE = 1003;
 
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
@@ -403,6 +406,52 @@ public class MainActivity extends Activity {
         }
         final String path = rawPath.isEmpty() ? "index.html" : rawPath;
 
+        // Native MediaStore direct stream interceptor for seamless high-speed gallery pull
+        if (path.contains("api/mediastore/")) {
+            try {
+                String[] parts = path.split("/");
+                if (parts.length >= 4) {
+                    String mediaType = parts[parts.length - 2];
+                    long mediaId = Long.parseLong(parts[parts.length - 1]);
+                    Uri contentUri = "video".equalsIgnoreCase(mediaType)
+                            ? ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId)
+                            : ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId);
+
+                    InputStream stream = getContentResolver().openInputStream(contentUri);
+                    if (stream != null) {
+                        String mime = getContentResolver().getType(contentUri);
+                        if (mime == null) mime = "video".equalsIgnoreCase(mediaType) ? "video/mp4" : "image/jpeg";
+                        Map<String, String> headers = new HashMap<>();
+                        headers.put("Access-Control-Allow-Origin", "*");
+                        headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                        return new WebResourceResponse(mime, null, 200, "OK", headers, stream);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // Direct content URI stream interceptor for seamless file and media transfers
+        if (path.contains("api/contenturi/")) {
+            try {
+                int idx = rawPath.indexOf("api/contenturi/");
+                String uriStr = rawPath.substring(idx + 15);
+                if (uriStr.startsWith("/")) uriStr = uriStr.substring(1);
+                if (!uriStr.startsWith("content://") && !uriStr.startsWith("file://")) {
+                    try { uriStr = URLDecoder.decode(uriStr, "UTF-8"); } catch (Exception ignored) {}
+                }
+                Uri contentUri = Uri.parse(uriStr);
+                InputStream stream = getContentResolver().openInputStream(contentUri);
+                if (stream != null) {
+                    String mime = getContentResolver().getType(contentUri);
+                    if (mime == null) mime = "application/octet-stream";
+                    Map<String, String> headers = new HashMap<>();
+                    headers.put("Access-Control-Allow-Origin", "*");
+                    headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                    return new WebResourceResponse(mime, null, 200, "OK", headers, stream);
+                }
+            } catch (Exception ignored) {}
+        }
+
         // Try candidate paths in assets (handling Unix / and Windows \ seamlessly)
         String[] candidates = new String[]{
             "www/" + path,
@@ -546,6 +595,7 @@ public class MainActivity extends Activity {
                 obj.put("id", "android_share_" + System.currentTimeMillis() + "_" + i);
                 obj.put("name", name);
                 obj.put("type", type);
+                obj.put("mimeType", mime);
                 obj.put("sizeMB", Math.round(sizeMB * 10.0) / 10.0);
                 obj.put("uri", u.toString());
                 obj.put("selected", true);
@@ -599,8 +649,47 @@ public class MainActivity extends Activity {
             }
             filePathCallback.onReceiveValue(results);
             filePathCallback = null;
+        } else if (requestCode == NATIVE_MEDIA_PICKER_REQUEST_CODE) {
+            List<Uri> results = new ArrayList<>();
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                if (data.getClipData() != null) {
+                    ClipData clip = data.getClipData();
+                    int count = clip.getItemCount();
+                    for (int i = 0; i < count; i++) {
+                        results.add(clip.getItemAt(i).getUri());
+                    }
+                } else if (data.getData() != null) {
+                    results.add(data.getData());
+                }
+            }
+            if (!results.isEmpty()) {
+                parseAndStageUris(results);
+            }
         } else {
             super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            boolean anyGranted = false;
+            for (int r : grantResults) {
+                if (r == PackageManager.PERMISSION_GRANTED) {
+                    anyGranted = true;
+                    break;
+                }
+            }
+            final boolean granted = anyGranted;
+            if (webView != null) {
+                webView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        webView.evaluateJavascript("if (window.onAuraSyncPermissionsResult) window.onAuraSyncPermissionsResult(" + granted + ");", null);
+                    }
+                });
+            }
         }
     }
 
@@ -636,20 +725,62 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void requestStoragePermissions() {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                List<String> perms = new ArrayList<>();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    perms.add("android.permission.READ_MEDIA_IMAGES");
-                    perms.add("android.permission.READ_MEDIA_VIDEO");
-                    perms.add("android.permission.READ_MEDIA_AUDIO");
-                    perms.add("android.permission.POST_NOTIFICATIONS");
-                } else {
-                    perms.add("android.permission.READ_EXTERNAL_STORAGE");
-                    perms.add("android.permission.WRITE_EXTERNAL_STORAGE");
-                }
-                requestPermissions(perms.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+        public boolean hasStoragePermissions() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                return checkSelfPermission("android.permission.READ_MEDIA_IMAGES") == PackageManager.PERMISSION_GRANTED;
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                return checkSelfPermission("android.permission.READ_EXTERNAL_STORAGE") == PackageManager.PERMISSION_GRANTED;
             }
+            return true;
+        }
+
+        @JavascriptInterface
+        public void requestStoragePermissions() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        List<String> perms = new ArrayList<>();
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            perms.add("android.permission.READ_MEDIA_IMAGES");
+                            perms.add("android.permission.READ_MEDIA_VIDEO");
+                            perms.add("android.permission.READ_MEDIA_AUDIO");
+                            if (Build.VERSION.SDK_INT >= 34) {
+                                try {
+                                    perms.add("android.permission.READ_MEDIA_VISUAL_USER_SELECTED");
+                                } catch (Exception ignored) {}
+                            }
+                        } else {
+                            perms.add("android.permission.READ_EXTERNAL_STORAGE");
+                            perms.add("android.permission.WRITE_EXTERNAL_STORAGE");
+                        }
+                        requestPermissions(perms.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void launchNativeMediaPicker(final String mode) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        if ("gallery".equalsIgnoreCase(mode) || "media".equalsIgnoreCase(mode)) {
+                            intent.setType("image/*");
+                            intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+                        } else {
+                            intent.setType("*/*");
+                        }
+                        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                        startActivityForResult(Intent.createChooser(intent, "AuraSync - اختر الملفات"), NATIVE_MEDIA_PICKER_REQUEST_CODE);
+                    } catch (Exception e) {
+                        showToast("تعذر فتح المعرض: " + e.getMessage());
+                    }
+                }
+            });
         }
 
         @JavascriptInterface
@@ -1029,6 +1160,98 @@ public class MainActivity extends Activity {
             try {
                 showToast("جاري تنزيل " + fileName);
             } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public int getGalleryMediaTotalCount() {
+            if (!hasStoragePermissions()) {
+                requestStoragePermissions();
+                return -1;
+            }
+            int total = 0;
+            try {
+                ContentResolver cr = getContentResolver();
+                Cursor cImg = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, new String[]{MediaStore.Images.Media._ID}, null, null, null);
+                if (cImg != null) {
+                    total += cImg.getCount();
+                    cImg.close();
+                }
+                Cursor cVid = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, new String[]{MediaStore.Video.Media._ID}, null, null, null);
+                if (cVid != null) {
+                    total += cVid.getCount();
+                    cVid.close();
+                }
+            } catch (Exception ignored) {}
+            return total;
+        }
+
+        @JavascriptInterface
+        public String scanGalleryMedia(final int limit, final int offset) {
+            JSONArray arr = new JSONArray();
+            try {
+                ContentResolver cr = getContentResolver();
+                int safeLimit = limit > 0 ? Math.min(limit, 500) : 100;
+                int safeOffset = Math.max(offset, 0);
+
+                String[] proj = new String[]{
+                    MediaStore.MediaColumns._ID,
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.SIZE,
+                    MediaStore.MediaColumns.MIME_TYPE
+                };
+
+                Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC");
+                if (c != null) {
+                    if (c.moveToPosition(safeOffset)) {
+                        int count = 0;
+                        do {
+                            long id = c.getLong(c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
+                            String name = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME));
+                            long size = c.getLong(c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
+                            String mime = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE));
+
+                            JSONObject item = new JSONObject();
+                            item.put("id", id);
+                            item.put("type", "image");
+                            item.put("name", name != null ? name : ("photo_" + id + ".jpg"));
+                            item.put("size", size);
+                            item.put("mimeType", mime != null ? mime : "image/jpeg");
+                            arr.put(item);
+                            count++;
+                            if (count >= safeLimit) break;
+                        } while (c.moveToNext());
+                    }
+                    c.close();
+                }
+
+                int remaining = safeLimit - arr.length();
+                if (remaining > 0) {
+                    Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC");
+                    if (cv != null) {
+                        if (cv.moveToPosition(safeOffset)) {
+                            int count = 0;
+                            do {
+                                long id = cv.getLong(cv.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
+                                String name = cv.getString(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME));
+                                long size = cv.getLong(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
+                                String mime = cv.getString(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE));
+
+                                JSONObject item = new JSONObject();
+                                item.put("id", id);
+                                item.put("type", "video");
+                                item.put("name", name != null ? name : ("video_" + id + ".mp4"));
+                                item.put("size", size);
+                                item.put("mimeType", mime != null ? mime : "video/mp4");
+                                arr.put(item);
+                                count++;
+                                if (count >= remaining) break;
+                            } while (cv.moveToNext());
+                        }
+                        cv.close();
+                    }
+                }
+            } catch (Exception ignored) {}
+            return arr.toString();
         }
     }
 
