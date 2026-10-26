@@ -34,7 +34,7 @@ const GoogleIcon = ({ size = 32 }) => (
 
 export default function MobileCloudLogin({
   theme = 'dark',
-  version = '1.0.40',
+  version = '1.0.41',
   onLoginSuccess,
   onShowToast,
 }) {

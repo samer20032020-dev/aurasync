@@ -16,7 +16,6 @@ import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
-import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import java.util.concurrent.Executor;
@@ -45,9 +44,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLDecoder;
@@ -251,6 +250,7 @@ public class MainActivity extends Activity {
         handleIncomingIntent(intent);
     }
 
+    @SuppressWarnings("deprecation")
     private void configureWindowStyle() {
         Window window = getWindow();
         if (window != null) {
@@ -263,6 +263,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void setupWebView() {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -552,18 +553,29 @@ public class MainActivity extends Activity {
     }
 
     // Handles incoming Share Intents (single or 900+ files)
+    @SuppressWarnings("deprecation")
     private void handleIncomingIntent(Intent intent) {
         if (intent == null) return;
         String action = intent.getAction();
         if (Intent.ACTION_SEND.equals(action)) {
-            Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            Uri uri;
+            if (Build.VERSION.SDK_INT >= 33) {
+                uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri.class);
+            } else {
+                uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            }
             if (uri != null) {
                 List<Uri> list = new ArrayList<>();
                 list.add(uri);
                 parseAndStageUris(list);
             }
         } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
-            ArrayList<Uri> uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            ArrayList<Uri> uris;
+            if (Build.VERSION.SDK_INT >= 33) {
+                uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri.class);
+            } else {
+                uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            }
             if (uris != null && !uris.isEmpty()) {
                 parseAndStageUris(uris);
             }
@@ -751,6 +763,7 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void onBackPressed() {
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
@@ -868,9 +881,16 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        @SuppressWarnings("deprecation")
         public void vibrate(final long ms) {
             try {
-                android.os.Vibrator v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+                android.os.Vibrator v;
+                if (Build.VERSION.SDK_INT >= 31) {
+                    android.os.VibratorManager vm = (android.os.VibratorManager) getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE);
+                    v = (vm != null) ? vm.getDefaultVibrator() : null;
+                } else {
+                    v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+                }
                 if (v != null && v.hasVibrator()) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         v.vibrate(android.os.VibrationEffect.createOneShot(ms, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
@@ -908,7 +928,7 @@ public class MainActivity extends Activity {
                                 ? apkUrl.trim()
                                 : "https://github.com/samer20032020-dev/aurasync/releases/download/v" + (versionName != null && !versionName.isEmpty() ? versionName : "1.0.26") + "/AuraSync.apk";
 
-                        URL targetUrl = new URL(rawTarget);
+                        URL targetUrl = URI.create(rawTarget).toURL();
                         int redirects = 0;
 
                         // Follow GitHub/CDN redirects (301, 302, 303, 307, 308) to final S3/CDN URL
@@ -929,7 +949,7 @@ public class MainActivity extends Activity {
                                 String loc = conn.getHeaderField("Location");
                                 conn.disconnect();
                                 if (loc == null || loc.isEmpty()) break;
-                                targetUrl = new URL(loc);
+                                targetUrl = targetUrl.toURI().resolve(loc).toURL();
                                 redirects++;
                                 continue;
                             }
@@ -1661,7 +1681,7 @@ public class MainActivity extends Activity {
                     String userPicture = null;
 
                     if ("google".equalsIgnoreCase(provider)) {
-                        URL tokenUrl = new URL("https://oauth2.googleapis.com/token");
+                        URL tokenUrl = URI.create("https://oauth2.googleapis.com/token").toURL();
                         HttpURLConnection conn = (HttpURLConnection) tokenUrl.openConnection();
                         conn.setRequestMethod("POST");
                         conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
@@ -1693,7 +1713,7 @@ public class MainActivity extends Activity {
                         refreshToken = tokenJson.optString("refresh_token", null);
 
                         if (accessToken != null) {
-                            URL userUrl = new URL("https://www.googleapis.com/oauth2/v3/userinfo");
+                            URL userUrl = URI.create("https://www.googleapis.com/oauth2/v3/userinfo").toURL();
                             HttpURLConnection userConn = (HttpURLConnection) userUrl.openConnection();
                             userConn.setRequestProperty("Authorization", "Bearer " + accessToken);
                             userConn.setConnectTimeout(10000);
@@ -1713,7 +1733,7 @@ public class MainActivity extends Activity {
 
                             // Automatically ensure "aurasync-mobile" folder exists in Google Drive root
                             try {
-                                URL searchUrl = new URL("https://www.googleapis.com/drive/v3/files?q=" + URLEncoder.encode("mimeType='application/vnd.google-apps.folder' and name='aurasync-mobile' and trashed=false and 'root' in parents", "UTF-8") + "&fields=files(id,name)");
+                                URL searchUrl = URI.create("https://www.googleapis.com/drive/v3/files?q=" + URLEncoder.encode("mimeType='application/vnd.google-apps.folder' and name='aurasync-mobile' and trashed=false and 'root' in parents", "UTF-8") + "&fields=files(id,name)").toURL();
                                 HttpURLConnection sConn = (HttpURLConnection) searchUrl.openConnection();
                                 sConn.setRequestProperty("Authorization", "Bearer " + accessToken);
                                 sConn.setConnectTimeout(8000);
@@ -1727,7 +1747,7 @@ public class MainActivity extends Activity {
                                     JSONObject searchRes = new JSONObject(sbSearch.toString());
                                     JSONArray filesArr = searchRes.optJSONArray("files");
                                     if (filesArr == null || filesArr.length() == 0) {
-                                        URL createUrl = new URL("https://www.googleapis.com/drive/v3/files");
+                                        URL createUrl = URI.create("https://www.googleapis.com/drive/v3/files").toURL();
                                         HttpURLConnection cConn = (HttpURLConnection) createUrl.openConnection();
                                         cConn.setRequestMethod("POST");
                                         cConn.setRequestProperty("Authorization", "Bearer " + accessToken);
@@ -1749,7 +1769,7 @@ public class MainActivity extends Activity {
                             } catch (Exception ignored) {}
                         }
                     } else if ("onedrive".equalsIgnoreCase(provider)) {
-                        URL tokenUrl = new URL("https://login.microsoftonline.com/common/oauth2/v2.0/token");
+                        URL tokenUrl = URI.create("https://login.microsoftonline.com/common/oauth2/v2.0/token").toURL();
                         HttpURLConnection conn = (HttpURLConnection) tokenUrl.openConnection();
                         conn.setRequestMethod("POST");
                         conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
@@ -1780,7 +1800,7 @@ public class MainActivity extends Activity {
                         refreshToken = tokenJson.optString("refresh_token", null);
 
                         if (accessToken != null) {
-                            URL meUrl = new URL("https://graph.microsoft.com/v1.0/me");
+                            URL meUrl = URI.create("https://graph.microsoft.com/v1.0/me").toURL();
                             HttpURLConnection meConn = (HttpURLConnection) meUrl.openConnection();
                             meConn.setRequestProperty("Authorization", "Bearer " + accessToken);
                             meConn.setConnectTimeout(10000);
@@ -1799,7 +1819,7 @@ public class MainActivity extends Activity {
 
                             // Automatically ensure "aurasync-mobile" folder exists in OneDrive root
                             try {
-                                URL createUrl = new URL("https://graph.microsoft.com/v1.0/me/drive/root/children");
+                                URL createUrl = URI.create("https://graph.microsoft.com/v1.0/me/drive/root/children").toURL();
                                 HttpURLConnection cConn = (HttpURLConnection) createUrl.openConnection();
                                 cConn.setRequestMethod("POST");
                                 cConn.setRequestProperty("Authorization", "Bearer " + accessToken);
