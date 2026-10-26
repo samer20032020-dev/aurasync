@@ -36,8 +36,10 @@ import org.json.JSONObject;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -47,8 +49,10 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
+import java.net.URLConnection;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import android.util.Base64;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -406,6 +410,26 @@ public class MainActivity extends Activity {
         }
         final String path = rawPath.isEmpty() ? "index.html" : rawPath;
 
+        // Direct staged file stream interceptor for picker files (zero permission loss)
+        if (path.contains("api/staged/")) {
+            try {
+                int idx = rawPath.indexOf("api/staged/");
+                String fileName = rawPath.substring(idx + 11);
+                if (fileName.startsWith("/")) fileName = fileName.substring(1);
+                File file = new File(new File(getCacheDir(), "aurasync_staged"), fileName);
+                if (file.exists() && file.isFile()) {
+                    String mime = URLConnection.guessContentTypeFromName(file.getName());
+                    if (mime == null) mime = "application/octet-stream";
+                    Map<String, String> headers = new HashMap<>();
+                    headers.put("Access-Control-Allow-Origin", "*");
+                    headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                    headers.put("Access-Control-Allow-Headers", "*");
+                    headers.put("Cache-Control", "no-cache, no-store");
+                    return new WebResourceResponse(mime, null, 200, "OK", headers, new FileInputStream(file));
+                }
+            } catch (Exception ignored) {}
+        }
+
         // Native MediaStore direct stream interceptor for seamless high-speed gallery pull
         if (path.contains("api/mediastore/")) {
             try {
@@ -424,6 +448,8 @@ public class MainActivity extends Activity {
                         Map<String, String> headers = new HashMap<>();
                         headers.put("Access-Control-Allow-Origin", "*");
                         headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                        headers.put("Access-Control-Allow-Headers", "*");
+                        headers.put("Cache-Control", "no-cache, no-store");
                         return new WebResourceResponse(mime, null, 200, "OK", headers, stream);
                     }
                 }
@@ -447,6 +473,8 @@ public class MainActivity extends Activity {
                     Map<String, String> headers = new HashMap<>();
                     headers.put("Access-Control-Allow-Origin", "*");
                     headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                    headers.put("Access-Control-Allow-Headers", "*");
+                    headers.put("Cache-Control", "no-cache, no-store");
                     return new WebResourceResponse(mime, null, 200, "OK", headers, stream);
                 }
             } catch (Exception ignored) {}
@@ -590,6 +618,32 @@ public class MainActivity extends Activity {
                 else if (mime.startsWith("audio/")) type = "audio";
 
                 double sizeMB = sizeBytes > 0 ? (double) sizeBytes / (1024.0 * 1024.0) : 2.5;
+                File stageDir = new File(getCacheDir(), "aurasync_staged");
+                if (!stageDir.exists()) stageDir.mkdirs();
+                String safeName = (name != null ? name : ("file_" + i)).replaceAll("[^a-zA-Z0-9._-]", "_");
+                File stageFile = new File(stageDir, "stage_" + System.currentTimeMillis() + "_" + i + "_" + safeName);
+                String stagedFileName = null;
+
+                try (InputStream in = cr.openInputStream(u);
+                     FileOutputStream out = new FileOutputStream(stageFile)) {
+                    if (in != null) {
+                        byte[] buf = new byte[65536];
+                        int len;
+                        long totalCopied = 0;
+                        while ((len = in.read(buf)) > 0) {
+                            out.write(buf, 0, len);
+                            totalCopied += len;
+                        }
+                        out.flush();
+                        if (totalCopied > 0) {
+                            sizeBytes = totalCopied;
+                            sizeMB = (double) totalCopied / (1024.0 * 1024.0);
+                        }
+                        stagedFileName = stageFile.getName();
+                    }
+                } catch (Exception ex) {
+                    android.util.Log.w("AuraSyncStage", "Could not stage file: " + ex.getMessage());
+                }
 
                 JSONObject obj = new JSONObject();
                 obj.put("id", "android_share_" + System.currentTimeMillis() + "_" + i);
@@ -598,6 +652,9 @@ public class MainActivity extends Activity {
                 obj.put("mimeType", mime);
                 obj.put("sizeMB", Math.round(sizeMB * 10.0) / 10.0);
                 obj.put("uri", u.toString());
+                if (stagedFileName != null) {
+                    obj.put("stagedFileName", stagedFileName);
+                }
                 obj.put("selected", true);
                 obj.put("status", "ready");
 
@@ -726,8 +783,13 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public boolean hasStoragePermissions() {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                return checkSelfPermission("android.permission.READ_MEDIA_IMAGES") == PackageManager.PERMISSION_GRANTED;
+            if (Build.VERSION.SDK_INT >= 34) {
+                return checkSelfPermission("android.permission.READ_MEDIA_IMAGES") == PackageManager.PERMISSION_GRANTED
+                    || checkSelfPermission("android.permission.READ_MEDIA_VIDEO") == PackageManager.PERMISSION_GRANTED
+                    || checkSelfPermission("android.permission.READ_MEDIA_VISUAL_USER_SELECTED") == PackageManager.PERMISSION_GRANTED;
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                return checkSelfPermission("android.permission.READ_MEDIA_IMAGES") == PackageManager.PERMISSION_GRANTED
+                    || checkSelfPermission("android.permission.READ_MEDIA_VIDEO") == PackageManager.PERMISSION_GRANTED;
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 return checkSelfPermission("android.permission.READ_EXTERNAL_STORAGE") == PackageManager.PERMISSION_GRANTED;
             }
@@ -1223,77 +1285,99 @@ public class MainActivity extends Activity {
 
                 // ── Phase 1: Images ──────────────────────────────────────────
                 int imageTotal  = 0;
-                int imageSkip   = 0;   // how many image rows to skip (may exceed imageTotal)
-                int imageTake   = 0;   // how many image rows to read into arr
+                try (Cursor cCount = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, new String[]{MediaStore.MediaColumns._ID}, null, null, null)) {
+                    if (cCount != null) {
+                        imageTotal = cCount.getCount();
+                    }
+                } catch (Exception ignored) {}
 
-                Cursor cImg = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, order);
-                if (cImg != null) {
-                    imageTotal = cImg.getCount();
-                    cImg.close();
-                }
-
-                imageSkip = Math.min(safeOffset, imageTotal);
-                imageTake = Math.min(safeLimit, imageTotal - imageSkip);
+                int imageSkip = Math.min(safeOffset, imageTotal);
+                int imageTake = Math.min(safeLimit, Math.max(0, imageTotal - imageSkip));
 
                 if (imageTake > 0) {
-                    Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, order);
-                    if (c != null) {
-                        try {
-                            if (c.moveToPosition(imageSkip)) {
-                                int taken = 0;
-                                do {
-                                    long   id   = c.getLong  (c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
-                                    String name = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME));
-                                    long   size = c.getLong  (c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
-                                    String mime = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE));
-                                    JSONObject item = new JSONObject();
-                                    item.put("id",       id);
-                                    item.put("type",     "image");
-                                    item.put("name",     (name != null ? name : ("photo_" + id + ".jpg")));
-                                    item.put("size",     size);
-                                    item.put("mimeType", (mime != null ? mime : "image/jpeg"));
-                                    arr.put(item);
-                                    taken++;
-                                    if (taken >= imageTake) break;
-                                } while (c.moveToNext());
-                            }
-                        } finally { c.close(); }
-                    }
+                    try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, order)) {
+                        if (c != null && c.moveToPosition(imageSkip)) {
+                            int idIdx   = c.getColumnIndex(MediaStore.MediaColumns._ID);
+                            int nameIdx = c.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
+                            int sizeIdx = c.getColumnIndex(MediaStore.MediaColumns.SIZE);
+                            int mimeIdx = c.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE);
+
+                            int taken = 0;
+                            do {
+                                long id = idIdx >= 0 ? c.getLong(idIdx) : 0L;
+                                String name = nameIdx >= 0 ? c.getString(nameIdx) : null;
+                                long size = sizeIdx >= 0 && !c.isNull(sizeIdx) ? c.getLong(sizeIdx) : 0L;
+                                String mime = mimeIdx >= 0 ? c.getString(mimeIdx) : null;
+
+                                JSONObject item = new JSONObject();
+                                item.put("id",       id);
+                                item.put("type",     "image");
+                                item.put("name",     (name != null && !name.isEmpty() ? name : ("photo_" + id + ".jpg")));
+                                item.put("size",     size);
+                                item.put("mimeType", (mime != null && !mime.isEmpty() ? mime : "image/jpeg"));
+                                arr.put(item);
+                                taken++;
+                                if (taken >= imageTake) break;
+                            } while (c.moveToNext());
+                        }
+                    } catch (Exception ignored) {}
                 }
 
                 // ── Phase 2: Videos (fill remaining slots) ────────────────────
                 int remaining = safeLimit - arr.length();
                 if (remaining > 0) {
-                    // Global offset already consumed by images; video offset is what's left
                     int videoOffset = Math.max(0, safeOffset - imageTotal);
+                    try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, null, null, order)) {
+                        if (cv != null && cv.moveToPosition(videoOffset)) {
+                            int idIdx   = cv.getColumnIndex(MediaStore.MediaColumns._ID);
+                            int nameIdx = cv.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
+                            int sizeIdx = cv.getColumnIndex(MediaStore.MediaColumns.SIZE);
+                            int mimeIdx = cv.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE);
 
-                    Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, null, null, order);
-                    if (cv != null) {
-                        try {
-                            if (cv.moveToPosition(videoOffset)) {
-                                int taken = 0;
-                                do {
-                                    long   id   = cv.getLong  (cv.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
-                                    String name = cv.getString(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME));
-                                    long   size = cv.getLong  (cv.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
-                                    String mime = cv.getString(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE));
-                                    JSONObject item = new JSONObject();
-                                    item.put("id",       id);
-                                    item.put("type",     "video");
-                                    item.put("name",     (name != null ? name : ("video_" + id + ".mp4")));
-                                    item.put("size",     size);
-                                    item.put("mimeType", (mime != null ? mime : "video/mp4"));
-                                    arr.put(item);
-                                    taken++;
-                                    if (taken >= remaining) break;
-                                } while (cv.moveToNext());
-                            }
-                        } finally { cv.close(); }
-                    }
+                            int taken = 0;
+                            do {
+                                long id = idIdx >= 0 ? cv.getLong(idIdx) : 0L;
+                                String name = nameIdx >= 0 ? cv.getString(nameIdx) : null;
+                                long size = sizeIdx >= 0 && !cv.isNull(sizeIdx) ? cv.getLong(sizeIdx) : 0L;
+                                String mime = mimeIdx >= 0 ? cv.getString(mimeIdx) : null;
+
+                                JSONObject item = new JSONObject();
+                                item.put("id",       id);
+                                item.put("type",     "video");
+                                item.put("name",     (name != null && !name.isEmpty() ? name : ("video_" + id + ".mp4")));
+                                item.put("size",     size);
+                                item.put("mimeType", (mime != null && !mime.isEmpty() ? mime : "video/mp4"));
+                                arr.put(item);
+                                taken++;
+                                if (taken >= remaining) break;
+                            } while (cv.moveToNext());
+                        }
+                    } catch (Exception ignored) {}
                 }
 
             } catch (Exception ignored) {}
             return arr.toString();
+        }
+
+        @JavascriptInterface
+        public String getMediaItemBase64(final String mediaType, final long mediaId) {
+            try {
+                Uri contentUri = "video".equalsIgnoreCase(mediaType)
+                        ? ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId)
+                        : ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId);
+                try (InputStream stream = getContentResolver().openInputStream(contentUri);
+                     ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                    if (stream != null) {
+                        byte[] buf = new byte[32768];
+                        int len;
+                        while ((len = stream.read(buf)) > 0) {
+                            baos.write(buf, 0, len);
+                        }
+                        return Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
+                    }
+                }
+            } catch (Exception ignored) {}
+            return "";
         }
     }
 

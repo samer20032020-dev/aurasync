@@ -44,7 +44,6 @@ class MobileEngine {
       window.AuraSyncMobileReceiveShared = (incoming) => {
         if (Array.isArray(incoming) && incoming.length > 0) {
           this.notifyListeners('native_files_selected', incoming);
-          this.addUploadedFiles(incoming);
         }
       };
 
@@ -748,6 +747,20 @@ class MobileEngine {
     return { successful, failed, noAccount: false };
   }
 
+  base64ToBlob(base64, mimeType = 'application/octet-stream') {
+    try {
+      const cleanB64 = base64.replace(/^data:[^;]+;base64,/, '');
+      const byteChars = atob(cleanB64);
+      const byteNumbers = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+      }
+      return new Blob([byteNumbers], { type: mimeType });
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Native Full Gallery Pull Engine (Transfers all media directly to aurasync-mobile/galary)
   async pullEntireGalleryNative(options = {}) {
     const account = options.account || this.getPrimaryAccount();
@@ -789,9 +802,29 @@ class MobileEngine {
       for (const item of items) {
         try {
           if (options.onStatus) options.onStatus(`جاري جلب: ${item.name}`);
-          const res = await fetch(`/api/mediastore/${item.type}/${item.id}`);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const blob = await res.blob();
+          let blob = null;
+          try {
+            const res = await fetch(`/api/mediastore/${item.type}/${item.id}`);
+            if (res.ok) {
+              blob = await res.blob();
+            }
+          } catch (_) {}
+
+          // Fallback to direct native Base64 bridge if fetch was blocked or empty
+          if ((!blob || blob.size === 0) && typeof window !== 'undefined' && window.AuraSyncAndroid?.getMediaItemBase64) {
+            try {
+              const b64 = window.AuraSyncAndroid.getMediaItemBase64(item.type, item.id);
+              if (b64 && b64.length > 0) {
+                const mime = item.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg');
+                blob = this.base64ToBlob(b64, mime);
+              }
+            } catch (_) {}
+          }
+
+          if (!blob || blob.size === 0) {
+            throw new Error(`تعذر قراءة ملف ${item.name} من وسائط الهاتف`);
+          }
+
           const file = new File([blob], item.name, {
             type: item.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg')
           });
@@ -812,6 +845,7 @@ class MobileEngine {
           };
           successful.push(record);
         } catch (itemErr) {
+          console.error(`Gallery item pull/upload error: ${item.name}`, itemErr);
           failed.push({ item, error: itemErr.message });
         }
 
@@ -967,8 +1001,13 @@ class MobileEngine {
         const folderId = await this.ensureCloudFolder('google');
         if (!folderId) return this.uploadedFiles;
 
-        const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,webContentLink)&pageSize=1000`, {
+        const galaryFolderId = await this.ensureCloudFolder('google', 'galary');
+        const parentFilter = galaryFolderId && galaryFolderId !== folderId
+          ? `('${folderId}' in parents or '${galaryFolderId}' in parents)`
+          : `'${folderId}' in parents`;
+
+        const q = encodeURIComponent(`${parentFilter} and mimeType != 'application/vnd.google-apps.folder' and trashed = false`);
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,webContentLink,parents)&pageSize=1000`, {
           headers: { Authorization: `Bearer ${account.accessToken}` }
         });
 
@@ -979,6 +1018,7 @@ class MobileEngine {
             const isImage = f.mimeType && f.mimeType.startsWith('image');
             const type = isImage ? 'image' : (isVideo ? 'video' : 'doc');
             const sizeMB = f.size ? Number((Number(f.size) / (1024 * 1024)).toFixed(1)) : 2.5;
+            const inGalary = Array.isArray(f.parents) && galaryFolderId && f.parents.includes(galaryFolderId);
 
             return {
               id: f.id,
@@ -990,7 +1030,7 @@ class MobileEngine {
               date: f.modifiedTime ? new Date(f.modifiedTime).toLocaleDateString() : new Date().toLocaleDateString(),
               provider: 'google',
               status: 'synced',
-              cloudFolder: MOBILE_FOLDER_NAME,
+              cloudFolder: inGalary ? `${MOBILE_FOLDER_NAME}/galary` : MOBILE_FOLDER_NAME,
               preview: f.thumbnailLink || null,
               downloadUrl: f.webContentLink || `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
               encrypted: true,

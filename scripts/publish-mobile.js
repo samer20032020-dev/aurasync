@@ -37,7 +37,7 @@ execFileSync(process.execPath, [ghScript, '--mobile'], { stdio: 'inherit' });
 // 4. Sync version metadata with git origin main
 try {
   console.log('\n🔄 [4/4] Syncing version metadata with git origin main...');
-  execSync('git add version.json package.json package-lock.json website/index.html src/', { cwd: rootDir, stdio: 'inherit' });
+  execSync('git add version.json package.json package-lock.json website/index.html src/ mobile/ scripts/', { cwd: rootDir, stdio: 'inherit' });
   execSync(`git commit -m "chore(mobile): release v${mobileVer} and sync version metadata"`, { cwd: rootDir, stdio: 'inherit' });
   execSync('git push origin main', { cwd: rootDir, stdio: 'inherit' });
   console.log('✅ Git origin main synced successfully!');

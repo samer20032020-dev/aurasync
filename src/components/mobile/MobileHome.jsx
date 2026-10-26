@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.38',
+  version = '1.0.39',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -218,16 +218,19 @@ export default function MobileHome({
         const filesToUpload = [];
         for (const item of data) {
           try {
-            if (item.uri) {
-              const res = await fetch('/api/contenturi/' + encodeURIComponent(item.uri));
-              if (res.ok) {
-                const blob = await res.blob();
-                const file = new File([blob], item.name, { type: item.mimeType || blob.type });
-                filesToUpload.push(file);
-              }
+            let res = null;
+            if (item.stagedFileName) {
+              res = await fetch('/api/staged/' + encodeURIComponent(item.stagedFileName));
+            } else if (item.uri) {
+              res = await fetch('/api/contenturi/' + encodeURIComponent(item.uri));
+            }
+            if (res && res.ok) {
+              const blob = await res.blob();
+              const file = new File([blob], item.name, { type: item.mimeType || blob.type });
+              filesToUpload.push(file);
             }
           } catch (e) {
-            console.warn('Failed to resolve content uri:', item.uri, e);
+            console.warn('Failed to resolve staged/content uri:', item, e);
           }
         }
         if (filesToUpload.length > 0) {
@@ -368,20 +371,34 @@ export default function MobileHome({
             }
           });
 
-          setGalleryProgress(100);
-          triggerHaptic(60);
-          setTimeout(() => {
+          if (res.successful && res.successful.length > 0) {
+            setGalleryProgress(100);
+            triggerHaptic(60);
+            setTimeout(() => {
+              setIsBackingUpGallery(false);
+              setGalleryDone(true);
+              if (onShowToast) {
+                onShowToast(
+                  isRtl
+                    ? `✓ تم سحب ونقل المعرض بالكامل (${res.successful.length.toLocaleString()} ملف) إلى مجلد ${AURASYNC_MOBILE_FOLDER}/galary في ${currentAcc.label || 'السحابة'} بنجاح ومزامنته!`
+                    : `✓ Pulled and synced ${res.successful.length.toLocaleString()} items to ${AURASYNC_MOBILE_FOLDER}/galary!`,
+                  'success'
+                );
+              }
+            }, 600);
+          } else {
             setIsBackingUpGallery(false);
-            setGalleryDone(true);
+            setGalleryDone(false);
+            const errDetail = res.failed && res.failed.length > 0 ? res.failed[0].error : '';
             if (onShowToast) {
               onShowToast(
                 isRtl
-                  ? `✓ تم سحب ونقل المعرض بالكامل (${res.successful.length.toLocaleString()} ملف) إلى مجلد ${AURASYNC_MOBILE_FOLDER}/galary في ${currentAcc.label || 'السحابة'} بنجاح ومزامنته!`
-                  : `✓ Pulled and synced ${res.successful.length.toLocaleString()} items to ${AURASYNC_MOBILE_FOLDER}/galary!`,
-                'success'
+                  ? `⚠️ لم يتم نقل ملفات المعرض${errDetail ? ' (' + errDetail + ')' : ''}. يرجى التحقق من اتصال الإنترنت وصلاحيات المعرض`
+                  : `⚠️ No gallery files transferred${errDetail ? ': ' + errDetail : ''}`,
+                'error'
               );
             }
-          }, 600);
+          }
           return;
         } catch (err) {
           setIsBackingUpGallery(false);
