@@ -1165,18 +1165,27 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public int getGalleryMediaTotalCount() {
             if (!hasStoragePermissions()) {
+                // Request permissions and return 0 so callers handle gracefully
                 requestStoragePermissions();
-                return -1;
+                return 0;
             }
             int total = 0;
             try {
                 ContentResolver cr = getContentResolver();
-                Cursor cImg = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, new String[]{MediaStore.Images.Media._ID}, null, null, null);
+                Cursor cImg = cr.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.Images.Media._ID},
+                    null, null, null
+                );
                 if (cImg != null) {
                     total += cImg.getCount();
                     cImg.close();
                 }
-                Cursor cVid = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, new String[]{MediaStore.Video.Media._ID}, null, null, null);
+                Cursor cVid = cr.query(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.Video.Media._ID},
+                    null, null, null
+                );
                 if (cVid != null) {
                     total += cVid.getCount();
                     cVid.close();
@@ -1185,12 +1194,23 @@ public class MainActivity extends Activity {
             return total;
         }
 
+        /**
+         * scanGalleryMedia — Returns a page of media items using correct global LIMIT+OFFSET
+         * across the unified images+videos list (sorted newest-first per type).
+         *
+         * Strategy: images come first (offset applied globally across both), then videos fill
+         * whatever slots remain in the page after images are exhausted.
+         *
+         * Example: limit=50, offset=0  → up to 50 images, then fill with videos if < 50 images
+         *          limit=50, offset=10 → skip first 10 images globally, take next 50 slots
+         *          limit=50, offset=60 → all images exhausted (imageCount=13), skip (60-13)=47 videos
+         */
         @JavascriptInterface
         public String scanGalleryMedia(final int limit, final int offset) {
             JSONArray arr = new JSONArray();
             try {
                 ContentResolver cr = getContentResolver();
-                int safeLimit = limit > 0 ? Math.min(limit, 500) : 100;
+                int safeLimit  = (limit  > 0 ? Math.min(limit,  500) : 100);
                 int safeOffset = Math.max(offset, 0);
 
                 String[] proj = new String[]{
@@ -1199,57 +1219,79 @@ public class MainActivity extends Activity {
                     MediaStore.MediaColumns.SIZE,
                     MediaStore.MediaColumns.MIME_TYPE
                 };
+                final String order = MediaStore.MediaColumns.DATE_ADDED + " DESC";
 
-                Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC");
-                if (c != null) {
-                    if (c.moveToPosition(safeOffset)) {
-                        int count = 0;
-                        do {
-                            long id = c.getLong(c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
-                            String name = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME));
-                            long size = c.getLong(c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
-                            String mime = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE));
+                // ── Phase 1: Images ──────────────────────────────────────────
+                int imageTotal  = 0;
+                int imageSkip   = 0;   // how many image rows to skip (may exceed imageTotal)
+                int imageTake   = 0;   // how many image rows to read into arr
 
-                            JSONObject item = new JSONObject();
-                            item.put("id", id);
-                            item.put("type", "image");
-                            item.put("name", name != null ? name : ("photo_" + id + ".jpg"));
-                            item.put("size", size);
-                            item.put("mimeType", mime != null ? mime : "image/jpeg");
-                            arr.put(item);
-                            count++;
-                            if (count >= safeLimit) break;
-                        } while (c.moveToNext());
-                    }
-                    c.close();
+                Cursor cImg = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, order);
+                if (cImg != null) {
+                    imageTotal = cImg.getCount();
+                    cImg.close();
                 }
 
+                imageSkip = Math.min(safeOffset, imageTotal);
+                imageTake = Math.min(safeLimit, imageTotal - imageSkip);
+
+                if (imageTake > 0) {
+                    Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, order);
+                    if (c != null) {
+                        try {
+                            if (c.moveToPosition(imageSkip)) {
+                                int taken = 0;
+                                do {
+                                    long   id   = c.getLong  (c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
+                                    String name = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME));
+                                    long   size = c.getLong  (c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
+                                    String mime = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE));
+                                    JSONObject item = new JSONObject();
+                                    item.put("id",       id);
+                                    item.put("type",     "image");
+                                    item.put("name",     (name != null ? name : ("photo_" + id + ".jpg")));
+                                    item.put("size",     size);
+                                    item.put("mimeType", (mime != null ? mime : "image/jpeg"));
+                                    arr.put(item);
+                                    taken++;
+                                    if (taken >= imageTake) break;
+                                } while (c.moveToNext());
+                            }
+                        } finally { c.close(); }
+                    }
+                }
+
+                // ── Phase 2: Videos (fill remaining slots) ────────────────────
                 int remaining = safeLimit - arr.length();
                 if (remaining > 0) {
-                    Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC");
-                    if (cv != null) {
-                        if (cv.moveToPosition(safeOffset)) {
-                            int count = 0;
-                            do {
-                                long id = cv.getLong(cv.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
-                                String name = cv.getString(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME));
-                                long size = cv.getLong(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
-                                String mime = cv.getString(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE));
+                    // Global offset already consumed by images; video offset is what's left
+                    int videoOffset = Math.max(0, safeOffset - imageTotal);
 
-                                JSONObject item = new JSONObject();
-                                item.put("id", id);
-                                item.put("type", "video");
-                                item.put("name", name != null ? name : ("video_" + id + ".mp4"));
-                                item.put("size", size);
-                                item.put("mimeType", mime != null ? mime : "video/mp4");
-                                arr.put(item);
-                                count++;
-                                if (count >= remaining) break;
-                            } while (cv.moveToNext());
-                        }
-                        cv.close();
+                    Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, null, null, order);
+                    if (cv != null) {
+                        try {
+                            if (cv.moveToPosition(videoOffset)) {
+                                int taken = 0;
+                                do {
+                                    long   id   = cv.getLong  (cv.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
+                                    String name = cv.getString(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME));
+                                    long   size = cv.getLong  (cv.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
+                                    String mime = cv.getString(cv.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE));
+                                    JSONObject item = new JSONObject();
+                                    item.put("id",       id);
+                                    item.put("type",     "video");
+                                    item.put("name",     (name != null ? name : ("video_" + id + ".mp4")));
+                                    item.put("size",     size);
+                                    item.put("mimeType", (mime != null ? mime : "video/mp4"));
+                                    arr.put(item);
+                                    taken++;
+                                    if (taken >= remaining) break;
+                                } while (cv.moveToNext());
+                            }
+                        } finally { cv.close(); }
                     }
                 }
+
             } catch (Exception ignored) {}
             return arr.toString();
         }

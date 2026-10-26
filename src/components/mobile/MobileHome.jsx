@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.37',
+  version = '1.0.38',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -342,8 +342,10 @@ export default function MobileHome({
         nativeCount = window.AuraSyncAndroid.getGalleryMediaTotalCount();
       } catch (_) {}
 
-      if (nativeCount === -1) {
-        // Permission requested by native method
+      // If permissions were just requested, nativeCount will be 0.
+      // The onAuraSyncPermissionsResult callback will retry handleStartGalleryTransfer.
+      if (nativeCount <= 0 && window.AuraSyncAndroid.hasStoragePermissions && !window.AuraSyncAndroid.hasStoragePermissions()) {
+        // Permissions dialog just opened — wait for callback
         return;
       }
 
