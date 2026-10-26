@@ -12,6 +12,7 @@ export default function MobileCloudExplorer({
   const fileInputRef = useRef(null);
 
   const [files, setFiles] = useState(() => mobileEngine.uploadedFiles || []);
+  const [accounts, setAccounts] = useState(() => mobileEngine.accounts || []);
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -31,7 +32,10 @@ export default function MobileCloudExplorer({
     mobileEngine.syncCloudFiles().catch(() => {});
     const unsub = mobileEngine.subscribe((event, data) => {
       if (event === 'files_updated') {
-        setFiles(data);
+        setFiles(data || []);
+      }
+      if (event === 'accounts_updated') {
+        setAccounts(data || []);
       }
     });
     return unsub;
@@ -67,7 +71,6 @@ export default function MobileCloudExplorer({
     const selected = e.target.files;
     if (!selected || selected.length === 0) return;
 
-    const accounts = mobileEngine.accounts || [];
     if (accounts.length === 0) {
       triggerHaptic(25);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -173,13 +176,14 @@ export default function MobileCloudExplorer({
   });
 
   const colors = {
-    card: isDark ? 'rgba(15,20,40,0.88)' : '#ffffff',
-    border: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(226,232,240,0.9)',
+    card: isDark ? '#111726' : '#ffffff',
+    border: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)',
+    cardGlow: isDark ? '0 4px 24px rgba(0, 0, 0, 0.25)' : '0 2px 12px rgba(0, 0, 0, 0.03)',
     text: isDark ? '#f8fafc' : '#0f172a',
     textMuted: isDark ? '#94a3b8' : '#64748b',
-    accent: isDark ? '#3b82f6' : '#2563eb',
-    accentLight: isDark ? 'rgba(59,130,246,0.12)' : 'rgba(37,99,235,0.08)',
-    tileBg: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
+    accent: '#2563eb',
+    accentLight: isDark ? 'rgba(37, 99, 235, 0.12)' : 'rgba(37, 99, 235, 0.08)',
+    tileBg: isDark ? 'rgba(255, 255, 255, 0.04)' : '#f1f5f9',
   };
 
   const filterChips = [
@@ -191,6 +195,12 @@ export default function MobileCloudExplorer({
 
   return (
     <div>
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
       {/* Hidden Native File Input */}
       <input
         ref={fileInputRef}
@@ -201,60 +211,65 @@ export default function MobileCloudExplorer({
         onChange={handleSelectFiles}
       />
 
-      {/* ── Top Bar: Upload Button + Location Tag + Sync Button ─────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      {/* ── Top Bar: Clean, Minimalist & Soft Header ─────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: colors.text }}>
-            {isRtl ? `ملفات السحابة (${AURASYNC_MOBILE_FOLDER})` : `Cloud Files (${AURASYNC_MOBILE_FOLDER})`}
+          <h2 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 3px', color: colors.text }}>
+            {isRtl ? 'معرض الصور والملفات' : 'Cloud Gallery & Media'}
           </h2>
-          <span style={{ fontSize: 11, color: colors.textMuted }}>
-            {isRtl
-              ? `المجموع: ${files.length} ملف متزامن مع كافة الهواتف والحاسوب`
-              : `Total: ${files.length} file(s) synced across all devices & PC`}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: colors.textMuted }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px rgba(16,185,129,0.7)' }} />
+            <span>
+              {files.length > 0
+                ? (isRtl ? `${files.length} ملف متزامن مع كافة الأجهزة` : `${files.length} files synced with all devices`)
+                : (isRtl ? `متصل مع ${accounts[0]?.label || 'السحابة'} • متزامن` : `Connected to ${accounts[0]?.label || 'Cloud'} • Synced`)}
+            </span>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Sync Button */}
           <button
             onClick={handleSyncCloud}
             disabled={isSyncing}
             style={{
-              padding: '9px 12px', borderRadius: 14,
-              background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+              width: 38, height: 38, borderRadius: 12,
+              background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
               border: `1px solid ${colors.border}`,
-              color: colors.text, fontSize: 12, fontWeight: 700,
+              color: colors.text,
               cursor: isSyncing ? 'wait' : 'pointer',
-              display: 'flex', alignItems: 'center', gap: 5,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s',
             }}
-            title={isRtl ? 'مزامنة وتحديث الملفات من كافة الهواتف' : 'Sync all devices'}
+            title={isRtl ? 'مزامنة وتحديث الملفات' : 'Sync & refresh files'}
           >
             <span style={{
               display: 'inline-block',
               animation: isSyncing ? 'spin 1s linear infinite' : 'none',
-              fontSize: 12,
+              fontSize: 14,
             }}>
               🔄
             </span>
-            <span>{isRtl ? 'مزامنة' : 'Sync'}</span>
           </button>
 
+          {/* Upload Button */}
           <button
             onClick={() => {
               triggerHaptic(20);
               if (fileInputRef.current) fileInputRef.current.click();
             }}
             style={{
-              padding: '9px 15px', borderRadius: 14,
-              background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+              padding: '8px 14px', borderRadius: 12,
+              background: '#2563eb',
               border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-              boxShadow: '0 4px 14px rgba(37,99,235,0.35)',
+              boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
             }}
           >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            <span>{isRtl ? 'رفع' : 'Upload'}</span>
+            <span>{isRtl ? 'رفع صور' : 'Upload'}</span>
           </button>
         </div>
       </div>
@@ -267,7 +282,7 @@ export default function MobileCloudExplorer({
           border: '1px solid rgba(59,130,246,0.3)',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: '#3b82f6', marginBottom: 6 }}>
-            <span>{isRtl ? `جاري الرفع إلى مجلد ${AURASYNC_MOBILE_FOLDER}...` : `Uploading to ${AURASYNC_MOBILE_FOLDER}...`}</span>
+            <span>{isRtl ? `جاري الرفع المشفر إلى مجلد ${AURASYNC_MOBILE_FOLDER}...` : `Uploading to ${AURASYNC_MOBILE_FOLDER}...`}</span>
             <span>{uploadProgress}%</span>
           </div>
           <div style={{ width: '100%', height: 4, borderRadius: 99, background: 'rgba(59,130,246,0.2)', overflow: 'hidden' }}>
@@ -276,109 +291,175 @@ export default function MobileCloudExplorer({
         </div>
       )}
 
-      {/* ── Search Input ─────────────────────────────────────────────── */}
-      <div style={{ position: 'relative', marginBottom: 12 }}>
-        <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', left: 14, pointerEvents: 'none' }}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke={colors.textMuted} strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-        </div>
-        <input
-          type="text"
-          placeholder={isRtl ? 'بحث في صور وملفات السحابة...' : 'Search uploaded cloud media...'}
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          style={{
-            width: '100%', boxSizing: 'border-box',
-            padding: '11px 16px 11px 40px',
-            borderRadius: 14,
-            background: isDark ? 'rgba(255,255,255,0.04)' : '#ffffff',
-            border: `1px solid ${colors.border}`,
-            color: colors.text, fontSize: 13, outline: 'none',
-          }}
-        />
-      </div>
+      {/* ── Search Input & Filter Chips: Only shown when files exist ── */}
+      {files.length > 0 && (
+        <>
+          <div style={{ position: 'relative', marginBottom: 12 }}>
+            <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', left: isRtl ? undefined : 14, right: isRtl ? 14 : undefined, pointerEvents: 'none' }}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke={colors.textMuted} strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder={isRtl ? 'بحث في المعرض...' : 'Search media...'}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: isRtl ? '10px 38px 10px 14px' : '10px 14px 10px 38px',
+                borderRadius: 14,
+                background: isDark ? 'rgba(255,255,255,0.04)' : '#ffffff',
+                border: `1px solid ${colors.border}`,
+                color: colors.text, fontSize: 13, outline: 'none',
+              }}
+            />
+          </div>
 
-      {/* ── Filter Chips ─────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }} className="no-scrollbar">
-        {filterChips.map(chip => (
-          <button
-            key={chip.id}
-            onClick={() => {
-              triggerHaptic(10);
-              setActiveFilter(chip.id);
-            }}
-            style={{
-              padding: '6px 14px', borderRadius: 999,
-              background: activeFilter === chip.id ? colors.accent : colors.card,
-              border: `1px solid ${activeFilter === chip.id ? colors.accent : colors.border}`,
-              color: activeFilter === chip.id ? '#fff' : colors.textMuted,
-              fontSize: 12, fontWeight: activeFilter === chip.id ? 700 : 500,
-              cursor: 'pointer', whiteSpace: 'nowrap',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            <span>{isRtl ? chip.ar : chip.en}</span>
-            <span style={{
-              fontSize: 10, padding: '1px 6px', borderRadius: 999,
-              background: activeFilter === chip.id ? 'rgba(255,255,255,0.25)' : colors.tileBg,
-            }}>
-              {chip.count}
-            </span>
-          </button>
-        ))}
-      </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }} className="no-scrollbar">
+            {filterChips.map(chip => (
+              <button
+                key={chip.id}
+                onClick={() => {
+                  triggerHaptic(10);
+                  setActiveFilter(chip.id);
+                }}
+                style={{
+                  padding: '5px 12px', borderRadius: 999,
+                  background: activeFilter === chip.id ? colors.accent : (isDark ? 'rgba(255,255,255,0.04)' : '#ffffff'),
+                  border: `1px solid ${activeFilter === chip.id ? colors.accent : colors.border}`,
+                  color: activeFilter === chip.id ? '#fff' : colors.textMuted,
+                  fontSize: 11, fontWeight: activeFilter === chip.id ? 700 : 500,
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}
+              >
+                <span>{isRtl ? chip.ar : chip.en}</span>
+                {chip.count > 0 && (
+                  <span style={{
+                    fontSize: 10, padding: '1px 5px', borderRadius: 999,
+                    background: activeFilter === chip.id ? 'rgba(255,255,255,0.25)' : colors.tileBg,
+                  }}>
+                    {chip.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
-      {/* ── Google Photos Style Media Gallery / Files Grid ───────────── */}
-      {filteredFiles.length === 0 ? (
-        /* Empty State */
+      {/* ── Content View: High-Utility Empty State OR Media Grid ───── */}
+      {files.length === 0 ? (
+        /* Soft, Minimalist, Truly Useful Empty State */
         <div style={{
-          borderRadius: 24, padding: '40px 20px', textAlign: 'center',
+          borderRadius: 24,
+          padding: '36px 20px',
+          textAlign: 'center',
           background: colors.card,
-          border: `1px dashed ${colors.border}`,
-          marginTop: 10,
+          border: `1px solid ${colors.border}`,
+          boxShadow: colors.cardGlow,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
         }}>
+          {/* Soft Icon */}
           <div style={{
-            width: 72, height: 72, borderRadius: 24,
+            width: 60, height: 60, borderRadius: 20,
             background: colors.accentLight,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 16px',
+            color: '#3b82f6', marginBottom: 16,
           }}>
-            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke={colors.accent} strokeWidth="2">
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
               <circle cx="8.5" cy="8.5" r="1.5"/>
               <polyline points="21 15 16 10 5 21"/>
             </svg>
           </div>
 
-          <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 8px', color: colors.text }}>
-            {searchQuery ? (isRtl ? 'لا توجد نتائج للبحث' : 'No matching files') : (isRtl ? 'لا توجد ملفات مرفوعة بعد' : 'No uploaded files yet')}
+          <h3 style={{ fontSize: 17, fontWeight: 800, margin: '0 0 8px', color: colors.text }}>
+            {isRtl ? 'معرضك السحابي جاهز للمزامنة' : 'Your Cloud Gallery is Ready'}
           </h3>
 
-          <p style={{ fontSize: 12, color: colors.textMuted, maxWidth: 300, margin: '0 auto 20px', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 12, color: colors.textMuted, maxWidth: 300, margin: '0 0 22px', lineHeight: 1.6 }}>
             {isRtl
-              ? 'كل الصور والملفات التي ترفعها من هاتفك ستظهر هنا تلقائياً وتبقى محفوظة في مجلد aurasync-mobile بالسحابة.'
-              : 'Photos, videos, and files you upload will appear here and stay safe inside your aurasync-mobile cloud folder.'}
+              ? 'ارفع صورك وفيديوهاتك لتكون محفوظة بجودتها الأصلية ومتاحة فوراً للمزامنة والتنزيل عبر كافة هواتفك وحاسوبك.'
+              : 'Upload photos & videos to keep them safe in original quality and synced across all your phones and PC.'}
           </p>
 
+          {/* Primary Action Button: Fast Native Upload */}
           <button
             onClick={() => {
               triggerHaptic(20);
               if (fileInputRef.current) fileInputRef.current.click();
             }}
             style={{
-              padding: '12px 24px', borderRadius: 14,
-              background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+              width: '100%', maxWidth: 310,
+              padding: '13px 20px', borderRadius: 14,
+              background: '#2563eb',
               border: 'none', color: '#fff', fontSize: 13, fontWeight: 700,
-              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8,
-              boxShadow: '0 4px 16px rgba(37,99,235,0.3)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              boxShadow: '0 4px 18px rgba(37, 99, 235, 0.35)',
+              marginBottom: 10,
             }}
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            <span>{isRtl ? 'اختر صور وملفات من الهاتف' : 'Choose Photos & Files'}</span>
+            <span>{isRtl ? 'رفع صور أو فيديوهات الآن' : 'Upload Photos & Videos Now'}</span>
           </button>
+
+          {/* Secondary Action Button: Pull from other devices */}
+          <button
+            onClick={handleSyncCloud}
+            disabled={isSyncing}
+            style={{
+              width: '100%', maxWidth: 310,
+              padding: '11px 18px', borderRadius: 14,
+              background: 'transparent',
+              border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+              color: colors.text, fontSize: 12, fontWeight: 600,
+              cursor: isSyncing ? 'wait' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              marginBottom: 20,
+            }}
+          >
+            <span style={{ display: 'inline-block', animation: isSyncing ? 'spin 1s linear infinite' : 'none', fontSize: 13 }}>
+              🔄
+            </span>
+            <span>
+              {isSyncing
+                ? (isRtl ? 'جاري الفحص والمزامنة...' : 'Syncing with devices…')
+                : (isRtl ? 'جلب الصور المرفوعة من هواتفك وحاسوبك' : 'Fetch media from your other devices')}
+            </span>
+          </button>
+
+          {/* 3 Soft Highlights */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 12, fontSize: 10, color: colors.textMuted,
+            paddingTop: 16, borderTop: `1px solid ${colors.border}`, width: '100%',
+          }}>
+            <span>✨ {isRtl ? 'جودة أصلية 100%' : 'Original Quality'}</span>
+            <span>•</span>
+            <span>📱 {isRtl ? 'مزامنة لكافة الهواتف' : 'Multi-Device Sync'}</span>
+            <span>•</span>
+            <span>🔒 {isRtl ? 'حفظ دائم' : 'Permanent Save'}</span>
+          </div>
+        </div>
+      ) : filteredFiles.length === 0 ? (
+        /* Search returned 0 results */
+        <div style={{
+          borderRadius: 20, padding: '32px 16px', textAlign: 'center',
+          background: colors.card, border: `1px solid ${colors.border}`,
+        }}>
+          <span style={{ fontSize: 28, display: 'block', marginBottom: 8 }}>🔍</span>
+          <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: colors.text }}>
+            {isRtl ? 'لا توجد نتائج مطابقة' : 'No matching items'}
+          </h4>
+          <p style={{ fontSize: 11, color: colors.textMuted, margin: 0 }}>
+            {isRtl ? 'جرب البحث بكلمة أخرى' : 'Try searching with another keyword'}
+          </p>
         </div>
       ) : (
         /* Files Grid (Google Photos Experience) */
