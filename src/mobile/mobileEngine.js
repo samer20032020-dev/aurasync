@@ -761,7 +761,7 @@ class MobileEngine {
       } catch (_) {}
     }
 
-    if (totalCount === 0) {
+    if (totalCount <= 0) {
       this.releaseWakeLock();
       return { successful: [], failed: [], totalCount: 0 };
     }

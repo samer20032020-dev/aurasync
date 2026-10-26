@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.35',
+  version = '1.0.36',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -157,6 +157,23 @@ export default function MobileHome({
         );
       }
       setShowAddModal(true);
+      return;
+    }
+
+    const activeAcc = accounts[0];
+    if (!activeAcc.isOffline && !activeAcc.accessToken) {
+      triggerHaptic(30);
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? '⚠️ حسابك غير مصادق برمز وصول سحابي نشط! اضغط لتسجيل الدخول في Google Drive أولاً'
+            : '⚠️ Access token missing! Please authenticate with Google Drive first',
+          'warn'
+        );
+      }
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+        window.AuraSyncAndroid.startRealOAuth(activeAcc.provider || 'google');
+      }
       return;
     }
 
