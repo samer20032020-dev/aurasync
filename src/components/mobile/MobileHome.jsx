@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.29',
+  version = '1.0.30',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -51,7 +51,6 @@ export default function MobileHome({
   const isRtl = language === 'ar';
   const isDark = theme === 'dark';
   const galleryInputRef = useRef(null);
-  const freeSpaceInputRef = useRef(null);
 
   const [accounts, setAccounts] = useState(() => mobileEngine.accounts || []);
   const [uploadedFiles, setUploadedFiles] = useState(() => mobileEngine.uploadedFiles || []);
@@ -59,21 +58,14 @@ export default function MobileHome({
   const [connectingProvider, setConnectingProvider] = useState(null);
   const [userEmailInput, setUserEmailInput] = useState('');
 
-  // Storage info (128GB default)
-  const [storageInfo, setStorageInfo] = useState(() => mobileEngine.getStorageUsage());
-
-  // Gallery transfer state
+  // Gallery transfer & sync state
   const [isBackingUpGallery, setIsBackingUpGallery] = useState(false);
   const [galleryProgress, setGalleryProgress] = useState(0);
   const [gallerySpeed, setGallerySpeed] = useState(0);
   const [galleryCurrentFile, setGalleryCurrentFile] = useState('');
   const [galleryDone, setGalleryDone] = useState(false);
   const [galleryStats, setGalleryStats] = useState({ photos: 0, videos: 0, total: 0 });
-
-  // Free up space state
-  const [isFreeingSpace, setIsFreeingSpace] = useState(false);
-  const [freedGB, setFreedGB] = useState(0);
-  const [freeSpaceDone, setFreeSpaceDone] = useState(false);
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
 
   const triggerHaptic = useCallback((ms = 15) => {
     try {
@@ -82,7 +74,9 @@ export default function MobileHome({
     } catch (_) {}
   }, []);
 
+  // Automatic initial and periodic cross-device cloud sync
   useEffect(() => {
+    mobileEngine.syncCloudFiles().catch(() => {});
     const unsub = mobileEngine.subscribe((event, data) => {
       if (event === 'accounts_updated') setAccounts(data || []);
       if (event === 'files_updated') setUploadedFiles(data || []);
@@ -90,16 +84,32 @@ export default function MobileHome({
     return unsub;
   }, []);
 
-  // Update storage info periodically
-  useEffect(() => {
+  // Manual Cross-Device Sync Trigger
+  const handleManualSync = useCallback(async () => {
+    if (isManualSyncing) return;
+    setIsManualSyncing(true);
+    triggerHaptic(20);
     try {
-      setStorageInfo(mobileEngine.getStorageUsage());
-    } catch (_) {}
-  }, [uploadedFiles]);
+      const files = await mobileEngine.syncCloudFiles();
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `✓ تم تحديث المزامنة مع كافة الأجهزة (${(files || []).length} ملف متزامن)`
+            : `✓ Synced with all devices (${(files || []).length} files)`,
+          'success'
+        );
+      }
+    } catch (err) {
+      if (onShowToast) {
+        onShowToast(isRtl ? `خطأ أثناء المزامنة: ${err.message}` : `Sync error: ${err.message}`, 'error');
+      }
+    } finally {
+      setIsManualSyncing(false);
+    }
+  }, [isManualSyncing, isRtl, onShowToast, triggerHaptic]);
 
-  // Execute gallery backup
-  // Execute real gallery backup to cloud
-  const executeTransfer = useCallback(async (fileArray, isFreeUpMode = false) => {
+  // Execute real gallery backup to cloud and sync across devices
+  const executeTransfer = useCallback(async (fileArray) => {
     if (!fileArray || fileArray.length === 0) return;
 
     if (accounts.length === 0) {
@@ -124,18 +134,10 @@ export default function MobileHome({
     mobileEngine.acquireWakeLock(1800000);
 
     triggerHaptic(30);
-    if (isFreeUpMode) {
-      setIsFreeingSpace(true);
-      setFreeSpaceDone(false);
-    } else {
-      setIsBackingUpGallery(true);
-      setGalleryDone(false);
-    }
+    setIsBackingUpGallery(true);
+    setGalleryDone(false);
     setGalleryProgress(5);
     setGalleryStats({ photos, videos, total: totalCount });
-
-    const totalEstimatedMB = fileArray.reduce((acc, f) => acc + (f.size / (1024 * 1024) || 2.4), 0);
-    const approxFreedGB = Math.max(0.1, Number((totalEstimatedMB / 1024).toFixed(2)));
 
     try {
       const result = await mobileEngine.uploadBatch(fileArray, {
@@ -155,30 +157,19 @@ export default function MobileHome({
       const targetCloudName = accounts[0].label || 'السحابة';
       const successCount = result.successful.length;
 
+      // Automatically sync remote files so other devices have immediate access
+      mobileEngine.syncCloudFiles().catch(() => {});
+
       setTimeout(() => {
-        if (isFreeUpMode) {
-          setIsFreeingSpace(false);
-          setFreeSpaceDone(true);
-          setFreedGB(approxFreedGB);
-          if (onShowToast) {
-            onShowToast(
-              isRtl
-                ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName} بنجاح!`
-                : `✓ Transferred ${successCount.toLocaleString()} files to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName}!`,
-              'success'
-            );
-          }
-        } else {
-          setIsBackingUpGallery(false);
-          setGalleryDone(true);
-          if (onShowToast) {
-            onShowToast(
-              isRtl
-                ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName} بنجاح!`
-                : `✓ Transferred ${successCount.toLocaleString()} files to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName}!`,
-              'success'
-            );
-          }
+        setIsBackingUpGallery(false);
+        setGalleryDone(true);
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName} بنجاح ومزامنته فوراً!`
+              : `✓ Transferred ${successCount.toLocaleString()} files to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName} and synced!`,
+            'success'
+          );
         }
       }, 500);
     } catch (err) {
@@ -188,7 +179,6 @@ export default function MobileHome({
         onShowToast(isRtl ? `فشل النقل: ${err.message}` : `Transfer failed: ${err.message}`, 'error');
       }
       setIsBackingUpGallery(false);
-      setIsFreeingSpace(false);
     }
   }, [accounts, isRtl, onShowToast, triggerHaptic]);
 
@@ -214,32 +204,7 @@ export default function MobileHome({
 
     const fileArray = Array.from(selected);
     if (e.target) e.target.value = '';
-    executeTransfer(fileArray, false);
-  }, [accounts, executeTransfer, isRtl, onShowToast, triggerHaptic]);
-
-  // Free up space file picker change
-  const handleFreeSpaceFilesSelected = useCallback((e) => {
-    const selected = e.target.files;
-    if (!selected || selected.length === 0) return;
-
-    if (accounts.length === 0) {
-      triggerHaptic(30);
-      if (e.target) e.target.value = '';
-      if (onShowToast) {
-        onShowToast(
-          isRtl
-            ? '⚠️ يرجى ربط حساب سحابي أولاً لإخلاء المساحة ونقل الملفات بأمان!'
-            : '⚠️ Please connect a cloud account first before freeing space!',
-          'warn'
-        );
-      }
-      setShowAddModal(true);
-      return;
-    }
-
-    const fileArray = Array.from(selected);
-    if (e.target) e.target.value = '';
-    executeTransfer(fileArray, true);
+    executeTransfer(fileArray);
   }, [accounts, executeTransfer, isRtl, onShowToast, triggerHaptic]);
 
   // One-click Gallery Transfer button
@@ -333,7 +298,7 @@ export default function MobileHome({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Hidden file inputs for native photo/video picker */}
+      {/* Hidden file input for native photo/video picker */}
       <input
         ref={galleryInputRef}
         type="file"
@@ -341,14 +306,6 @@ export default function MobileHome({
         accept="image/*,video/*"
         style={{ display: 'none' }}
         onChange={handleGalleryFilesSelected}
-      />
-      <input
-        ref={freeSpaceInputRef}
-        type="file"
-        multiple
-        accept="image/*,video/*,audio/*"
-        style={{ display: 'none' }}
-        onChange={handleFreeSpaceFilesSelected}
       />
 
       {/* ── 1. Connected Cloud Capsule (هادئة وناعمة) ───────────────────────── */}
@@ -443,41 +400,11 @@ export default function MobileHome({
         </div>
       )}
 
-      {/* ── 2. Soft Storage Bar (مؤشر ذاكرة ناعم وخفيف) ────────────────────────── */}
-      <div style={{
-        background: colors.card,
-        borderRadius: 20,
-        padding: '14px 18px',
-        border: `1px solid ${colors.cardBorder}`,
-        boxShadow: colors.cardGlow,
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: 12 }}>
-          <span style={{ color: colors.text, fontWeight: 700 }}>
-            {isRtl ? 'ذاكرة الهاتف' : 'Phone Storage'}
-          </span>
-          <span style={{ color: colors.textMuted, fontSize: 11 }}>
-            {storageInfo.usedGB} GB {isRtl ? 'مستخدم من' : 'of'} {storageInfo.totalGB} GB ({storageInfo.percent}%)
-          </span>
-        </div>
-        <div style={{
-          width: '100%', height: 6, borderRadius: 99,
-          background: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            width: `${storageInfo.percent}%`, height: '100%',
-            borderRadius: 99,
-            background: storageInfo.percent > 85 ? '#ef4444' : '#3b82f6',
-            transition: 'width 0.4s ease',
-          }} />
-        </div>
-      </div>
-
-      {/* ── 3. Core Clean Action Card (بطاقة المزامنة الرئيسية الهادئة) ──────── */}
+      {/* ── 2. Core Clean Action Card (بطاقة المزامنة الموحدة بين جميع الهواتف) ──────── */}
       <div style={{
         background: colors.card,
         borderRadius: 24,
-        padding: '28px 20px',
+        padding: '32px 20px',
         border: `1px solid ${colors.cardBorder}`,
         boxShadow: colors.cardGlow,
         textAlign: 'center',
@@ -487,25 +414,63 @@ export default function MobileHome({
       }}>
         {/* Soft Icon */}
         <div style={{
-          width: 56, height: 56, borderRadius: 18,
+          width: 58, height: 58, borderRadius: 20,
           background: isDark ? 'rgba(37, 99, 235, 0.12)' : 'rgba(37, 99, 235, 0.08)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#3b82f6', marginBottom: 14,
+          color: '#3b82f6', marginBottom: 16,
         }}>
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
             <circle cx="12" cy="13" r="4"/>
           </svg>
         </div>
 
-        <h2 style={{ fontSize: 17, fontWeight: 800, color: colors.text, margin: '0 0 6px' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: colors.text, margin: '0 0 6px' }}>
           {isRtl ? 'مزامنة معرض الهاتف' : 'Sync Phone Gallery'}
         </h2>
-        <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 22px', maxWidth: 300, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 16px', maxWidth: 300, lineHeight: 1.5 }}>
           {isRtl
-            ? `نسخ احتياطي فوري لجميع الصور والفيديوهات وحفظها في مجلد ${AURASYNC_MOBILE_FOLDER} في سحابتك بأمان.`
-            : `Safely backup all your photos and videos to ${AURASYNC_MOBILE_FOLDER} in your cloud.`}
+            ? `مزامنة سحابية موحدة لجميع الصور والفيديوهات بين كافة هواتفك وحاسوبك تلقائياً.`
+            : `Unified cloud sync for all photos & videos across all your phones and PC.`}
         </p>
+
+        {/* Multi-Device Sync Live Status Pill (Interactive tap to sync with all devices) */}
+        <div
+          onClick={handleManualSync}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 14px',
+            borderRadius: 999,
+            background: isDark ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.12)',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+            color: '#10b981',
+            fontSize: 11,
+            fontWeight: 700,
+            marginBottom: 20,
+            cursor: 'pointer',
+            userSelect: 'none',
+            transition: 'all 0.2s ease',
+          }}
+          title={isRtl ? 'اضغط للمزامنة الفورية مع باقي الهواتف' : 'Tap to sync with all phones now'}
+        >
+          <span style={{
+            fontSize: 12,
+            display: 'inline-block',
+            animation: isManualSyncing ? 'spin 1s linear infinite' : 'none',
+          }}>
+            🔄
+          </span>
+          <span>
+            {isManualSyncing
+              ? (isRtl ? 'جاري مزامنة الملفات من الأجهزة...' : 'Syncing device files…')
+              : (uploadedFiles.length > 0
+                  ? (isRtl ? `مزامنة الأجهزة نشطة (${uploadedFiles.length} ملف متزامن)` : `Device Sync Active (${uploadedFiles.length} files synced)`)
+                  : (isRtl ? 'مزامنة الأجهزة نشطة عبر نفس الحساب' : 'Device Sync Active via Same Account'))
+            }
+          </span>
+        </div>
 
         {/* Primary Action Button */}
         <button
@@ -513,7 +478,7 @@ export default function MobileHome({
           disabled={isBackingUpGallery}
           style={{
             width: '100%',
-            padding: '14px 20px',
+            padding: '15px 20px',
             borderRadius: 16,
             border: 'none',
             background: '#2563eb',
@@ -525,7 +490,7 @@ export default function MobileHome({
             alignItems: 'center',
             justifyContent: 'center',
             gap: 8,
-            boxShadow: '0 4px 16px rgba(37, 99, 235, 0.3)',
+            boxShadow: '0 4px 18px rgba(37, 99, 235, 0.35)',
             transition: 'all 0.2s ease',
           }}
         >
@@ -535,7 +500,7 @@ export default function MobileHome({
                 <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
                 <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
               </svg>
-              <span>{isRtl ? `جاري النقل المشفر (${galleryProgress}%)...` : `Transferring (${galleryProgress}%)…`}</span>
+              <span>{isRtl ? `جاري المزامنة المشفرة (${galleryProgress}%)...` : `Syncing (${galleryProgress}%)…`}</span>
             </>
           ) : (
             <>
@@ -546,51 +511,10 @@ export default function MobileHome({
             </>
           )}
         </button>
-
-        {/* Soft Secondary Action: تفريغ مساحة الهاتف بناعومة */}
-        <button
-          onClick={handleStartFreeUpSpace}
-          disabled={isFreeingSpace}
-          style={{
-            marginTop: 14,
-            background: 'transparent',
-            border: 'none',
-            color: colors.textMuted,
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: isFreeingSpace ? 'wait' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 12px',
-            borderRadius: 12,
-          }}
-        >
-          <span>🧹</span>
-          <span>{isRtl ? 'تفريغ مساحة الهاتف بعد النسخ' : 'Free up phone storage after backup'}</span>
-        </button>
-
-        {/* Minimalist Footnote */}
-        <div style={{
-          marginTop: 18,
-          paddingTop: 16,
-          borderTop: `1px solid ${colors.cardBorder}`,
-          width: '100%',
-          fontSize: 11,
-          color: colors.textMuted,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 10,
-        }}>
-          <span>🔒 {isRtl ? 'تشفير آمن AES-256' : 'AES-256'}</span>
-          <span>•</span>
-          <span>🛡️ {isRtl ? 'سياسة عدم حذف الملفات' : 'Zero-Deletion Policy'}</span>
-        </div>
       </div>
 
       {/* ── 5. Transfer Progress Overlay ─────────────────────────────────────── */}
-      {(isBackingUpGallery || isFreeingSpace) && (
+      {isBackingUpGallery && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 100,
           background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(12px)',
@@ -616,9 +540,7 @@ export default function MobileHome({
             </div>
 
             <h3 style={{ fontSize: 16, fontWeight: 900, color: colors.text, margin: '0 0 6px' }}>
-              {isFreeingSpace
-                ? (isRtl ? 'جاري تفريغ مساحة الهاتف ونقل الملفات' : 'Freeing Device Storage & Transferring')
-                : (isRtl ? 'جاري نقل معرض الهاتف إلى السحابة' : 'Transferring Gallery to Cloud')}
+              {isRtl ? 'جاري نقل معرض الهاتف إلى السحابة ومزامنته' : 'Transferring Gallery to Cloud & Syncing'}
             </h3>
 
             <p style={{ fontSize: 11, color: colors.textMuted, margin: '0 0 16px', fontFamily: 'monospace' }}>

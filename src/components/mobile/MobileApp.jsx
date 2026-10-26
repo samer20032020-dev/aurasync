@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.29',
+  version = '1.0.30',
   accounts = [],
   storage = {},
   stats = {},
@@ -233,6 +233,7 @@ export default function MobileApp({
     setPressedTab(tabId);
     setTimeout(() => setPressedTab(null), 250);
     setActiveTab(tabId);
+    mobileEngine.syncCloudFiles().catch(() => {});
   }, [activeTab, triggerHaptic]);
 
   // Upload incoming shared files

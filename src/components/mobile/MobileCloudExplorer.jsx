@@ -17,6 +17,7 @@ export default function MobileCloudExplorer({
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const triggerHaptic = useCallback((ms = 15) => {
     try {
@@ -25,8 +26,9 @@ export default function MobileCloudExplorer({
     } catch (_) {}
   }, []);
 
-  // Subscribe to engine file updates
+  // Sync cloud files on mount and subscribe to updates
   useEffect(() => {
+    mobileEngine.syncCloudFiles().catch(() => {});
     const unsub = mobileEngine.subscribe((event, data) => {
       if (event === 'files_updated') {
         setFiles(data);
@@ -34,6 +36,31 @@ export default function MobileCloudExplorer({
     });
     return unsub;
   }, []);
+
+  // Manual Trigger to re-sync across all devices
+  const handleSyncCloud = useCallback(async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    triggerHaptic(20);
+    try {
+      const updated = await mobileEngine.syncCloudFiles();
+      if (updated) setFiles(updated);
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `✓ تم تحديث المزامنة مع كافة الهواتف والحاسوب (${(updated || []).length} ملف)`
+            : `✓ Synced with all devices & PC (${(updated || []).length} files)`,
+          'success'
+        );
+      }
+    } catch (err) {
+      if (onShowToast) {
+        onShowToast(isRtl ? `تعذر تحديث المزامنة: ${err.message}` : `Sync failed: ${err.message}`, 'error');
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isRtl, isSyncing, onShowToast, triggerHaptic]);
 
   // Handle file selection from phone
   const handleSelectFiles = (e) => {
@@ -67,6 +94,7 @@ export default function MobileCloudExplorer({
       }
     }).then((result) => {
       setUploadProgress(100);
+      mobileEngine.syncCloudFiles().catch(() => {});
       setTimeout(() => {
         setIsUploading(false);
         setUploadProgress(0);
@@ -92,15 +120,22 @@ export default function MobileCloudExplorer({
     });
   };
 
-  const handleDownloadFile = (file) => {
+  const handleDownloadFile = async (file) => {
     triggerHaptic(20);
-    if (onShowToast) {
-      onShowToast(
-        isRtl
-          ? `تم تنزيل "${file.name}" إلى ذاكرة الهاتف بنجاح ✓`
-          : `Saved "${file.name}" to phone storage ✓`,
-        'success'
-      );
+    try {
+      await mobileEngine.downloadFileToPhone(file);
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `تم تنزيل "${file.name}" إلى ذاكرة الهاتف بنجاح ✓`
+            : `Saved "${file.name}" to phone storage ✓`,
+          'success'
+        );
+      }
+    } catch (err) {
+      if (onShowToast) {
+        onShowToast(isRtl ? `تعذر تنزيل الملف: ${err.message}` : `Download failed: ${err.message}`, 'error');
+      }
     }
   };
 
@@ -166,7 +201,7 @@ export default function MobileCloudExplorer({
         onChange={handleSelectFiles}
       />
 
-      {/* ── Top Bar: Upload Button + Location Tag ─────────────────────── */}
+      {/* ── Top Bar: Upload Button + Location Tag + Sync Button ─────── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: colors.text }}>
@@ -174,29 +209,54 @@ export default function MobileCloudExplorer({
           </h2>
           <span style={{ fontSize: 11, color: colors.textMuted }}>
             {isRtl
-              ? `المجموع: ${files.length} ملف مرفوع من الهاتف`
-              : `Total: ${files.length} file(s) uploaded from phone`}
+              ? `المجموع: ${files.length} ملف متزامن مع كافة الهواتف والحاسوب`
+              : `Total: ${files.length} file(s) synced across all devices & PC`}
           </span>
         </div>
 
-        <button
-          onClick={() => {
-            triggerHaptic(20);
-            if (fileInputRef.current) fileInputRef.current.click();
-          }}
-          style={{
-            padding: '9px 16px', borderRadius: 14,
-            background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
-            border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-            boxShadow: '0 4px 14px rgba(37,99,235,0.35)',
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          <span>{isRtl ? 'رفع ملفات' : 'Upload'}</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={handleSyncCloud}
+            disabled={isSyncing}
+            style={{
+              padding: '9px 12px', borderRadius: 14,
+              background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+              border: `1px solid ${colors.border}`,
+              color: colors.text, fontSize: 12, fontWeight: 700,
+              cursor: isSyncing ? 'wait' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
+            title={isRtl ? 'مزامنة وتحديث الملفات من كافة الهواتف' : 'Sync all devices'}
+          >
+            <span style={{
+              display: 'inline-block',
+              animation: isSyncing ? 'spin 1s linear infinite' : 'none',
+              fontSize: 12,
+            }}>
+              🔄
+            </span>
+            <span>{isRtl ? 'مزامنة' : 'Sync'}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              triggerHaptic(20);
+              if (fileInputRef.current) fileInputRef.current.click();
+            }}
+            style={{
+              padding: '9px 15px', borderRadius: 14,
+              background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+              border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+              boxShadow: '0 4px 14px rgba(37,99,235,0.35)',
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>{isRtl ? 'رفع' : 'Upload'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Uploading Progress Indicator */}

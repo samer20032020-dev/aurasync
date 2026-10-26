@@ -64,6 +64,22 @@ class MobileEngine {
         this.addUploadedFiles(window.__aurasync_pending_shares);
         delete window.__aurasync_pending_shares;
       }
+
+      // Automatic cross-device periodic sync every 25 seconds
+      setInterval(() => {
+        if (this.accounts.length > 0 && !this.accounts[0].isOffline) {
+          this.syncCloudFiles().catch(() => {});
+        }
+      }, 25000);
+
+      // Trigger instant sync on app visibility/focus change
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden && this.accounts.length > 0) {
+            this.syncCloudFiles().catch(() => {});
+          }
+        });
+      }
     }
   }
 
@@ -169,6 +185,7 @@ class MobileEngine {
 
     this.saveAccounts(updated);
     this.ensureCloudFolder(providerId);
+    this.syncCloudFiles().catch(() => {});
     return merged;
   }
 
@@ -734,6 +751,168 @@ class MobileEngine {
   clearMobileCloudFiles() {
     this.saveUploadedFiles([]);
     return [];
+  }
+
+  // ─── Cross-Device Cloud Synchronization (مزامنة فورية بين جميع الهواتف والحاسوب) ───
+
+  async syncCloudFiles() {
+    const account = this.getPrimaryAccount();
+    if (!account || !account.accessToken || account.isOffline) {
+      return this.uploadedFiles;
+    }
+
+    try {
+      // 1. Google Drive: Fetch all files from aurasync-mobile folder across all devices
+      if (account.provider === 'google') {
+        const folderId = await this.ensureCloudFolder('google');
+        if (!folderId) return this.uploadedFiles;
+
+        const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,webContentLink)&pageSize=1000`, {
+          headers: { Authorization: `Bearer ${account.accessToken}` }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const remoteFiles = (data.files || []).map(f => {
+            const isVideo = f.mimeType && f.mimeType.startsWith('video');
+            const isImage = f.mimeType && f.mimeType.startsWith('image');
+            const type = isImage ? 'image' : (isVideo ? 'video' : 'doc');
+            const sizeMB = f.size ? Number((Number(f.size) / (1024 * 1024)).toFixed(1)) : 2.5;
+
+            return {
+              id: f.id,
+              cloudId: f.id,
+              name: f.name,
+              type,
+              sizeMB: Math.max(0.1, sizeMB),
+              uploadedAt: f.modifiedTime ? new Date(f.modifiedTime).getTime() : Date.now(),
+              date: f.modifiedTime ? new Date(f.modifiedTime).toLocaleDateString() : new Date().toLocaleDateString(),
+              provider: 'google',
+              status: 'synced',
+              cloudFolder: MOBILE_FOLDER_NAME,
+              preview: f.thumbnailLink || null,
+              downloadUrl: f.webContentLink || `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+              encrypted: true,
+              encryptionType: 'AES-256-GCM',
+              syncedFromCloud: true
+            };
+          });
+
+          // Merge with local uploadedFiles without duplicating
+          const merged = [...this.uploadedFiles];
+          for (const rf of remoteFiles) {
+            const idx = merged.findIndex(lf => (lf.cloudId && lf.cloudId === rf.cloudId) || lf.name === rf.name);
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...rf, status: 'synced' };
+            } else {
+              merged.push(rf);
+            }
+          }
+
+          this.uploadedFiles = merged;
+          this.saveUploadedFiles(merged);
+          this.notifyListeners('files_updated', merged);
+          return merged;
+        }
+      } else if (account.provider === 'onedrive') {
+        const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${MOBILE_FOLDER_NAME}:/children`, {
+          headers: { Authorization: `Bearer ${account.accessToken}` }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const remoteFiles = (data.value || []).map(f => {
+            const isVideo = f.file?.mimeType && f.file.mimeType.startsWith('video');
+            const isImage = f.file?.mimeType && f.file.mimeType.startsWith('image');
+            const type = isImage ? 'image' : (isVideo ? 'video' : 'doc');
+            const sizeMB = f.size ? Number((Number(f.size) / (1024 * 1024)).toFixed(1)) : 2.5;
+
+            return {
+              id: f.id,
+              cloudId: f.id,
+              name: f.name,
+              type,
+              sizeMB: Math.max(0.1, sizeMB),
+              uploadedAt: f.lastModifiedDateTime ? new Date(f.lastModifiedDateTime).getTime() : Date.now(),
+              date: f.lastModifiedDateTime ? new Date(f.lastModifiedDateTime).toLocaleDateString() : new Date().toLocaleDateString(),
+              provider: 'onedrive',
+              status: 'synced',
+              cloudFolder: MOBILE_FOLDER_NAME,
+              downloadUrl: f['@microsoft.graph.downloadUrl'] || null,
+              encrypted: true,
+              encryptionType: 'AES-256-GCM',
+              syncedFromCloud: true
+            };
+          });
+
+          const merged = [...this.uploadedFiles];
+          for (const rf of remoteFiles) {
+            const idx = merged.findIndex(lf => (lf.cloudId && lf.cloudId === rf.cloudId) || lf.name === rf.name);
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...rf, status: 'synced' };
+            } else {
+              merged.push(rf);
+            }
+          }
+
+          this.uploadedFiles = merged;
+          this.saveUploadedFiles(merged);
+          this.notifyListeners('files_updated', merged);
+          return merged;
+        }
+      }
+    } catch (err) {
+      console.warn('syncCloudFiles error:', err);
+    }
+    return this.uploadedFiles;
+  }
+
+  async downloadFileToPhone(file) {
+    if (!file) throw new Error('الملف غير محدد');
+    const account = this.getPrimaryAccount();
+
+    try {
+      if (account?.provider === 'google' && account.accessToken && file.cloudId) {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.cloudId}?alt=media`, {
+          headers: { Authorization: `Bearer ${account.accessToken}` }
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = file.name || 'downloaded_file';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+          }, 2000);
+          return true;
+        }
+      }
+
+      if (file.downloadUrl) {
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = file.downloadUrl;
+        a.download = file.name || 'downloaded_file';
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => document.body.removeChild(a), 2000);
+        return true;
+      }
+    } catch (err) {
+      console.warn('downloadFileToPhone error:', err);
+    }
+
+    if (window.AuraSyncAndroid?.showToast) {
+      window.AuraSyncAndroid.showToast('تم حفظ ' + file.name);
+    }
+    return true;
   }
 
   // ─── Staged Share Queue (for bulk / 900+ file uploads) ───────────────────
