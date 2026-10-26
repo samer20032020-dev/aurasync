@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.33',
+  version = '1.0.34',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -51,6 +51,8 @@ export default function MobileHome({
   const isRtl = language === 'ar';
   const isDark = theme === 'dark';
   const galleryInputRef = useRef(null);
+  const filesInputRef = useRef(null);
+  const [transferMode, setTransferMode] = useState('gallery'); // 'files' | 'gallery'
 
   const [accounts, setAccounts] = useState(() => mobileEngine.accounts || []);
   const [uploadedFiles, setUploadedFiles] = useState(() => mobileEngine.uploadedFiles || []);
@@ -108,8 +110,8 @@ export default function MobileHome({
     }
   }, [isManualSyncing, isRtl, onShowToast, triggerHaptic]);
 
-  // Execute real gallery backup to cloud and sync across devices
-  const executeTransfer = useCallback(async (fileArray) => {
+  // Execute real backup to cloud and sync across devices
+  const executeTransfer = useCallback(async (fileArray, subFolder = '') => {
     if (!fileArray || fileArray.length === 0) return;
 
     if (accounts.length === 0) {
@@ -131,7 +133,7 @@ export default function MobileHome({
     const totalCount = fileArray.length;
 
     // Acquire WakeLock so background execution continues even with screen off
-    mobileEngine.acquireWakeLock(1800000);
+    mobileEngine.acquireWakeLock(3600000);
 
     triggerHaptic(30);
     setIsBackingUpGallery(true);
@@ -139,9 +141,13 @@ export default function MobileHome({
     setGalleryProgress(5);
     setGalleryStats({ photos, videos, total: totalCount });
 
+    const cleanSub = subFolder ? String(subFolder).trim().replace(/^\/+|\/+$/g, '') : '';
+    const targetFolderDisplay = cleanSub ? `${AURASYNC_MOBILE_FOLDER}/${cleanSub}` : AURASYNC_MOBILE_FOLDER;
+
     try {
       const result = await mobileEngine.uploadBatch(fileArray, {
         account: accounts[0],
+        subFolder: cleanSub,
         onProgress: ({ overallPercent, currentFileName, speedMBps }) => {
           setGalleryProgress(overallPercent);
           setGalleryCurrentFile(currentFileName);
@@ -166,8 +172,8 @@ export default function MobileHome({
         if (onShowToast) {
           onShowToast(
             isRtl
-              ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName} بنجاح ومزامنته فوراً!`
-              : `✓ Transferred ${successCount.toLocaleString()} files to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName} and synced!`,
+              ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${targetFolderDisplay} في ${targetCloudName} بنجاح ومزامنته فوراً!`
+              : `✓ Transferred ${successCount.toLocaleString()} files to ${targetFolderDisplay} in ${targetCloudName} and synced!`,
             'success'
           );
         }
@@ -182,50 +188,120 @@ export default function MobileHome({
     }
   }, [accounts, isRtl, onShowToast, triggerHaptic]);
 
-  // Gallery file picker change
-  const handleGalleryFilesSelected = useCallback((e) => {
-    const selected = e.target.files;
-    if (!selected || selected.length === 0) return;
-
-    if (accounts.length === 0) {
-      triggerHaptic(30);
-      if (e.target) e.target.value = '';
-      if (onShowToast) {
-        onShowToast(
-          isRtl
-            ? '⚠️ يرجى ربط حساب سحابي أولاً (Google Drive أو OneDrive) لنقل المعرض إليه!'
-            : '⚠️ Please connect a cloud account first to transfer your gallery!',
-          'warn'
-        );
-      }
-      setShowAddModal(true);
-      return;
-    }
-
-    const fileArray = Array.from(selected);
-    if (e.target) e.target.value = '';
-    executeTransfer(fileArray);
-  }, [accounts, executeTransfer, isRtl, onShowToast, triggerHaptic]);
-
-  // One-click Gallery Transfer button
-  const handleStartGalleryTransfer = useCallback(() => {
+  // Option 1: مزامنة ملفات (حفظ أي ملفات في aurasync-mobile مباشرة)
+  const handleStartFilesSync = useCallback(() => {
     triggerHaptic(25);
     if (accounts.length === 0) {
       if (onShowToast) {
         onShowToast(
           isRtl
-            ? '⚠️ اختر سحابتك أولاً (Google Drive / OneDrive / Dropbox) لإنشاء مجلد AuraSync-mobile فيها'
-            : '⚠️ Connect a cloud account first to create the AuraSync-mobile folder',
+            ? '⚠️ اختر سحابتك أولاً (Google Drive / OneDrive / Dropbox) لمزامنة الملفات فيها'
+            : '⚠️ Connect a cloud account first to sync files',
           'warn'
         );
       }
       setShowAddModal(true);
       return;
     }
+    setTransferMode('files');
+    if (filesInputRef.current) {
+      filesInputRef.current.click();
+    }
+  }, [accounts.length, isRtl, onShowToast, triggerHaptic]);
+
+  const handleGeneralFilesSelected = useCallback((e) => {
+    const selected = e.target.files;
+    if (!selected || selected.length === 0) return;
+    const fileArray = Array.from(selected);
+    if (e.target) e.target.value = '';
+    setTransferMode('files');
+    executeTransfer(fileArray, '');
+  }, [executeTransfer]);
+
+  // Option 2: سحب المعرض كامل (سحب كل الصور والفيديوهات تلقائياً إلى aurasync-mobile/galary)
+  const handleStartGalleryTransfer = useCallback(async () => {
+    triggerHaptic(25);
+    if (accounts.length === 0) {
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? '⚠️ اختر سحابتك أولاً (Google Drive / OneDrive / Dropbox) لسحب المعرض إليها'
+            : '⚠️ Connect a cloud account first to transfer your gallery',
+          'warn'
+        );
+      }
+      setShowAddModal(true);
+      return;
+    }
+
+    setTransferMode('gallery');
+
+    // 1. Android Native automatic media pull (fetches all photos & videos from MediaStore)
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.getGalleryMediaTotalCount) {
+      let nativeCount = 0;
+      try {
+        nativeCount = window.AuraSyncAndroid.getGalleryMediaTotalCount();
+      } catch (_) {}
+
+      if (nativeCount > 0) {
+        setIsBackingUpGallery(true);
+        setGalleryDone(false);
+        setGalleryProgress(1);
+        setGalleryStats({ photos: nativeCount, videos: 0, total: nativeCount });
+        setGalleryCurrentFile(isRtl ? `جاري فحص وسحب ${nativeCount} ملف من المعرض...` : `Scanning ${nativeCount} gallery items…`);
+
+        try {
+          const res = await mobileEngine.pullEntireGalleryNative({
+            account: accounts[0],
+            onStatus: (st) => setGalleryCurrentFile(st),
+            onProgress: ({ overallPercent, currentFileName, speedMBps, fileIndex, totalFiles }) => {
+              setGalleryProgress(overallPercent);
+              setGalleryCurrentFile(currentFileName);
+              setGallerySpeed(speedMBps);
+              setGalleryStats({ photos: fileIndex, videos: 0, total: totalFiles });
+            }
+          });
+
+          setGalleryProgress(100);
+          triggerHaptic(60);
+          setTimeout(() => {
+            setIsBackingUpGallery(false);
+            setGalleryDone(true);
+            if (onShowToast) {
+              onShowToast(
+                isRtl
+                  ? `✓ تم سحب ونقل المعرض بالكامل (${res.successful.length.toLocaleString()} ملف) إلى مجلد ${AURASYNC_MOBILE_FOLDER}/galary بنجاح ومزامنته!`
+                  : `✓ Pulled and synced ${res.successful.length.toLocaleString()} items to ${AURASYNC_MOBILE_FOLDER}/galary!`,
+                'success'
+              );
+            }
+          }, 600);
+          return;
+        } catch (err) {
+          setIsBackingUpGallery(false);
+          if (onShowToast) {
+            onShowToast(isRtl ? `خطأ أثناء سحب المعرض: ${err.message}` : `Gallery pull error: ${err.message}`, 'error');
+          }
+          return;
+        }
+      }
+    }
+
+    // 2. Web browser / Simulator fallback to gallery picker
     if (galleryInputRef.current) {
       galleryInputRef.current.click();
     }
-  }, [accounts.length, isRtl, onShowToast, triggerHaptic]);
+  }, [accounts, isRtl, onShowToast, triggerHaptic]);
+
+  const handleGalleryFilesSelected = useCallback((e) => {
+    const selected = e.target.files;
+    if (!selected || selected.length === 0) return;
+    const fileArray = Array.from(selected);
+    if (e.target) e.target.value = '';
+    setTransferMode('gallery');
+    executeTransfer(fileArray, 'galary');
+  }, [executeTransfer]);
+
   const handleStartGalleryBackup = handleStartGalleryTransfer;
 
   // One-click Free Up Device Space (128GB)
@@ -298,7 +374,16 @@ export default function MobileHome({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Hidden file input for native photo/video picker */}
+      {/* Hidden file input for general files sync (Option 1: مزامنة ملفات -> aurasync-mobile) */}
+      <input
+        ref={filesInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleGeneralFilesSelected}
+      />
+
+      {/* Hidden file input for gallery picker fallback (Option 2: سحب المعرض -> aurasync-mobile/galary) */}
       <input
         ref={galleryInputRef}
         type="file"
@@ -400,117 +485,266 @@ export default function MobileHome({
         </div>
       )}
 
-      {/* ── 2. Core Clean Action Card (بطاقة المزامنة الموحدة بين جميع الهواتف) ──────── */}
+      {/* ── 2. Unified Cloud Transfer & Sync Hub (الخيارين: 1- مزامنة ملفات | 2- سحب المعرض كامل) ── */}
       <div style={{
         background: colors.card,
         borderRadius: 24,
-        padding: '32px 20px',
+        padding: '24px 18px',
         border: `1px solid ${colors.cardBorder}`,
         boxShadow: colors.cardGlow,
-        textAlign: 'center',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
+        gap: 16,
       }}>
-        {/* Soft Icon */}
-        <div style={{
-          width: 58, height: 58, borderRadius: 20,
-          background: isDark ? 'rgba(37, 99, 235, 0.12)' : 'rgba(37, 99, 235, 0.08)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#3b82f6', marginBottom: 16,
-        }}>
-          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-            <circle cx="12" cy="13" r="4"/>
-          </svg>
-        </div>
-
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: colors.text, margin: '0 0 6px' }}>
-          {isRtl ? 'مزامنة معرض الهاتف' : 'Sync Phone Gallery'}
-        </h2>
-        <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 16px', maxWidth: 300, lineHeight: 1.5 }}>
-          {isRtl
-            ? `مزامنة سحابية موحدة لجميع الصور والفيديوهات بين كافة هواتفك وحاسوبك تلقائياً.`
-            : `Unified cloud sync for all photos & videos across all your phones and PC.`}
-        </p>
-
-        {/* Multi-Device Sync Live Status Pill (Interactive tap to sync with all devices) */}
-        <div
-          onClick={handleManualSync}
-          style={{
+        {/* Top Header & Multi-Device Sync Pill */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
-            padding: '6px 14px',
-            borderRadius: 999,
-            background: isDark ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.12)',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
-            color: '#10b981',
-            fontSize: 11,
-            fontWeight: 700,
-            marginBottom: 20,
-            cursor: 'pointer',
-            userSelect: 'none',
-            transition: 'all 0.2s ease',
-          }}
-          title={isRtl ? 'اضغط للمزامنة الفورية مع باقي الهواتف' : 'Tap to sync with all phones now'}
-        >
-          <span style={{
-            fontSize: 12,
-            display: 'inline-block',
-            animation: isManualSyncing ? 'spin 1s linear infinite' : 'none',
+            justifyContent: 'center',
+            width: 52, height: 52, borderRadius: 18,
+            background: isDark ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(124, 58, 237, 0.2))' : 'linear-gradient(135deg, #dbeafe, #ede9fe)',
+            color: '#3b82f6', marginBottom: 12,
+            boxShadow: '0 4px 16px rgba(37, 99, 235, 0.15)',
           }}>
-            🔄
-          </span>
-          <span>
-            {isManualSyncing
-              ? (isRtl ? 'جاري مزامنة الملفات من الأجهزة...' : 'Syncing device files…')
-              : (uploadedFiles.length > 0
-                  ? (isRtl ? `مزامنة الأجهزة نشطة (${uploadedFiles.length} ملف متزامن)` : `Device Sync Active (${uploadedFiles.length} files synced)`)
-                  : (isRtl ? 'مزامنة الأجهزة نشطة عبر نفس الحساب' : 'Device Sync Active via Same Account'))
-            }
-          </span>
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+              <polyline points="12 13 12 9 10 11"/>
+            </svg>
+          </div>
+
+          <h2 style={{ fontSize: 17, fontWeight: 900, color: colors.text, margin: '0 0 4px' }}>
+            {isRtl ? 'مركز النقل والمزامنة السحابية' : 'Cloud Sync & Media Transfer'}
+          </h2>
+          <p style={{ fontSize: 11, color: colors.textMuted, margin: '0 0 14px', lineHeight: 1.5 }}>
+            {isRtl
+              ? 'اختر نوع العملية لحفظ بياناتك في سحابتك ومزامنتها بين أجهزتك فوراً'
+              : 'Select transfer mode to backup and sync your data with other devices'}
+          </p>
+
+          {/* Device Sync Status Pill */}
+          <div
+            onClick={handleManualSync}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 12px',
+              borderRadius: 999,
+              background: isDark ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.12)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              color: '#10b981',
+              fontSize: 10,
+              fontWeight: 700,
+              cursor: 'pointer',
+              userSelect: 'none',
+              transition: 'all 0.2s ease',
+            }}
+            title={isRtl ? 'اضغط لتحديث المزامنة مع كافة الهواتف' : 'Tap to sync with all phones now'}
+          >
+            <span style={{
+              fontSize: 11,
+              display: 'inline-block',
+              animation: isManualSyncing ? 'spin 1s linear infinite' : 'none',
+            }}>
+              🔄
+            </span>
+            <span>
+              {isManualSyncing
+                ? (isRtl ? 'جاري المزامنة مع الأجهزة...' : 'Syncing with devices…')
+                : (uploadedFiles.length > 0
+                    ? (isRtl ? `مزامنة الأجهزة نشطة (${uploadedFiles.length} ملف)` : `Device Sync Active (${uploadedFiles.length} files)`)
+                    : (isRtl ? 'مزامنة الأجهزة نشطة عبر نفس الحساب' : 'Device Sync Active via Same Account'))
+              }
+            </span>
+          </div>
         </div>
 
-        {/* Primary Action Button */}
-        <button
-          onClick={handleStartGalleryTransfer}
-          disabled={isBackingUpGallery}
-          style={{
-            width: '100%',
-            padding: '15px 20px',
-            borderRadius: 16,
-            border: 'none',
-            background: '#2563eb',
-            color: '#ffffff',
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: isBackingUpGallery ? 'wait' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            boxShadow: '0 4px 18px rgba(37, 99, 235, 0.35)',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          {isBackingUpGallery ? (
-            <>
-              <svg className="animate-spin" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
-              </svg>
-              <span>{isRtl ? `جاري المزامنة المشفرة (${galleryProgress}%)...` : `Syncing (${galleryProgress}%)…`}</span>
-            </>
-          ) : (
-            <>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <span>{isRtl ? 'مزامنة الصور والفيديوهات الآن' : 'Sync Photos & Videos Now'}</span>
-            </>
-          )}
-        </button>
+        {/* ── Option 1: مزامنة ملفات ── */}
+        <div style={{
+          background: isDark ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc',
+          borderRadius: 18,
+          padding: '16px',
+          border: `1px solid ${isDark ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.2)'}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          transition: 'all 0.2s ease',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: 12,
+                background: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.12)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#3b82f6', fontSize: 18,
+              }}>
+                📁
+              </div>
+              <div style={{ textAlign: isRtl ? 'right' : 'left' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0, color: colors.text }}>
+                  {isRtl ? '1. مزامنة ملفات' : '1. Sync Files'}
+                </h3>
+                <span style={{ fontSize: 10, color: colors.textMuted }}>
+                  {isRtl ? 'مستندات، أرشيف، ملفات عامة، أو وسائط' : 'Documents, archives, media or any files'}
+                </span>
+              </div>
+            </div>
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 8,
+              background: isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
+              color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.25)',
+              fontFamily: 'monospace',
+            }}>
+              /{AURASYNC_MOBILE_FOLDER}
+            </span>
+          </div>
+
+          <p style={{ fontSize: 11, color: colors.textMuted, margin: 0, lineHeight: 1.4, textAlign: isRtl ? 'right' : 'left' }}>
+            {isRtl
+              ? 'مزامنة واختيار أي ملفات أو وسائط وحفظها مباشرة داخل مجلد السحابة الرئيسي.'
+              : 'Choose any files and sync them directly to your root cloud folder.'}
+          </p>
+
+          <button
+            onClick={handleStartFilesSync}
+            disabled={isBackingUpGallery}
+            style={{
+              width: '100%',
+              padding: '11px 14px',
+              borderRadius: 12,
+              border: `1px solid ${isDark ? 'rgba(59, 130, 246, 0.35)' : 'rgba(59, 130, 246, 0.3)'}`,
+              background: isDark ? 'rgba(59, 130, 246, 0.1)' : '#eff6ff',
+              color: '#3b82f6',
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: isBackingUpGallery ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <span>📂</span>
+            <span>{isRtl ? 'اختيار ومزامنة ملفات الآن' : 'Select & Sync Files Now'}</span>
+          </button>
+        </div>
+
+        {/* ── Option 2: سحب المعرض كامل (PRO Highlighted) ── */}
+        <div style={{
+          background: isDark
+            ? 'linear-gradient(145deg, rgba(37, 99, 235, 0.1) 0%, rgba(124, 58, 237, 0.12) 100%)'
+            : 'linear-gradient(145deg, #f0fdf4 0%, #ede9fe 100%)',
+          borderRadius: 18,
+          padding: '16px',
+          border: `1px solid ${isDark ? 'rgba(124, 58, 237, 0.35)' : 'rgba(124, 58, 237, 0.25)'}`,
+          boxShadow: isDark ? '0 6px 20px rgba(124, 58, 237, 0.12)' : '0 4px 14px rgba(124, 58, 237, 0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          {/* Top Badge */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{
+              fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 999,
+              background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+              color: '#ffffff', boxShadow: '0 2px 8px rgba(124, 58, 237, 0.3)',
+            }}>
+              {isRtl ? '⚡ نقل شامل وتلقائي' : '⚡ Full Auto-Transfer'}
+            </span>
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 8,
+              background: isDark ? 'rgba(124, 58, 237, 0.18)' : '#f5f3ff',
+              color: '#a855f7', border: '1px solid rgba(124, 58, 237, 0.3)',
+              fontFamily: 'monospace',
+            }}>
+              /{AURASYNC_MOBILE_FOLDER}/galary
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 12,
+              background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#ffffff', fontSize: 18,
+              boxShadow: '0 3px 12px rgba(37, 99, 235, 0.3)',
+            }}>
+              📸
+            </div>
+            <div style={{ textAlign: isRtl ? 'right' : 'left', flex: 1 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 900, margin: 0, color: colors.text }}>
+                {isRtl ? '2. سحب المعرض كامل' : '2. Pull Entire Gallery'}
+              </h3>
+              <span style={{ fontSize: 10, color: colors.textMuted }}>
+                {isRtl ? 'سحب كل الصور والفيديوهات تلقائياً (حتى 40,000+ ملف)' : 'Automatic transfer for all photos & videos (40,000+ files)'}
+              </span>
+            </div>
+          </div>
+
+          <p style={{ fontSize: 11, color: colors.textMuted, margin: 0, lineHeight: 1.4, textAlign: isRtl ? 'right' : 'left' }}>
+            {isRtl
+              ? 'يسحب كل محتويات المعرض تلقائياً وينشئ مجلد galary مخصص داخل aurasync-mobile لنقل وحفظ الألبوم كاملاً.'
+              : 'Pulls your complete gallery and creates a dedicated galary folder inside aurasync-mobile.'}
+          </p>
+
+          <button
+            onClick={handleStartGalleryTransfer}
+            disabled={isBackingUpGallery}
+            style={{
+              width: '100%',
+              padding: '13px 16px',
+              borderRadius: 14,
+              border: 'none',
+              background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+              color: '#ffffff',
+              fontSize: 13,
+              fontWeight: 800,
+              cursor: isBackingUpGallery ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow: '0 4px 18px rgba(37, 99, 235, 0.35)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {isBackingUpGallery && transferMode === 'gallery' ? (
+              <>
+                <svg className="animate-spin" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+                  <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
+                </svg>
+                <span>{isRtl ? `جاري سحب المعرض (${galleryProgress}%)...` : `Pulling Gallery (${galleryProgress}%)…`}</span>
+              </>
+            ) : (
+              <>
+                <span>🚀</span>
+                <span>{isRtl ? 'سحب المعرض كامل إلى السحابة الآن' : 'Pull Entire Gallery to Cloud Now'}</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Feature Badges Footer */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-around',
+          paddingTop: 4,
+          fontSize: 10,
+          fontWeight: 700,
+          color: colors.textMuted,
+        }}>
+          <span>✨ {isRtl ? 'جودة أصلية 100%' : '100% Original Quality'}</span>
+          <span>•</span>
+          <span>⚡ {isRtl ? 'سرعة فائقة' : 'Ultra Fast'}</span>
+          <span>•</span>
+          <span>🔒 {isRtl ? 'حفظ مشفر' : 'Encrypted Safe'}</span>
+        </div>
       </div>
 
       {/* ── 5. Transfer Progress Overlay ─────────────────────────────────────── */}
@@ -540,11 +774,13 @@ export default function MobileHome({
             </div>
 
             <h3 style={{ fontSize: 16, fontWeight: 900, color: colors.text, margin: '0 0 6px' }}>
-              {isRtl ? 'جاري نقل معرض الهاتف إلى السحابة ومزامنته' : 'Transferring Gallery to Cloud & Syncing'}
+              {transferMode === 'gallery'
+                ? (isRtl ? 'جاري سحب المعرض كامل إلى مجلد galary' : 'Pulling entire gallery to galary folder')
+                : (isRtl ? 'جاري مزامنة الملفات إلى مجلد السحابة' : 'Syncing files to cloud folder')}
             </h3>
 
             <p style={{ fontSize: 11, color: colors.textMuted, margin: '0 0 16px', fontFamily: 'monospace' }}>
-              📁 {AURASYNC_MOBILE_FOLDER} • ⚡ {gallerySpeed} MB/s
+              📁 {AURASYNC_MOBILE_FOLDER}{transferMode === 'gallery' ? '/galary' : ''} • ⚡ {gallerySpeed} MB/s
             </p>
 
             {/* Progress Bar */}

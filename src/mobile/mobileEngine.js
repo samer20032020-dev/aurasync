@@ -295,61 +295,112 @@ class MobileEngine {
     return this.accounts[0];
   }
 
-  async ensureCloudFolder(providerId = 'google') {
-    if (this.cloudFolderCache && this.cloudFolderCache[providerId]) {
-      return this.cloudFolderCache[providerId];
+  async ensureCloudFolder(providerId = 'google', subFolder = null) {
+    const cleanSub = subFolder ? String(subFolder).trim().replace(/^\/+|\/+$/g, '') : null;
+    const cacheKey = cleanSub ? `${providerId}_${cleanSub}` : providerId;
+
+    if (this.cloudFolderCache && this.cloudFolderCache[cacheKey]) {
+      return this.cloudFolderCache[cacheKey];
     }
 
     const account = (this.accounts || []).find(a => a.id === providerId || a.provider === providerId) || this.getPrimaryAccount();
 
-    // 1. Google Drive: search or create "aurasync-mobile" folder in Google Drive
+    // 1. Google Drive: search or create "aurasync-mobile" and optional subfolder (e.g., "galary")
     if (account && account.provider === 'google' && account.accessToken) {
       try {
-        const q = encodeURIComponent(`mimeType = 'application/vnd.google-apps.folder' and name = '${MOBILE_FOLDER_NAME}' and trashed = false`);
-        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`, {
-          headers: { Authorization: `Bearer ${account.accessToken}` }
-        });
+        let parentFolderId = this.cloudFolderCache && this.cloudFolderCache['google'];
 
-        if (searchRes.ok) {
-          const data = await searchRes.json();
-          if (data.files && data.files.length > 0) {
-            this.cloudFolderCache[providerId] = data.files[0].id;
-            this.notifyListeners('cloud_folder_created', { folder: MOBILE_FOLDER_NAME, providerId: 'google', folderId: data.files[0].id });
-            return data.files[0].id;
+        if (!parentFolderId) {
+          const q = encodeURIComponent(`mimeType = 'application/vnd.google-apps.folder' and name = '${MOBILE_FOLDER_NAME}' and trashed = false`);
+          const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`, {
+            headers: { Authorization: `Bearer ${account.accessToken}` }
+          });
+
+          if (searchRes.ok) {
+            const data = await searchRes.json();
+            if (data.files && data.files.length > 0) {
+              parentFolderId = data.files[0].id;
+              this.cloudFolderCache['google'] = parentFolderId;
+            }
+          }
+
+          if (!parentFolderId) {
+            // Create folder in Google Drive root
+            const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${account.accessToken}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                name: MOBILE_FOLDER_NAME,
+                mimeType: 'application/vnd.google-apps.folder',
+                description: 'AuraSync Mobile gallery & media cloud storage'
+              })
+            });
+
+            if (createRes.ok) {
+              const created = await createRes.json();
+              if (created.id) {
+                parentFolderId = created.id;
+                this.cloudFolderCache['google'] = parentFolderId;
+                this.notifyListeners('cloud_folder_created', { folder: MOBILE_FOLDER_NAME, providerId: 'google', folderId: created.id });
+              }
+            }
           }
         }
 
-        // Create folder in Google Drive root
-        const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${account.accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name: MOBILE_FOLDER_NAME,
-            mimeType: 'application/vnd.google-apps.folder',
-            description: 'AuraSync Mobile gallery & media cloud storage'
-          })
-        });
+        if (!cleanSub) {
+          return parentFolderId || MOBILE_FOLDER_NAME;
+        }
 
-        if (createRes.ok) {
-          const created = await createRes.json();
-          if (created.id) {
-            this.cloudFolderCache[providerId] = created.id;
-            this.notifyListeners('cloud_folder_created', { folder: MOBILE_FOLDER_NAME, providerId: 'google', folderId: created.id });
-            return created.id;
+        // Subfolder creation / lookup (e.g., "galary")
+        if (parentFolderId) {
+          const subQ = encodeURIComponent(`mimeType = 'application/vnd.google-apps.folder' and name = '${cleanSub}' and '${parentFolderId}' in parents and trashed = false`);
+          const subSearchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${subQ}&fields=files(id,name)&spaces=drive`, {
+            headers: { Authorization: `Bearer ${account.accessToken}` }
+          });
+          if (subSearchRes.ok) {
+            const subData = await subSearchRes.json();
+            if (subData.files && subData.files.length > 0) {
+              this.cloudFolderCache[cacheKey] = subData.files[0].id;
+              return subData.files[0].id;
+            }
+          }
+
+          // Create subfolder inside parent
+          const subCreateRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${account.accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: cleanSub,
+              mimeType: 'application/vnd.google-apps.folder',
+              parents: [parentFolderId],
+              description: `AuraSync Mobile ${cleanSub} storage`
+            })
+          });
+          if (subCreateRes.ok) {
+            const subCreated = await subCreateRes.json();
+            if (subCreated.id) {
+              this.cloudFolderCache[cacheKey] = subCreated.id;
+              return subCreated.id;
+            }
           }
         }
+        return parentFolderId || MOBILE_FOLDER_NAME;
       } catch (err) {
         console.warn('Google ensureCloudFolder error:', err);
       }
     }
 
-    // 2. Microsoft OneDrive: ensure folder in root
+    // 2. Microsoft OneDrive: ensure folder in root and optional subfolder
     if (account && account.provider === 'onedrive' && account.accessToken) {
       try {
-        const createRes = await fetch('https://graph.microsoft.com/v1.0/me/drive/root/children', {
+        const targetPath = cleanSub ? `${MOBILE_FOLDER_NAME}/${cleanSub}` : MOBILE_FOLDER_NAME;
+        await fetch('https://graph.microsoft.com/v1.0/me/drive/root/children', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${account.accessToken}`,
@@ -361,20 +412,31 @@ class MobileEngine {
             '@microsoft.graph.conflictBehavior': 'replace'
           })
         });
-        if (createRes.ok) {
-          const created = await createRes.json();
-          this.cloudFolderCache[providerId] = created.id || MOBILE_FOLDER_NAME;
-          this.notifyListeners('cloud_folder_created', { folder: MOBILE_FOLDER_NAME, providerId: 'onedrive', folderId: this.cloudFolderCache[providerId] });
-          return this.cloudFolderCache[providerId];
+        if (cleanSub) {
+          await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${MOBILE_FOLDER_NAME}:/children`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${account.accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: cleanSub,
+              folder: {},
+              '@microsoft.graph.conflictBehavior': 'replace'
+            })
+          });
         }
+        this.cloudFolderCache[cacheKey] = targetPath;
+        return targetPath;
       } catch (err) {
         console.warn('OneDrive ensureCloudFolder error:', err);
       }
     }
 
-    // 3. Dropbox: ensure folder
+    // 3. Dropbox: ensure folder and optional subfolder
     if (account && account.provider === 'dropbox' && account.accessToken) {
       try {
+        const targetPath = cleanSub ? `/${MOBILE_FOLDER_NAME}/${cleanSub}` : `/${MOBILE_FOLDER_NAME}`;
         await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
           method: 'POST',
           headers: {
@@ -382,12 +444,12 @@ class MobileEngine {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            path: `/${MOBILE_FOLDER_NAME}`,
+            path: targetPath,
             autorename: false
           })
         });
-        this.cloudFolderCache[providerId] = `/${MOBILE_FOLDER_NAME}`;
-        return `/${MOBILE_FOLDER_NAME}`;
+        this.cloudFolderCache[cacheKey] = targetPath;
+        return targetPath;
       } catch (err) {
         console.warn('Dropbox ensureCloudFolder error:', err);
       }
@@ -399,14 +461,17 @@ class MobileEngine {
         await window.electronAPI.ensureMobileFolder(providerId);
       } catch (_) {}
     }
-    this.notifyListeners('cloud_folder_created', { folder: MOBILE_FOLDER_NAME, providerId });
-    return MOBILE_FOLDER_NAME;
+    const finalDest = cleanSub ? `${MOBILE_FOLDER_NAME}/${cleanSub}` : MOBILE_FOLDER_NAME;
+    this.notifyListeners('cloud_folder_created', { folder: finalDest, providerId });
+    return finalDest;
   }
 
-  async uploadFileToCloud(file, account, onProgress) {
+  async uploadFileToCloud(file, account, onProgress, subFolder = '') {
     if (!account) {
       throw new Error('No cloud account provided');
     }
+    const cleanSub = subFolder ? String(subFolder).trim().replace(/^\/+|\/+$/g, '') : '';
+    const destFolder = cleanSub ? `${MOBILE_FOLDER_NAME}/${cleanSub}` : MOBILE_FOLDER_NAME;
 
     // Offline mode: store locally
     if (account.isOffline || !account.accessToken) {
@@ -415,17 +480,17 @@ class MobileEngine {
         name: file.name || `File_${Date.now()}`,
         provider: 'offline',
         status: 'synced',
-        cloudFolder: MOBILE_FOLDER_NAME
+        cloudFolder: destFolder
       };
     }
 
-    // 1. Google Drive Multipart Upload (Direct to aurasync-mobile folder)
+    // 1. Google Drive Multipart Upload (Direct to aurasync-mobile or aurasync-mobile/galary)
     if (account.provider === 'google') {
-      const folderId = await this.ensureCloudFolder('google');
+      const folderId = await this.ensureCloudFolder('google', cleanSub);
       const boundary = '-------AuraSyncMobileBoundary' + Date.now();
       const metadata = {
         name: file.name || `photo_${Date.now()}.jpg`,
-        parents: folderId && folderId !== MOBILE_FOLDER_NAME ? [folderId] : []
+        parents: folderId && folderId !== MOBILE_FOLDER_NAME && folderId !== destFolder ? [folderId] : []
       };
 
       const metaPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${file.type || 'image/jpeg'}\r\n\r\n`;
@@ -456,7 +521,7 @@ class MobileEngine {
               name: resJson.name || file.name,
               provider: 'google',
               status: 'synced',
-              cloudFolder: MOBILE_FOLDER_NAME
+              cloudFolder: destFolder
             });
           } else {
             reject(new Error(`Google Drive upload failed (${xhr.status})`));
@@ -471,9 +536,9 @@ class MobileEngine {
 
     // 2. Microsoft OneDrive Upload
     if (account.provider === 'onedrive') {
-      await this.ensureCloudFolder('onedrive');
+      await this.ensureCloudFolder('onedrive', cleanSub);
       const fileName = encodeURIComponent(file.name || `photo_${Date.now()}.jpg`);
-      const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${MOBILE_FOLDER_NAME}/${fileName}:/content`;
+      const url = `https://graph.microsoft.com/v1.0/me/drive/root:/${destFolder}/${fileName}:/content`;
 
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -499,7 +564,7 @@ class MobileEngine {
               name: resJson.name || file.name,
               provider: 'onedrive',
               status: 'synced',
-              cloudFolder: MOBILE_FOLDER_NAME
+              cloudFolder: destFolder
             });
           } else {
             reject(new Error(`OneDrive upload failed (${xhr.status})`));
@@ -514,8 +579,8 @@ class MobileEngine {
 
     // 3. Dropbox Upload
     if (account.provider === 'dropbox') {
-      await this.ensureCloudFolder('dropbox');
-      const filePath = `/${MOBILE_FOLDER_NAME}/` + (file.name || `photo_${Date.now()}.jpg`);
+      await this.ensureCloudFolder('dropbox', cleanSub);
+      const filePath = `/${destFolder}/` + (file.name || `photo_${Date.now()}.jpg`);
       const arg = JSON.stringify({ path: filePath, mode: 'overwrite', autorename: true, mute: false });
 
       return new Promise((resolve, reject) => {
@@ -543,7 +608,7 @@ class MobileEngine {
               name: resJson.name || file.name,
               provider: 'dropbox',
               status: 'synced',
-              cloudFolder: MOBILE_FOLDER_NAME
+              cloudFolder: destFolder
             });
           } else {
             reject(new Error(`Dropbox upload failed (${xhr.status})`));
@@ -567,6 +632,9 @@ class MobileEngine {
     if (!account) {
       return { successful: [], failed: [], noAccount: true };
     }
+
+    const subFolder = options.subFolder ? String(options.subFolder).trim().replace(/^\/+|\/+$/g, '') : '';
+    const destFolder = subFolder ? `${MOBILE_FOLDER_NAME}/${subFolder}` : MOBILE_FOLDER_NAME;
 
     const successful = [];
     const failed = [];
@@ -614,7 +682,7 @@ class MobileEngine {
               filePercent: filePct
             });
           }
-        });
+        }, subFolder);
 
         totalBytesUploaded += isFile ? f.size : (sizeMB * 1024 * 1024);
 
@@ -624,7 +692,7 @@ class MobileEngine {
           type,
           sizeMB: Math.max(0.1, sizeMB),
           uploadedAt: Date.now(),
-          cloudFolder: MOBILE_FOLDER_NAME,
+          cloudFolder: destFolder,
           cloudProvider: account.provider,
           preview: preview || f.preview || null,
           encrypted: true,
@@ -659,6 +727,107 @@ class MobileEngine {
     }
 
     return { successful, failed, noAccount: false };
+  }
+
+  // Native Full Gallery Pull Engine (Transfers all media directly to aurasync-mobile/galary)
+  async pullEntireGalleryNative(options = {}) {
+    const account = options.account || this.getPrimaryAccount();
+    if (!account) throw new Error('No cloud account connected');
+    this.acquireWakeLock(3600000);
+
+    let totalCount = 0;
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.getGalleryMediaTotalCount) {
+      try {
+        totalCount = window.AuraSyncAndroid.getGalleryMediaTotalCount();
+      } catch (_) {}
+    }
+
+    if (totalCount === 0) {
+      this.releaseWakeLock();
+      return { successful: [], failed: [], totalCount: 0 };
+    }
+
+    const pageSize = 50;
+    let offset = 0;
+    let processed = 0;
+    const successful = [];
+    const failed = [];
+    const startTime = Date.now();
+    let totalBytesUploaded = 0;
+
+    while (offset < totalCount) {
+      let rawJson = '[]';
+      try {
+        rawJson = window.AuraSyncAndroid.scanGalleryMedia(pageSize, offset);
+      } catch (e) {
+        break;
+      }
+
+      let items = [];
+      try { items = JSON.parse(rawJson); } catch (_) {}
+      if (!items || items.length === 0) break;
+
+      for (const item of items) {
+        try {
+          if (options.onStatus) options.onStatus(`جاري جلب: ${item.name}`);
+          const res = await fetch(`/api/mediastore/${item.type}/${item.id}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const file = new File([blob], item.name, {
+            type: item.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg')
+          });
+
+          const uploadResult = await this.uploadFileToCloud(file, account, null, 'galary');
+          totalBytesUploaded += file.size;
+
+          const record = {
+            id: uploadResult.cloudId || `gallery_${Date.now()}_${item.id}`,
+            name: item.name,
+            type: item.type === 'video' ? 'video' : 'image',
+            sizeMB: Number((file.size / (1024 * 1024)).toFixed(1)) || 1.0,
+            uploadedAt: Date.now(),
+            cloudFolder: `${MOBILE_FOLDER_NAME}/galary`,
+            cloudProvider: account.provider,
+            encrypted: true,
+            status: 'synced'
+          };
+          successful.push(record);
+        } catch (itemErr) {
+          failed.push({ item, error: itemErr.message });
+        }
+
+        processed++;
+        const elapsedSec = (Date.now() - startTime) / 1000;
+        const overallPercent = Math.min(99, Math.round((processed / totalCount) * 100));
+        const speedMBps = elapsedSec > 0 ? Number((totalBytesUploaded / (1024 * 1024) / elapsedSec).toFixed(1)) : 5.0;
+
+        if (options.onProgress) {
+          options.onProgress({
+            overallPercent,
+            currentFileName: item.name,
+            fileIndex: processed,
+            totalFiles: totalCount,
+            speedMBps: Math.max(1.0, speedMBps)
+          });
+        }
+      }
+
+      offset += items.length;
+    }
+
+    if (successful.length > 0) {
+      const updated = [...successful, ...this.uploadedFiles];
+      this.saveUploadedFiles(updated);
+    }
+
+    this.releaseWakeLock();
+    this.syncCloudFiles().catch(() => {});
+
+    return {
+      successful,
+      failed,
+      totalCount
+    };
   }
 
   acquireWakeLock(timeoutMs = 1800000) {
