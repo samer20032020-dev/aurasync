@@ -157,23 +157,33 @@ export default function MobileAutoBackup({ onShowToast }) {
         }
       });
 
-      setBackupProgress(100);
-      setCurrentFile(isRtl ? '✓ اكتمل النسخ بنجاح!' : '✓ Backup complete!');
-      triggerHaptic(50);
-      setIsBackingUp(false);
-      setIsComplete(true);
       const successCount = result.successful ? result.successful.length : 0;
       const failedCount = result.failed ? result.failed.length : 0;
-      if (successCount > 0 && onShowToast) {
-        onShowToast(
-          isRtl
-            ? `✓ تم رفع ${successCount} ملف بنجاح إلى مجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة!`
-            : `✓ Backed up ${successCount} file(s) to ${AURASYNC_MOBILE_FOLDER} in cloud!`,
-          'success'
-        );
-      } else if (failedCount > 0 && onShowToast) {
-        const detail = result.failed[0]?.error || (isRtl ? 'تعذر النسخ' : 'Backup failed');
-        onShowToast(isRtl ? `تعذر النسخ: ${detail}` : `Backup failed: ${detail}`, 'error');
+
+      setBackupProgress(100);
+      setIsBackingUp(false);
+      setIsComplete(successCount > 0);
+
+      if (successCount === 0 && failedCount > 0) {
+        const firstError = result.failed[0]?.error || (isRtl ? 'حدث خطأ أثناء النسخ الاحتياطي' : 'Backup failed');
+        setCurrentFile(isRtl ? `⚠️ فشل النسخ: ${firstError}` : `⚠️ Backup failed: ${firstError}`);
+        triggerHaptic(90);
+        if (onShowToast) onShowToast(isRtl ? `⚠️ فشل النسخ: ${firstError}` : `⚠️ Backup failed: ${firstError}`, 'error');
+      } else if (failedCount > 0) {
+        setCurrentFile(isRtl ? `✓ اكتمل النسخ جزئياً (${successCount} نجح، ${failedCount} فشل)` : `✓ Partial backup complete`);
+        triggerHaptic(50);
+        if (onShowToast) onShowToast(isRtl ? `✓ تم رفع ${successCount} ملف (وفشل ${failedCount}) بالسحابة!` : `✓ Backed up ${successCount} (${failedCount} failed)!`, 'warn');
+      } else {
+        setCurrentFile(isRtl ? '✓ اكتمل النسخ بنجاح!' : '✓ Backup complete!');
+        triggerHaptic(50);
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? `✓ تم رفع ${successCount} ملف بنجاح إلى مجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة!`
+              : `✓ Backed up ${successCount} file(s) to ${AURASYNC_MOBILE_FOLDER} in cloud!`,
+            'success'
+          );
+        }
       }
     } catch (err) {
       setIsBackingUp(false);

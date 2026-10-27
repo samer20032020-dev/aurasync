@@ -71,13 +71,21 @@ public class MainActivity extends Activity {
     private String getGoogleClientId() {
         try {
             InputStream is = getAssets().open("credentials.json");
-            byte[] buf = new byte[is.available()];
-            is.read(buf);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int len;
+            while ((len = is.read(buf)) != -1) {
+                baos.write(buf, 0, len);
+            }
             is.close();
-            JSONObject json = new JSONObject(new String(buf, StandardCharsets.UTF_8));
+            JSONObject json = new JSONObject(baos.toString("UTF-8"));
             JSONObject installed = json.optJSONObject("installed");
-            if (installed != null) return installed.optString("client_id", "");
-            return json.optString("client_id", "");
+            if (installed != null) {
+                String cid = installed.optString("client_id", "");
+                if (!cid.isEmpty()) return cid;
+            }
+            String cid = json.optString("client_id", "");
+            if (!cid.isEmpty()) return cid;
         } catch (Exception ignored) {}
         return "";
     }
@@ -85,13 +93,21 @@ public class MainActivity extends Activity {
     private String getGoogleClientSecret() {
         try {
             InputStream is = getAssets().open("credentials.json");
-            byte[] buf = new byte[is.available()];
-            is.read(buf);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int len;
+            while ((len = is.read(buf)) != -1) {
+                baos.write(buf, 0, len);
+            }
             is.close();
-            JSONObject json = new JSONObject(new String(buf, StandardCharsets.UTF_8));
+            JSONObject json = new JSONObject(baos.toString("UTF-8"));
             JSONObject installed = json.optJSONObject("installed");
-            if (installed != null) return installed.optString("client_secret", "");
-            return json.optString("client_secret", "");
+            if (installed != null) {
+                String cs = installed.optString("client_secret", "");
+                if (!cs.isEmpty()) return cs;
+            }
+            String cs = json.optString("client_secret", "");
+            if (!cs.isEmpty()) return cs;
         } catch (Exception ignored) {}
         return "";
     }
@@ -1198,6 +1214,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String getGoogleClientId() {
             return MainActivity.this.getGoogleClientId();
+        }
+
+        @JavascriptInterface
+        public String getGoogleClientSecret() {
+            return MainActivity.this.getGoogleClientSecret();
         }
 
         @JavascriptInterface

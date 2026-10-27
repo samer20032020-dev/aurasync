@@ -25,6 +25,8 @@ const STORAGE_KEY_FILES        = 'aurasync_mobile_uploaded_files';
 const STORAGE_KEY_STAGED       = 'aurasync_mobile_staged_share';
 const MOBILE_FOLDER_NAME       = 'aurasync-mobile';
 
+const ONEDRIVE_CLIENT_ID       = 'a7a2023e-78b4-44a6-a92f-13265d31a89b';
+
 class MobileEngine {
   constructor() {
     this.listeners       = new Set();
@@ -224,6 +226,89 @@ class MobileEngine {
       isOffline: true,
       targetFolder: MOBILE_FOLDER_NAME,
     });
+  }
+
+  async refreshAccessToken(account) {
+    if (!account || !account.refreshToken) {
+      throw new Error('لا يوجد رمز تجديد (Refresh Token) متاح للحساب');
+    }
+
+    if (account.provider === 'google') {
+      const clientId = (typeof window !== 'undefined' && window.AuraSyncAndroid?.getGoogleClientId)
+        ? window.AuraSyncAndroid.getGoogleClientId()
+        : '';
+      const clientSecret = (typeof window !== 'undefined' && window.AuraSyncAndroid?.getGoogleClientSecret)
+        ? window.AuraSyncAndroid.getGoogleClientSecret()
+        : '';
+
+      if (!clientId || !clientSecret) {
+        throw new Error('بيانات مصادقة Google غير متوفرة لتجديد الجلسة');
+      }
+
+      const body = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: account.refreshToken,
+        grant_type: 'refresh_token',
+      });
+
+      const res = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`فشل تجديد جلسة Google Drive: ${errText || res.status}`);
+      }
+
+      const data = await res.json();
+      if (!data.access_token) {
+        throw new Error('لم يرجع خادم Google رمز وصول جديد');
+      }
+
+      const updatedAccount = this.addOrUpdateAccount({
+        ...account,
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || account.refreshToken,
+      });
+
+      return updatedAccount;
+    }
+
+    if (account.provider === 'onedrive') {
+      const body = new URLSearchParams({
+        client_id: ONEDRIVE_CLIENT_ID,
+        refresh_token: account.refreshToken,
+        grant_type: 'refresh_token',
+      });
+
+      const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+
+      if (!res.ok) {
+        throw new Error(`فشل تجديد جلسة OneDrive: ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (!data.access_token) {
+        throw new Error('لم يرجع خادم OneDrive رمز وصول جديد');
+      }
+
+      const updatedAccount = this.addOrUpdateAccount({
+        ...account,
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || account.refreshToken,
+      });
+
+      return updatedAccount;
+    }
+
+    throw new Error(`تجديد الرمز غير مدعوم لمزود الخدمة: ${account.provider}`);
   }
 
   async validateAndConnectOAuthToken(providerId, token) {
@@ -469,7 +554,7 @@ class MobileEngine {
     return finalDest;
   }
 
-  async uploadFileToCloud(file, account, onProgress, subFolder = '') {
+  async uploadFileToCloud(file, account, onProgress, subFolder = '', isRetry = false) {
     if (!account) {
       throw new Error('No cloud account provided');
     }
@@ -487,18 +572,17 @@ class MobileEngine {
       };
     }
 
-    // Live cloud mode: require valid accessToken, or graceful preview emulation in web browser test environment
-    if (!account.accessToken) {
-      const isBrowserPreview = typeof window !== 'undefined' && !window.AuraSyncAndroid && !window.electronAPI;
-      if (isBrowserPreview || account.isOffline) {
-        return {
-          cloudId: `preview_${account.provider}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          name: file.name || `File_${Date.now()}`,
-          provider: account.provider || 'google',
-          status: 'synced',
-          cloudFolder: destFolder
-        };
+    // Auto-refresh token if accessToken is missing but refreshToken is available
+    if (!account.accessToken && account.refreshToken) {
+      try {
+        account = await this.refreshAccessToken(account);
+      } catch (err) {
+        console.warn('Auto-refresh token before upload failed:', err);
       }
+    }
+
+    // Live cloud mode: strictly require valid accessToken
+    if (!account.accessToken) {
       throw new Error(
         `حساب ${account.label || account.provider} غير مصادق برمز وصول نشط. يرجى تسجيل الدخول إلى السحابة أولاً لرفع الملفات إليها.`
       );
@@ -552,6 +636,17 @@ class MobileEngine {
               }
             } catch (_) {}
             if (xhr.status === 401) {
+              if (!isRetry && account.refreshToken) {
+                this.refreshAccessToken(account)
+                  .then((refreshedAcc) => {
+                    return this.uploadFileToCloud(file, refreshedAcc, onProgress, subFolder, true);
+                  })
+                  .then(resolve)
+                  .catch(() => {
+                    reject(new Error(`Google Drive (401): انتهت صلاحية تسجيل الدخول. يرجى تسجيل الدخول مجدداً.`));
+                  });
+                return;
+              }
               reject(new Error(`Google Drive (401): انتهت صلاحية تسجيل الدخول. يرجى تسجيل الدخول مجدداً.`));
             } else {
               reject(new Error(`فشل الرفع إلى Google Drive (${xhr.status})${detail}`));
@@ -597,6 +692,15 @@ class MobileEngine {
               status: 'synced',
               cloudFolder: destFolder
             });
+          } else if (xhr.status === 401 && !isRetry && account.refreshToken) {
+            this.refreshAccessToken(account)
+              .then((refreshedAcc) => {
+                return this.uploadFileToCloud(file, refreshedAcc, onProgress, subFolder, true);
+              })
+              .then(resolve)
+              .catch(() => {
+                reject(new Error(`OneDrive (401): انتهت صلاحية تسجيل الدخول. يرجى تسجيل الدخول مجدداً.`));
+              });
           } else {
             reject(new Error(`OneDrive upload failed (${xhr.status})`));
           }
@@ -692,23 +796,8 @@ class MobileEngine {
         : (f.sizeMB || 2.4);
 
       let preview = null;
-      if (isFile && isImage) {
-        if (f.size < 6 * 1024 * 1024 && typeof FileReader !== 'undefined') {
-          try {
-            preview = await new Promise((res) => {
-              const reader = new FileReader();
-              reader.onload = () => res(reader.result);
-              reader.onerror = () => {
-                try { res(URL.createObjectURL(f)); } catch (_) { res(null); }
-              };
-              reader.readAsDataURL(f);
-            });
-          } catch (_) {
-            try { preview = URL.createObjectURL(f); } catch (_) {}
-          }
-        } else if (typeof URL !== 'undefined') {
-          try { preview = URL.createObjectURL(f); } catch (_) {}
-        }
+      if (isFile && isImage && typeof URL !== 'undefined') {
+        try { preview = URL.createObjectURL(f); } catch (_) {}
       }
 
       try {

@@ -85,13 +85,41 @@ export default function MobileCloudExplorer({
       return;
     }
 
+    const currentAcc = accounts[0];
+    const isUnauthenticated = !currentAcc.isOffline && !currentAcc.accessToken && !currentAcc.refreshToken;
+
+    if (isUnauthenticated) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+        window.AuraSyncAndroid.startRealOAuth(currentAcc.provider || 'google');
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? `🔑 يلزم تسجيل الدخول الفعلي إلى ${currentAcc.label || 'السحابة'} أولاً لرفع الملفات! جاري فتح المتصفح...`
+              : `🔑 Sign in to ${currentAcc.label || 'Cloud'} required! Opening browser...`,
+            'warn'
+          );
+        }
+      } else {
+        if (onShowToast) {
+          onShowToast(
+            isRtl
+              ? `🔑 حساب ${currentAcc.label || 'السحابة'} غير مصادق برمز وصول نشط. يرجى تسجيل الدخول أولاً من الشاشة الرئيسية.`
+              : `🔑 Please sign in to ${currentAcc.label || 'Cloud'} first from the Home tab.`,
+            'warn'
+          );
+        }
+      }
+      return;
+    }
+
     triggerHaptic(25);
     setIsUploading(true);
     setUploadProgress(5);
     const fileArray = Array.from(selected);
 
     mobileEngine.uploadBatch(fileArray, {
-      account: accounts[0],
+      account: currentAcc,
       onProgress: ({ overallPercent }) => {
         setUploadProgress(overallPercent);
       }
@@ -104,22 +132,32 @@ export default function MobileCloudExplorer({
         if (fileInputRef.current) fileInputRef.current.value = '';
         const successCount = result.successful ? result.successful.length : 0;
         const failedCount = result.failed ? result.failed.length : 0;
-        const targetCloudName = accounts[0]?.label || 'السحابة';
-        if (successCount > 0) {
+        const targetCloudName = currentAcc?.label || 'السحابة';
+
+        if (successCount === 0 && failedCount > 0) {
+          const firstError = result.failed[0]?.error || (isRtl ? 'حدث خطأ أثناء نقل الملفات للسحابة' : 'Failed to transfer files to cloud');
+          if (onShowToast) {
+            onShowToast(
+              isRtl ? `⚠️ فشل الرفع: ${firstError}` : `⚠️ Upload failed: ${firstError}`,
+              'error'
+            );
+          }
+        } else if (failedCount > 0) {
+          if (onShowToast) {
+            onShowToast(
+              isRtl
+                ? `⚠️ تم رفع ${successCount} ملف وفشل ${failedCount} في ${targetCloudName}`
+                : `⚠️ Uploaded ${successCount} file(s), ${failedCount} failed in ${targetCloudName}`,
+              'warn'
+            );
+          }
+        } else if (successCount > 0) {
           if (onShowToast) {
             onShowToast(
               isRtl
                 ? `✓ تم رفع ${successCount} ملف بنجاح في مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName}`
                 : `✓ Uploaded ${successCount} file(s) to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName}`,
               'success'
-            );
-          }
-        } else if (failedCount > 0) {
-          const detail = result.failed[0]?.error || (isRtl ? 'تعذر رفع الملف' : 'Upload failed');
-          if (onShowToast) {
-            onShowToast(
-              isRtl ? `تعذر الرفع للسحابة: ${detail}` : `Upload failed: ${detail}`,
-              'error'
             );
           }
         }
@@ -229,12 +267,31 @@ export default function MobileCloudExplorer({
             {isRtl ? 'معرض الصور والملفات' : 'Cloud Gallery & Media'}
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: colors.textMuted }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px rgba(16,185,129,0.7)' }} />
-            <span>
-              {files.length > 0
-                ? (isRtl ? `${files.length} ملف متزامن مع كافة الأجهزة` : `${files.length} files synced with all devices`)
-                : (isRtl ? `متصل مع ${accounts[0]?.label || 'السحابة'} • متزامن` : `Connected to ${accounts[0]?.label || 'Cloud'} • Synced`)}
-            </span>
+            {accounts.length > 0 && !accounts[0].isOffline && !accounts[0].accessToken && !accounts[0].refreshToken ? (
+              <div
+                onClick={() => {
+                  triggerHaptic(20);
+                  if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+                    window.AuraSyncAndroid.startRealOAuth(accounts[0].provider || 'google');
+                  }
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 6px rgba(245,158,11,0.7)' }} />
+                <span style={{ color: '#f59e0b', fontWeight: 700 }}>
+                  {isRtl ? `تسجيل الدخول مطلوب في ${accounts[0].label || 'السحابة'}` : `Sign-in required for ${accounts[0].label || 'Cloud'}`}
+                </span>
+              </div>
+            ) : (
+              <>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px rgba(16,185,129,0.7)' }} />
+                <span>
+                  {files.length > 0
+                    ? (isRtl ? `${files.length} ملف متزامن مع كافة الأجهزة` : `${files.length} files synced with all devices`)
+                    : (isRtl ? `متصل مع ${accounts[0]?.label || 'السحابة'} • متزامن` : `Connected to ${accounts[0]?.label || 'Cloud'} • Synced`)}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -392,11 +449,47 @@ export default function MobileCloudExplorer({
             {isRtl ? 'معرضك السحابي جاهز للمزامنة' : 'Your Cloud Gallery is Ready'}
           </h3>
 
-          <p style={{ fontSize: 12, color: colors.textMuted, maxWidth: 300, margin: '0 0 22px', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 12, color: colors.textMuted, maxWidth: 300, margin: '0 0 18px', lineHeight: 1.6 }}>
             {isRtl
               ? 'ارفع صورك وفيديوهاتك لتكون محفوظة بجودتها الأصلية ومتاحة فوراً للمزامنة والتنزيل عبر كافة هواتفك وحاسوبك.'
               : 'Upload photos & videos to keep them safe in original quality and synced across all your phones and PC.'}
           </p>
+
+          {/* Re-auth alert if active account is not yet signed in */}
+          {accounts.length > 0 && !accounts[0].isOffline && !accounts[0].accessToken && !accounts[0].refreshToken && (
+            <div
+              onClick={() => {
+                triggerHaptic(25);
+                if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+                  window.AuraSyncAndroid.startRealOAuth(accounts[0].provider || 'google');
+                }
+              }}
+              style={{
+                width: '100%', maxWidth: 310,
+                padding: '11px 14px', borderRadius: 14,
+                background: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginBottom: 14, cursor: 'pointer', textAlign: isRtl ? 'right' : 'left',
+                boxSizing: 'border-box'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18 }}>🔑</span>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#f59e0b' }}>
+                    {isRtl ? 'تسجيل الدخول الفعلي مطلوب للمزامنة' : 'Sign-in required for sync'}
+                  </div>
+                  <div style={{ fontSize: 10, color: colors.textMuted }}>
+                    {isRtl ? 'اضغط للمصادقة مع Google Drive والرفع المباشر' : 'Tap to sign in with Google Drive'}
+                  </div>
+                </div>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: '#f59e0b', color: '#000' }}>
+                {isRtl ? 'تسجيل' : 'Sign In'}
+              </span>
+            </div>
+          )}
 
           {/* Primary Action Button: Fast Native Upload */}
           <button

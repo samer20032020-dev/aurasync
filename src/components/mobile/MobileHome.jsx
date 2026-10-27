@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.44',
+  version = '1.0.45',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -153,20 +153,26 @@ export default function MobileHome({
 
       setTimeout(() => {
         setIsBackingUpGallery(false);
-        setGalleryDone(true);
-        if (successCount > 0 && onShowToast) {
-          onShowToast(
-            isRtl
-              ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${targetFolderDisplay} في ${targetCloudName} بنجاح ومزامنته فوراً!`
-              : `✓ Transferred ${successCount.toLocaleString()} files to ${targetFolderDisplay} in ${targetCloudName} and synced!`,
-            'success'
-          );
-        } else if (failedCount > 0 && onShowToast) {
-          const detail = result.failed[0]?.error || (isRtl ? 'تعذر نقل الملفات' : 'Transfer failed');
-          onShowToast(
-            isRtl ? `تعذر النقل: ${detail}` : `Transfer failed: ${detail}`,
-            'error'
-          );
+        setGalleryDone(successCount > 0);
+        if (onShowToast) {
+          if (successCount === 0 && failedCount > 0) {
+            const firstError = result.failed[0]?.error || (isRtl ? 'حدث خطأ أثناء نقل الملفات' : 'Transfer failed');
+            onShowToast(isRtl ? `⚠️ فشل النقل: ${firstError}` : `⚠️ Transfer failed: ${firstError}`, 'error');
+          } else if (failedCount > 0) {
+            onShowToast(
+              isRtl
+                ? `⚠️ تم نقل ${successCount.toLocaleString()} ملف (وفشل ${failedCount}) في ${targetCloudName}`
+                : `⚠️ Transferred ${successCount.toLocaleString()} (${failedCount} failed) to ${targetCloudName}`,
+              'warn'
+            );
+          } else if (successCount > 0) {
+            onShowToast(
+              isRtl
+                ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${targetFolderDisplay} في ${targetCloudName} بنجاح ومزامنته فوراً!`
+                : `✓ Transferred ${successCount.toLocaleString()} files to ${targetFolderDisplay} in ${targetCloudName} and synced!`,
+              'success'
+            );
+          }
         }
       }, 500);
     } catch (err) {

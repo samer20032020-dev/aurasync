@@ -113,19 +113,35 @@ export default function MobileShareReceiver({ onShowToast, onNavigateTab }) {
           setUploadedCount(fileIndex);
           if (speedMBps) setUploadSpeed(speedMBps);
         }
-      }).then(() => {
+      }).then((result) => {
         setIsUploading(false);
+        const successCount = result && result.successful ? result.successful.length : 0;
+        const failedCount = result && result.failed ? result.failed.length : 0;
+        if (successCount === 0 && failedCount > 0) {
+          const firstErr = result.failed[0]?.error || (isRtl ? 'فشل الرفع' : 'Upload failed');
+          if (onShowToast) onShowToast(isRtl ? `⚠️ فشل رفع الملفات: ${firstErr}` : `⚠️ Upload failed: ${firstErr}`, 'error');
+          return;
+        }
         setIsComplete(true);
         setUploadProgress(100);
-        setUploadedCount(actualBlobFiles.length);
+        setUploadedCount(successCount);
         setActualBlobFiles([]);
         mobileEngine.clearStagedShare();
         setStagedFiles([]);
         triggerHaptic(60);
-        if (onShowToast) onShowToast(
-          isRtl ? `✓ اكتمل رفع جميع الملفات إلى مجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة بنجاح!` : `✓ Uploaded all files to ${AURASYNC_MOBILE_FOLDER} successfully!`,
-          'success'
-        );
+        if (onShowToast) {
+          if (failedCount > 0) {
+            onShowToast(
+              isRtl ? `⚠️ تم رفع ${successCount} ملف وفشل ${failedCount} بالسحابة!` : `⚠️ Uploaded ${successCount} (${failedCount} failed)!`,
+              'warn'
+            );
+          } else {
+            onShowToast(
+              isRtl ? `✓ اكتمل رفع جميع الملفات إلى مجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة بنجاح!` : `✓ Uploaded all files to ${AURASYNC_MOBILE_FOLDER} successfully!`,
+              'success'
+            );
+          }
+        }
       }).catch((err) => {
         setIsUploading(false);
         if (onShowToast) onShowToast(isRtl ? `فشل الرفع: ${err.message}` : `Upload failed: ${err.message}`, 'error');
