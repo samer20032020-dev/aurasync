@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.ContentUris;
+import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -14,6 +15,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.view.Window;
@@ -252,6 +254,13 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         setupWebView();
         setContentView(webView);
+
+        // Auto-request storage permissions on startup if not already granted
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !new AuraSyncAndroidBridge().hasStoragePermissions()) {
+                new AuraSyncAndroidBridge().requestStoragePermissions();
+            }
+        } catch (Exception ignored) {}
 
         // Auto-install completed downloads from DownloadManager if triggered
         setupDownloadReceiver();
@@ -1346,10 +1355,103 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void downloadCloudFile(String fileName, String base64Data, String mimeType) {
+        public boolean saveCloudFileToPhone(final String fileName, final String base64Data, final String mimeType) {
+            if (fileName == null || fileName.trim().isEmpty() || base64Data == null || base64Data.trim().isEmpty()) {
+                return false;
+            }
             try {
-                showToast("جاري تنزيل " + fileName);
-            } catch (Exception ignored) {}
+                final byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
+                if (bytes == null || bytes.length == 0) return false;
+
+                final String cleanName = fileName.trim();
+                final String cleanMime = (mimeType != null && !mimeType.trim().isEmpty()) ? mimeType.trim() : "image/jpeg";
+                final boolean isImage = cleanMime.startsWith("image/");
+                final boolean isVideo = cleanMime.startsWith("video/");
+
+                // 1. Android 10+ (API 29+) Scoped MediaStore insertion
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.MediaColumns.DISPLAY_NAME, cleanName);
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, cleanMime);
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+                    Uri collectionUri;
+                    if (isImage) {
+                        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/AuraSync");
+                        collectionUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                    } else if (isVideo) {
+                        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/AuraSync");
+                        collectionUri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+                    } else {
+                        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AuraSync");
+                        collectionUri = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+                    }
+
+                    ContentResolver cr = getContentResolver();
+                    Uri itemUri = cr.insert(collectionUri, values);
+                    if (itemUri != null) {
+                        try (OutputStream os = cr.openOutputStream(itemUri)) {
+                            if (os != null) {
+                                os.write(bytes);
+                                os.flush();
+                            }
+                        }
+                        values.clear();
+                        values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                        cr.update(itemUri, values, null, null);
+
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                showToast("✓ تم تنزيل " + cleanName + " وحفظه في استوديو الهاتف");
+                            }
+                        });
+                        return true;
+                    }
+                }
+
+                // 2. Legacy filesystem write (< Android 10) or Direct Fallback
+                File targetDir;
+                if (isImage) {
+                    targetDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AuraSync");
+                } else if (isVideo) {
+                    targetDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "AuraSync");
+                } else {
+                    targetDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                }
+
+                if (!targetDir.exists()) targetDir.mkdirs();
+                File targetFile = new File(targetDir, cleanName);
+                try (FileOutputStream fos = new FileOutputStream(targetFile)) {
+                    fos.write(bytes);
+                    fos.flush();
+                }
+
+                // Trigger MediaScanner so gallery instantly indexes it
+                android.media.MediaScannerConnection.scanFile(
+                    MainActivity.this,
+                    new String[]{targetFile.getAbsolutePath()},
+                    new String[]{cleanMime},
+                    null
+                );
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        showToast("✓ تم تنزيل " + cleanName + " وحفظه في الهاتف بنجاح");
+                    }
+                });
+                return true;
+
+            } catch (Exception e) {
+                android.util.Log.e("AuraSyncDownload", "saveCloudFileToPhone error: " + e.getMessage(), e);
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public void downloadCloudFile(String fileName, String base64Data, String mimeType) {
+            saveCloudFileToPhone(fileName, base64Data, mimeType);
         }
 
         @JavascriptInterface
@@ -1386,47 +1488,184 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String getLocalMediaFileNames() {
-            JSONArray arr = new JSONArray();
+            java.util.LinkedHashSet<String> nameSet = new java.util.LinkedHashSet<>();
+
+            if (!hasStoragePermissions()) {
+                requestStoragePermissions();
+            }
+
+            // 1. MediaStore Images
             try {
                 ContentResolver cr = getContentResolver();
-                String[] proj = new String[]{MediaStore.MediaColumns.DISPLAY_NAME};
+                String[] proj = new String[]{
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.DATA
+                };
                 try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, null)) {
                     if (c != null) {
                         int nameIdx = c.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
+                        int dataIdx = c.getColumnIndex(MediaStore.MediaColumns.DATA);
                         while (c.moveToNext()) {
-                            String name = c.getString(nameIdx);
-                            if (name != null && !name.isEmpty()) arr.put(name);
+                            String name = (nameIdx >= 0) ? c.getString(nameIdx) : null;
+                            if (name == null || name.trim().isEmpty()) {
+                                if (dataIdx >= 0) {
+                                    String path = c.getString(dataIdx);
+                                    if (path != null) {
+                                        int ls = path.lastIndexOf('/');
+                                        name = (ls >= 0) ? path.substring(ls + 1) : path;
+                                    }
+                                }
+                            }
+                            if (name != null && !name.trim().isEmpty()) {
+                                nameSet.add(name.trim());
+                            }
                         }
                     }
                 }
+            } catch (Exception e) {
+                android.util.Log.w("AuraSyncMedia", "Images query error: " + e.getMessage());
+            }
+
+            // 2. MediaStore Videos
+            try {
+                ContentResolver cr = getContentResolver();
+                String[] proj = new String[]{
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.DATA
+                };
                 try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, null, null, null)) {
                     if (cv != null) {
                         int nameIdx = cv.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
+                        int dataIdx = cv.getColumnIndex(MediaStore.MediaColumns.DATA);
                         while (cv.moveToNext()) {
-                            String name = cv.getString(nameIdx);
-                            if (name != null && !name.isEmpty()) arr.put(name);
+                            String name = (nameIdx >= 0) ? cv.getString(nameIdx) : null;
+                            if (name == null || name.trim().isEmpty()) {
+                                if (dataIdx >= 0) {
+                                    String path = cv.getString(dataIdx);
+                                    if (path != null) {
+                                        int ls = path.lastIndexOf('/');
+                                        name = (ls >= 0) ? path.substring(ls + 1) : path;
+                                    }
+                                }
+                            }
+                            if (name != null && !name.trim().isEmpty()) {
+                                nameSet.add(name.trim());
+                            }
                         }
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                android.util.Log.w("AuraSyncMedia", "Videos query error: " + e.getMessage());
+            }
+
+            // 3. MediaStore Downloads (Android 10+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    ContentResolver cr = getContentResolver();
+                    String[] proj = new String[]{
+                        MediaStore.MediaColumns.DISPLAY_NAME,
+                        MediaStore.MediaColumns.DATA
+                    };
+                    try (Cursor cd = cr.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI, proj, null, null, null)) {
+                        if (cd != null) {
+                            int nameIdx = cd.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
+                            int dataIdx = cd.getColumnIndex(MediaStore.MediaColumns.DATA);
+                            while (cd.moveToNext()) {
+                                String name = (nameIdx >= 0) ? cd.getString(nameIdx) : null;
+                                if (name == null || name.trim().isEmpty()) {
+                                    if (dataIdx >= 0) {
+                                        String path = cd.getString(dataIdx);
+                                        if (path != null) {
+                                            int ls = path.lastIndexOf('/');
+                                            name = (ls >= 0) ? path.substring(ls + 1) : path;
+                                        }
+                                    }
+                                }
+                                if (name != null && !name.trim().isEmpty()) {
+                                    nameSet.add(name.trim());
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    android.util.Log.w("AuraSyncMedia", "Downloads query error: " + e.getMessage());
+                }
+            }
+
+            // 4. Direct Public Directory Inspection (Downloads, Pictures, DCIM, Pictures/AuraSync)
+            try {
+                File[] checkDirs = new File[]{
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AuraSync"),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
+                };
+                for (File dir : checkDirs) {
+                    if (dir != null && dir.exists() && dir.isDirectory()) {
+                        File[] list = dir.listFiles();
+                        if (list != null) {
+                            for (File f : list) {
+                                if (f != null && f.isFile()) {
+                                    nameSet.add(f.getName().trim());
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                android.util.Log.w("AuraSyncMedia", "Directory check error: " + e.getMessage());
+            }
+
+            JSONArray arr = new JSONArray();
+            for (String n : nameSet) {
+                arr.put(n);
+            }
+            android.util.Log.i("AuraSyncMedia", "getLocalMediaFileNames total count: " + arr.length());
             return arr.toString();
         }
 
         @JavascriptInterface
         public boolean isMediaFileOnPhone(String fileName) {
-            if (fileName == null || fileName.isEmpty()) return false;
+            if (fileName == null || fileName.trim().isEmpty()) return false;
+            final String cleanName = fileName.trim();
+
+            // 1. Direct filesystem check
+            try {
+                File[] checkDirs = new File[]{
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AuraSync"),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
+                };
+                for (File dir : checkDirs) {
+                    if (dir != null && dir.exists()) {
+                        File target = new File(dir, cleanName);
+                        if (target.exists() && target.isFile()) return true;
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // 2. MediaStore query
             try {
                 ContentResolver cr = getContentResolver();
                 String[] proj = new String[]{MediaStore.MediaColumns._ID};
-                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=?";
-                String[] args = new String[]{fileName};
+                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? OR " + MediaStore.MediaColumns.DATA + " LIKE ?";
+                String[] args = new String[]{cleanName, "%/" + cleanName};
                 try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
                     if (c != null && c.getCount() > 0) return true;
                 }
                 try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
                     if (cv != null && cv.getCount() > 0) return true;
                 }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    try (Cursor cd = cr.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
+                        if (cd != null && cd.getCount() > 0) return true;
+                    }
+                }
             } catch (Exception ignored) {}
+
             return false;
         }
 

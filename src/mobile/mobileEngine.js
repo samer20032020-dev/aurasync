@@ -1301,16 +1301,25 @@ class MobileEngine {
   }
 
   getLocalMediaNames() {
+    const set = new Set();
     if (typeof window !== 'undefined' && window.AuraSyncAndroid?.getLocalMediaFileNames) {
       try {
         const raw = window.AuraSyncAndroid.getLocalMediaFileNames();
         const arr = JSON.parse(raw);
         if (Array.isArray(arr)) {
-          return new Set(arr);
+          for (const item of arr) {
+            if (typeof item === 'string' && item.trim()) {
+              const name = item.trim();
+              set.add(name);
+              set.add(name.toLowerCase());
+            }
+          }
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('getLocalMediaNames error:', err);
+      }
     }
-    return new Set();
+    return set;
   }
 
   async deleteUploadedFile(fileId) {
@@ -1517,6 +1526,60 @@ class MobileEngine {
     const account = this.getPrimaryAccount();
 
     try {
+      // 1. If native Android bridge is available, save directly to Android phone storage & gallery
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.saveCloudFileToPhone) {
+        let base64Data = '';
+        if (file.preview && file.preview.startsWith('data:')) {
+          base64Data = file.preview.split(',')[1] || '';
+        }
+
+        const targetId = file.cloudId || file.id;
+        if (!base64Data && account && account.accessToken && targetId) {
+          try {
+            if (account.provider === 'google') {
+              const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(targetId)}?alt=media`, {
+                headers: { Authorization: `Bearer ${account.accessToken}` }
+              });
+              if (res.ok) {
+                const blob = await res.blob();
+                base64Data = await new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const result = String(reader.result || '');
+                    resolve(result.includes(',') ? result.split(',')[1] : result);
+                  };
+                  reader.readAsDataURL(blob);
+                });
+              }
+            } else if (account.provider === 'onedrive') {
+              const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(targetId)}/content`, {
+                headers: { Authorization: `Bearer ${account.accessToken}` }
+              });
+              if (res.ok) {
+                const blob = await res.blob();
+                base64Data = await new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const result = String(reader.result || '');
+                    resolve(result.includes(',') ? result.split(',')[1] : result);
+                  };
+                  reader.readAsDataURL(blob);
+                });
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('Fetch cloud media for download error:', fetchErr);
+          }
+        }
+
+        if (base64Data) {
+          const mime = file.mimeType || (file.type === 'video' ? 'video/mp4' : 'image/jpeg');
+          const saved = window.AuraSyncAndroid.saveCloudFileToPhone(file.name, base64Data, mime);
+          if (saved) return true;
+        }
+      }
+
+      // 2. Web fallback for browser testing
       if (account?.provider === 'google' && account.accessToken && file.cloudId) {
         const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.cloudId}?alt=media`, {
           headers: { Authorization: `Bearer ${account.accessToken}` }
@@ -1551,6 +1614,7 @@ class MobileEngine {
       }
     } catch (err) {
       console.warn('downloadFileToPhone error:', err);
+      throw err;
     }
 
     if (window.AuraSyncAndroid?.showToast) {

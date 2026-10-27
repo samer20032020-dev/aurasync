@@ -60,16 +60,34 @@ export default function MobileCloudExplorer({
       if (document.visibilityState === 'visible') refreshLocalMedia();
     });
 
+    if (typeof window !== 'undefined') {
+      window.onAuraSyncPermissionsResult = (granted) => {
+        if (granted) refreshLocalMedia();
+      };
+    }
+
     return () => {
       unsub();
       window.removeEventListener('focus', handleFocus);
+      if (typeof window !== 'undefined') {
+        delete window.onAuraSyncPermissionsResult;
+      }
     };
   }, [refreshLocalMedia]);
 
   // Fast helper to verify if file exists on phone
   const isItemOnPhone = useCallback((fileName) => {
-    if (!fileName || !localMediaNames || localMediaNames.size === 0) return false;
-    return localMediaNames.has(fileName);
+    if (!fileName) return false;
+    const clean = fileName.trim();
+    if (localMediaNames && (localMediaNames.has(clean) || localMediaNames.has(clean.toLowerCase()))) {
+      return true;
+    }
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.isMediaFileOnPhone) {
+      try {
+        return window.AuraSyncAndroid.isMediaFileOnPhone(clean);
+      } catch (_) {}
+    }
+    return false;
   }, [localMediaNames]);
 
   // Manual Trigger to re-sync across all devices
@@ -209,12 +227,15 @@ export default function MobileCloudExplorer({
     triggerHaptic(20);
     try {
       await mobileEngine.downloadFileToPhone(file);
-      refreshLocalMedia();
+      setTimeout(() => {
+        refreshLocalMedia();
+        setSelectedFile(prev => prev ? { ...prev } : null);
+      }, 350);
       if (onShowToast) {
         onShowToast(
           isRtl
-            ? `تم تنزيل "${file.name}" إلى ذاكرة الهاتف بنجاح ✓`
-            : `Saved "${file.name}" to phone storage ✓`,
+            ? `تم تنزيل "${file.name}" إلى استوديو وذاكرة الهاتف بنجاح ✓`
+            : `Saved "${file.name}" to phone gallery ✓`,
           'success'
         );
       }
