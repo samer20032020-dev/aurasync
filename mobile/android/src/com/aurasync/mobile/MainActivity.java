@@ -1266,6 +1266,7 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        @SuppressWarnings("deprecation")
         public void showProgressNotification(final String title, final String message, final int progress, final int max) {
             runOnUiThread(new Runnable() {
                 @Override
