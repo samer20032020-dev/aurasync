@@ -860,7 +860,10 @@ export default function App() {
   if (isMobileMode) {
     const mobileVersion = versionData.mobileVersion || '1.0.10';
     return (
-      <I18nProvider lang={settings.language || 'ar'}>
+      <I18nProvider
+        lang={settings.language || 'ar'}
+        onLanguageChange={(l) => setSettings((s) => ({ ...s, language: l }))}
+      >
         <ErrorBoundary>
           <Suspense fallback={<div className="p-8 text-center text-white bg-black min-h-screen flex items-center justify-center">Loading AuraSync Mobile...</div>}>
             <MobileApp

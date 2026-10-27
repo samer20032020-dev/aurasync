@@ -124,6 +124,9 @@ class MobileEngine {
       if (newSettings.theme) {
         localStorage.setItem('aurasync_mobile_theme', newSettings.theme);
       }
+      if (newSettings.language) {
+        localStorage.setItem('aurasync_language', newSettings.language);
+      }
     } catch (_) {}
     this.notifyListeners('settings_updated', this.settings);
   }

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
 
 export const translations = {
   ar: {
@@ -1399,16 +1399,84 @@ export function translate(lang, key, vars) {
 
 const I18nContext = createContext({
   lang: 'ar',
+  language: 'ar',
   dir: 'rtl',
-  t: (key, vars) => translate('ar', key, vars)
+  t: (key, vars) => translate('ar', key, vars),
+  setLanguage: () => {}
 });
 
-export function I18nProvider({ lang = 'ar', children }) {
+export function I18nProvider({ lang: propLang = 'ar', onLanguageChange, children }) {
+  const [currentLang, setCurrentLang] = useState(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const direct = localStorage.getItem('aurasync_language');
+        if (direct === 'en' || direct === 'ar') return direct;
+        const mobileSettings = localStorage.getItem('aurasync_mobile_settings');
+        if (mobileSettings) {
+          const parsed = JSON.parse(mobileSettings);
+          if (parsed?.language === 'en' || parsed?.language === 'ar') return parsed.language;
+        }
+      }
+    } catch (_) {}
+    return propLang || 'ar';
+  });
+
+  // If prop explicitly changes from outside, sync state
+  useEffect(() => {
+    if (propLang && (propLang === 'ar' || propLang === 'en') && propLang !== currentLang) {
+      setCurrentLang(propLang);
+    }
+  }, [propLang]);
+
+  // Sync DOM attributes
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('lang', currentLang);
+      document.documentElement.setAttribute('dir', currentLang === 'en' ? 'ltr' : 'rtl');
+    }
+  }, [currentLang]);
+
+  const setLanguage = useCallback((newLang) => {
+    const l = newLang === 'en' ? 'en' : 'ar';
+    setCurrentLang(l);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('aurasync_language', l);
+        const mobileSettings = localStorage.getItem('aurasync_mobile_settings');
+        if (mobileSettings) {
+          const parsed = JSON.parse(mobileSettings);
+          parsed.language = l;
+          localStorage.setItem('aurasync_mobile_settings', JSON.stringify(parsed));
+        }
+        window.dispatchEvent(new CustomEvent('aurasync_language_changed', { detail: l }));
+      }
+      if (typeof document !== 'undefined') {
+        document.documentElement.setAttribute('lang', l);
+        document.documentElement.setAttribute('dir', l === 'en' ? 'ltr' : 'rtl');
+      }
+    } catch (_) {}
+    if (onLanguageChange) onLanguageChange(l);
+  }, [onLanguageChange]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleLangEvent = (e) => {
+      const l = e?.detail;
+      if ((l === 'ar' || l === 'en') && l !== currentLang) {
+        setCurrentLang(l);
+      }
+    };
+    window.addEventListener('aurasync_language_changed', handleLangEvent);
+    return () => window.removeEventListener('aurasync_language_changed', handleLangEvent);
+  }, [currentLang]);
+
   const value = useMemo(() => ({
-    lang,
-    dir: lang === 'en' ? 'ltr' : 'rtl',
-    t: (key, vars) => translate(lang, key, vars)
-  }), [lang]);
+    lang: currentLang,
+    language: currentLang,
+    dir: currentLang === 'en' ? 'ltr' : 'rtl',
+    t: (key, vars) => translate(currentLang, key, vars),
+    setLanguage
+  }), [currentLang, setLanguage]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
@@ -1418,6 +1486,12 @@ export function useI18n() {
 }
 
 export function useTranslation() {
-  const { lang, t } = useContext(I18nContext);
-  return { t, language: lang };
+  const ctx = useContext(I18nContext);
+  return {
+    t: ctx.t,
+    language: ctx.language || ctx.lang || 'ar',
+    lang: ctx.language || ctx.lang || 'ar',
+    dir: ctx.dir || (ctx.language === 'en' ? 'ltr' : 'rtl'),
+    setLanguage: ctx.setLanguage
+  };
 }

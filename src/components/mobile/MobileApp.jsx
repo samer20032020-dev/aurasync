@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.41',
+  version = '1.0.42',
   accounts = [],
   storage = {},
   stats = {},
@@ -426,10 +426,17 @@ export default function MobileApp({
             <MobileSettings
               version={version}
               theme={theme}
+              language={language}
+              onSetLanguage={setLanguage}
               onToggleTheme={handleToggleTheme}
               onShowToast={showToast}
               availableUpdate={availableUpdate}
               onTriggerUpdate={() => setShowUpdateModal(true)}
+              onSignOut={() => {
+                mobileEngine.saveAccounts([]);
+                setEngineAccounts([]);
+                showToast(isRtl ? 'تم تسجيل الخروج بنجاح' : 'Signed out successfully', 'info');
+              }}
             />
           )}
         </div>
