@@ -1614,19 +1614,40 @@ class MobileEngine {
           try {
             if (account.provider === 'google') {
               const deleteGoogleFile = async (fileId) => {
-                return this.authenticatedFetch(
+                let r = await this.authenticatedFetch(
                   `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`,
                   { method: 'DELETE' },
                   account
                 );
+                if (!r || !r.ok) {
+                  r = await this.authenticatedFetch(
+                    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`,
+                    {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ trashed: true })
+                    },
+                    account
+                  );
+                }
+                return r;
               };
 
-              // If targetCloudId is a placeholder, search Google Drive by exact filename across all folders
-              if (!targetCloudId || targetCloudId.startsWith('mobile_file_') || targetCloudId.startsWith('gallery_') || targetCloudId.startsWith('local_')) {
+              let deletedSuccessfully = false;
+              if (targetCloudId && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_') && !targetCloudId.startsWith('local_')) {
+                const delRes = await deleteGoogleFile(targetCloudId).catch(() => null);
+                if (delRes && delRes.ok) {
+                  deletedSuccessfully = true;
+                }
+              }
+
+              // Also search Google Drive for any file with this exact name and delete/trash it
+              if (f.name) {
                 try {
-                  const q = encodeURIComponent(`name = '${f.name.replace(/'/g, "\\'")}' and trashed = false`);
+                  const cleanName = f.name.replace(/'/g, "\\'");
+                  const q = encodeURIComponent(`name = '${cleanName}' and trashed = false`);
                   const searchRes = await this.authenticatedFetch(
-                    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=10`,
+                    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=20`,
                     {},
                     account
                   );
@@ -1636,14 +1657,9 @@ class MobileEngine {
                       for (const item of data.files) {
                         await deleteGoogleFile(item.id).catch(() => {});
                       }
-                      return;
                     }
                   }
                 } catch (_) {}
-              }
-
-              if (targetCloudId && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_') && !targetCloudId.startsWith('local_')) {
-                await deleteGoogleFile(targetCloudId).catch(() => {});
               }
             } else if (account.provider === 'onedrive') {
               if (targetCloudId && !targetCloudId.startsWith('local_') && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_')) {
@@ -1776,25 +1792,12 @@ class MobileEngine {
           account
         );
 
-        // If folder query returned 0 files, check if there are any non-folder files in Drive
+        // Only query files inside AuraSync parent folders
         if (res && res.ok) {
-          let data = await res.json();
-          if ((!data.files || data.files.length === 0) && allParentIds.length > 0) {
-            const fallbackQ = encodeURIComponent(`mimeType != 'application/vnd.google-apps.folder' and trashed = false`);
-            const fallbackRes = await this.authenticatedFetch(
-              `https://www.googleapis.com/drive/v3/files?q=${fallbackQ}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,webContentLink,parents)&pageSize=1000`,
-              {},
-              account
-            );
-            if (fallbackRes && fallbackRes.ok) {
-              const fallbackData = await fallbackRes.json();
-              if (fallbackData.files && fallbackData.files.length > 0) {
-                data = fallbackData;
-              }
-            }
-          }
-
-          const remoteFiles = (data.files || []).map(f => {
+          const data = await res.json();
+          const remoteFiles = (data.files || [])
+            .filter(f => !this._isDeletedFromCloud(f.name))
+            .map(f => {
             const isVideo = f.mimeType && f.mimeType.startsWith('video');
             const isImage = f.mimeType && f.mimeType.startsWith('image');
             const type = isImage ? 'image' : (isVideo ? 'video' : 'doc');

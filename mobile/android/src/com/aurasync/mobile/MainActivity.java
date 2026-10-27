@@ -1812,42 +1812,53 @@ public class MainActivity extends Activity {
             boolean deletedAny = false;
             final ContentResolver cr = getContentResolver();
 
-            // 1. Gather MediaStore URIs and file paths
+            // 1. Gather MediaStore URIs using clean DISPLAY_NAME selection (never use restricted DATA in WHERE clause)
             for (String cleanName : fileNames) {
                 try {
-                    String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? OR LOWER(" + MediaStore.MediaColumns.DISPLAY_NAME + ")=LOWER(?) OR " + MediaStore.MediaColumns.DATA + " LIKE ?";
-                    String[] args = new String[]{cleanName, cleanName, "%/" + cleanName};
-                    String[] proj = new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DATA};
+                    String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? OR LOWER(" + MediaStore.MediaColumns.DISPLAY_NAME + ")=LOWER(?)";
+                    String[] args = new String[]{cleanName, cleanName};
+                    String[] proj = new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME};
 
+                    // Query MediaStore Images
                     try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
                         if (c != null) {
                             int idIdx = c.getColumnIndex(MediaStore.MediaColumns._ID);
-                            int dataIdx = c.getColumnIndex(MediaStore.MediaColumns.DATA);
                             while (c.moveToNext()) {
                                 long id = idIdx >= 0 ? c.getLong(idIdx) : -1L;
                                 if (id > 0) {
                                     urisToDelete.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id));
                                 }
-                                String p = dataIdx >= 0 ? c.getString(dataIdx) : null;
-                                if (p != null) pathsToScan.add(p);
                             }
                         }
                     } catch (Exception ignored) {}
 
+                    // Query MediaStore Videos
                     try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
                         if (cv != null) {
                             int idIdx = cv.getColumnIndex(MediaStore.MediaColumns._ID);
-                            int dataIdx = cv.getColumnIndex(MediaStore.MediaColumns.DATA);
                             while (cv.moveToNext()) {
                                 long id = idIdx >= 0 ? cv.getLong(idIdx) : -1L;
                                 if (id > 0) {
                                     urisToDelete.add(ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id));
                                 }
-                                String p = dataIdx >= 0 ? cv.getString(dataIdx) : null;
-                                if (p != null) pathsToScan.add(p);
                             }
                         }
                     } catch (Exception ignored) {}
+
+                    // Query MediaStore Downloads (Android 10+)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        try (Cursor cd = cr.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
+                            if (cd != null) {
+                                int idIdx = cd.getColumnIndex(MediaStore.MediaColumns._ID);
+                                while (cd.moveToNext()) {
+                                    long id = idIdx >= 0 ? cd.getLong(idIdx) : -1L;
+                                    if (id > 0) {
+                                        urisToDelete.add(ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id));
+                                    }
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
                 } catch (Exception ignored) {}
             }
 
@@ -1874,7 +1885,7 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) {}
 
-            // 3. Try direct deletion first (if All-Files permission granted or older Android)
+            // 3. Try direct deletion on filesystem (works when MANAGE_EXTERNAL_STORAGE is granted)
             for (String p : pathsToScan) {
                 try {
                     File f = new File(p);
@@ -1884,34 +1895,45 @@ public class MainActivity extends Activity {
                 } catch (Exception ignored) {}
             }
 
+            // 4. Try ContentResolver direct deletion or collect for system prompt
+            final List<Uri> pendingConfirmUris = new ArrayList<>();
             for (Uri u : urisToDelete) {
                 try {
                     int r = cr.delete(u, null, null);
-                    if (r > 0) deletedAny = true;
-                } catch (Exception ignored) {}
+                    if (r > 0) {
+                        deletedAny = true;
+                    } else {
+                        pendingConfirmUris.add(u);
+                    }
+                } catch (Exception e) {
+                    // Scoped Storage requires system confirmation prompt
+                    pendingConfirmUris.add(u);
+                }
             }
 
-            // 4. Android 11+ fallback: create native delete request prompt if direct deletion was restricted
-            if (!deletedAny && !urisToDelete.isEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // 5. Android 11+ fallback: create native delete request prompt if direct deletion required system permission
+            if (!pendingConfirmUris.isEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
                         try {
-                            PendingIntent pi = MediaStore.createDeleteRequest(cr, urisToDelete);
+                            PendingIntent pi = MediaStore.createDeleteRequest(cr, pendingConfirmUris);
                             startIntentSenderForResult(pi.getIntentSender(), MEDIA_DELETE_REQUEST_CODE, null, 0, 0, 0);
-                        } catch (Exception ignored) {}
+                        } catch (Exception e) {
+                            android.util.Log.e("AuraSyncMedia", "Failed to launch delete request: " + e.getMessage());
+                        }
                     }
                 });
             }
 
-            // 5. Force MediaScanner refresh on all touched paths
+            // 6. Force MediaScanner refresh on all touched paths so Android gallery updates instantly
             if (!pathsToScan.isEmpty()) {
                 try {
                     MediaScannerConnection.scanFile(MainActivity.this, pathsToScan.toArray(new String[0]), null, null);
                 } catch (Exception ignored) {}
             }
 
-            return deletedAny || !urisToDelete.isEmpty();
+            return deletedAny || !urisToDelete.isEmpty() || !pathsToScan.isEmpty();
         }
 
         @JavascriptInterface
@@ -2125,7 +2147,7 @@ public class MainActivity extends Activity {
                                         + "?client_id=" + URLEncoder.encode(getGoogleClientId(), "UTF-8")
                                         + "&redirect_uri=" + URLEncoder.encode("http://localhost:" + GOOGLE_PORT, "UTF-8")
                                         + "&response_type=code"
-                                        + "&scope=" + URLEncoder.encode("openid email profile https://www.googleapis.com/auth/drive.file", "UTF-8")
+                                        + "&scope=" + URLEncoder.encode("openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive", "UTF-8")
                                         + "&access_type=offline"
                                         + "&prompt=select_account";
                                 } else {

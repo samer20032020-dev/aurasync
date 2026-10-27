@@ -361,15 +361,6 @@ export default function MobileCloudExplorer({
     const fromCloud = deleteTargetMode === 'cloud' || deleteTargetMode === 'both';
     const fromPhone = deleteTargetMode === 'phone' || deleteTargetMode === 'both';
 
-    // If deleting from phone and permission not yet granted, prompt in background without blocking execution
-    if (fromPhone && typeof window !== 'undefined' && window.AuraSyncAndroid?.hasAllFilesPermission) {
-      try {
-        if (!window.AuraSyncAndroid.hasAllFilesPermission()) {
-          window.AuraSyncAndroid.requestAllFilesPermission();
-        }
-      } catch (_) {}
-    }
-
     try {
       const filesMap = new Map((files || []).map(f => [f.id, f]));
       const selectedFilesList = idsToDelete.map(id => filesMap.get(id)).filter(Boolean);
