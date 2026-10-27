@@ -45,7 +45,6 @@ export default function MobileCloudExplorer({
   // Sync cloud files on mount and subscribe to updates
   useEffect(() => {
     refreshLocalMedia();
-    mobileEngine.syncCloudFiles().catch(() => {});
     const unsub = mobileEngine.subscribe((event, data) => {
       if (event === 'files_updated') {
         setFiles(data || []);
@@ -54,6 +53,10 @@ export default function MobileCloudExplorer({
         setAccounts(data || []);
       }
     });
+
+    mobileEngine.syncCloudFiles().then(fresh => {
+      if (fresh && Array.isArray(fresh)) setFiles(fresh);
+    }).catch(() => {});
 
     const handleFocus = () => refreshLocalMedia();
     window.addEventListener('focus', handleFocus);

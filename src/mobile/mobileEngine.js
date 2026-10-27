@@ -36,6 +36,13 @@ class MobileEngine {
     this.stagedShareFiles = this.loadStagedShareFiles();
     this.cloudFolderCache = {};
     this.isNative        = typeof window !== 'undefined' && Boolean(window.AuraSyncAndroid);
+    this._recentlyDeletedCloudIds = new Set();
+
+    // Clear stale legacy name blacklist to restore visibility of valid files in cloud
+    try {
+      localStorage.removeItem('aurasync_deleted_from_cloud');
+    } catch (_) {}
+    this._deletedFromCloudNames = new Set();
 
     if (typeof window !== 'undefined') {
       window.onAuraSyncBiometricSuccess = () => {
@@ -642,9 +649,81 @@ class MobileEngine {
     // 1. Google Drive Multipart Upload (Direct to aurasync-mobile or aurasync-mobile/galary)
     if (account.provider === 'google') {
       const folderId = targetFolderId || (await this.ensureCloudFolder('google', cleanSub));
+      const fileName = file.name || `photo_${Date.now()}.jpg`;
+
+      // Prevent duplicate uploads to Google Drive:
+      // Google Drive POST creates a new file even if the name matches. Check if file already exists in folder!
+      try {
+        const cleanName = fileName.replace(/'/g, "\\'");
+        const parentCond = folderId && folderId !== MOBILE_FOLDER_NAME && folderId !== destFolder
+          ? `'${folderId}' in parents and `
+          : '';
+        const searchQ = encodeURIComponent(`${parentCond}name = '${cleanName}' and trashed = false`);
+        const searchRes = await this.authenticatedFetch(
+          `https://www.googleapis.com/drive/v3/files?q=${searchQ}&fields=files(id,name,size)&spaces=drive`,
+          {},
+          account
+        );
+        if (searchRes && searchRes.ok) {
+          const searchData = await searchRes.json();
+          if (searchData.files && searchData.files.length > 0) {
+            const existingFile = searchData.files[0];
+            // If already exists and size matches, return existing record without duplicating in Drive
+            if (file.size && existingFile.size && Number(file.size) === Number(existingFile.size)) {
+              if (onProgress) onProgress(100, file.size, file.size);
+              return {
+                cloudId: existingFile.id,
+                name: existingFile.name,
+                provider: 'google',
+                status: 'synced',
+                cloudFolder: destFolder
+              };
+            }
+            // If size differs, update existing file with PATCH media upload instead of creating a duplicate
+            const patchUrl = `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=media`;
+            return new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              this._activeUploadXhrs = this._activeUploadXhrs || new Set();
+              this._activeUploadXhrs.add(xhr);
+              const cleanup = () => {
+                if (this._activeUploadXhrs) this._activeUploadXhrs.delete(xhr);
+              };
+              xhr.open('PATCH', patchUrl);
+              xhr.setRequestHeader('Authorization', `Bearer ${account.accessToken}`);
+              xhr.setRequestHeader('Content-Type', file.type || 'image/jpeg');
+              if (xhr.upload && onProgress) {
+                xhr.upload.onprogress = (e) => {
+                  if (e.lengthComputable && e.total > 0) {
+                    onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)), e.loaded, e.total);
+                  }
+                };
+              }
+              xhr.onload = () => {
+                cleanup();
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  resolve({
+                    cloudId: existingFile.id,
+                    name: existingFile.name,
+                    provider: 'google',
+                    status: 'synced',
+                    cloudFolder: destFolder
+                  });
+                } else {
+                  reject(new Error(`Failed to update existing file: ${xhr.status}`));
+                }
+              };
+              xhr.onerror = () => { cleanup(); reject(new Error('Network error updating file in Google Drive')); };
+              xhr.onabort = () => { cleanup(); reject(new Error('UPLOAD_ABORTED')); };
+              xhr.send(file);
+            });
+          }
+        }
+      } catch (_) {}
+
       const boundary = '-------AuraSyncMobileBoundary' + Date.now();
       const metadata = {
-        name: file.name || `photo_${Date.now()}.jpg`,
+        name: fileName,
+        description: 'AuraSync Cloud Media',
         parents: folderId && folderId !== MOBILE_FOLDER_NAME && folderId !== destFolder ? [folderId] : []
       };
 
@@ -871,6 +950,9 @@ class MobileEngine {
         try { preview = URL.createObjectURL(f); } catch (_) {}
       }
 
+      // Clear any past deletion block on this file name so manual upload displays cleanly
+      this._clearDeletedFromCloud(name);
+
       // Check if duplicate prevention is enabled and file already exists
       if (this.settings.preventDuplicates !== false) {
         const alreadyExists = this.uploadedFiles.some(existing => 
@@ -921,6 +1003,7 @@ class MobileEngine {
         }, subFolder);
 
         totalBytesUploaded += isFile ? f.size : (sizeMB * 1024 * 1024);
+        this._recordUploadedGalleryKey(name);
 
         const newRecord = {
           id: uploadResult.cloudId || `mobile_file_${Date.now()}_${i}`,
@@ -997,9 +1080,7 @@ class MobileEngine {
     if (!key) return;
     const keys = this._getUploadedGalleryKeys();
     keys.add(String(key));
-    if (keys.size % 10 === 0) {
-      this._saveUploadedGalleryKeys();
-    }
+    this._saveUploadedGalleryKeys();
   }
 
   _saveUploadedGalleryKeys() {
@@ -1009,6 +1090,20 @@ class MobileEngine {
         localStorage.setItem('aurasync_gallery_uploaded_keys', JSON.stringify(arr.slice(-100000)));
       }
     } catch (_) {}
+  }
+
+  // Transient deleted cloud ID tracking (expires in 25s so cloud index settling doesn't resurrect them)
+  _recordRecentlyDeletedCloudId(id) {
+    if (!id) return;
+    this._recentlyDeletedCloudIds = this._recentlyDeletedCloudIds || new Set();
+    this._recentlyDeletedCloudIds.add(String(id));
+    setTimeout(() => {
+      if (this._recentlyDeletedCloudIds) this._recentlyDeletedCloudIds.delete(String(id));
+    }, 25000);
+  }
+
+  _isRecentlyDeletedCloudId(id) {
+    return Boolean(this._recentlyDeletedCloudIds && this._recentlyDeletedCloudIds.has(String(id)));
   }
 
   // Tracking for items deleted from cloud to safeguard against automatic background re-upload
@@ -1482,10 +1577,13 @@ class MobileEngine {
       const uploadedKeys = this._getUploadedGalleryKeys();
       for (const item of recentItems) {
         const itemKey = `${item.id}_${item.name}_${item.size || 0}`;
-        if (!uploadedKeys.has(itemKey) && !this._isDeletedFromCloud(item.name)) {
+        if (!uploadedKeys.has(itemKey) && !uploadedKeys.has(item.name) && !this._isDeletedFromCloud(item.name)) {
           const already = (this.uploadedFiles || []).some(f => f.name === item.name);
           if (!already) {
             unbackedItems.push(item);
+          } else {
+            this._recordUploadedGalleryKey(itemKey);
+            this._recordUploadedGalleryKey(item.name);
           }
         }
       }
@@ -1508,6 +1606,7 @@ class MobileEngine {
             const uploadResult = await this.uploadFileToCloud(file, account, null, 'galary', false, galaryFolderId);
             const itemKey = `${item.id}_${item.name}_${item.size || 0}`;
             this._recordUploadedGalleryKey(itemKey);
+            this._recordUploadedGalleryKey(item.name);
 
             const record = {
               id: uploadResult.cloudId || `gallery_${Date.now()}_${item.id}`,
@@ -1595,6 +1694,8 @@ class MobileEngine {
       for (const f of filesToDelete) {
         if (f.localMediaId) galleryKeys.delete(`${f.localMediaId}_${f.name}_${f.size || 0}`);
         if (f.name) this._recordDeletedFromCloud(f.name);
+        if (f.id) this._recordRecentlyDeletedCloudId(f.id);
+        if (f.cloudId) this._recordRecentlyDeletedCloudId(f.cloudId);
       }
       this._saveUploadedGalleryKeys();
 
@@ -1647,7 +1748,7 @@ class MobileEngine {
                   const cleanName = f.name.replace(/'/g, "\\'");
                   const q = encodeURIComponent(`name = '${cleanName}' and trashed = false`);
                   const searchRes = await this.authenticatedFetch(
-                    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=20`,
+                    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=100`,
                     {},
                     account
                   );
@@ -1655,6 +1756,7 @@ class MobileEngine {
                     const data = await searchRes.json();
                     if (data.files && data.files.length > 0) {
                       for (const item of data.files) {
+                        this._recordRecentlyDeletedCloudId(item.id);
                         await deleteGoogleFile(item.id).catch(() => {});
                       }
                     }
@@ -1795,9 +1897,44 @@ class MobileEngine {
         // Only query files inside AuraSync parent folders
         if (res && res.ok) {
           const data = await res.json();
-          const remoteFiles = (data.files || [])
-            .filter(f => !this._isDeletedFromCloud(f.name))
-            .map(f => {
+          const rawFiles = data.files || [];
+
+          // Deduplicate multiple copies in Google Drive (keep newest, purge redundant older duplicate IDs in background)
+          const seenFilesByName = new Map();
+          const duplicatesToClean = [];
+
+          for (const f of rawFiles) {
+            // Check transient deleted IDs (only filters specific IDs deleted within last 25s)
+            if (this._isRecentlyDeletedCloudId(f.id)) continue;
+
+            const existing = seenFilesByName.get(f.name);
+            if (!existing) {
+              seenFilesByName.set(f.name, f);
+            } else {
+              const existingTime = existing.modifiedTime ? new Date(existing.modifiedTime).getTime() : 0;
+              const thisTime = f.modifiedTime ? new Date(f.modifiedTime).getTime() : 0;
+              if (thisTime > existingTime) {
+                duplicatesToClean.push(existing.id);
+                seenFilesByName.set(f.name, f);
+              } else {
+                duplicatesToClean.push(f.id);
+              }
+            }
+          }
+
+          // Clean up older duplicate IDs in Google Drive in the background
+          if (duplicatesToClean.length > 0) {
+            for (const dupId of duplicatesToClean) {
+              this.authenticatedFetch(
+                `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(dupId)}?supportsAllDrives=true`,
+                { method: 'DELETE' },
+                account
+              ).catch(() => {});
+            }
+          }
+
+          const uniqueFiles = Array.from(seenFilesByName.values());
+          const remoteFiles = uniqueFiles.map(f => {
             const isVideo = f.mimeType && f.mimeType.startsWith('video');
             const isImage = f.mimeType && f.mimeType.startsWith('image');
             const type = isImage ? 'image' : (isVideo ? 'video' : 'doc');
