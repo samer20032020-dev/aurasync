@@ -846,6 +846,7 @@ export default function App() {
   const [isMobileMode, setIsMobileMode] = useState(() => {
     if (typeof window !== 'undefined') {
       if (window.AuraSyncAndroid) return true;
+      if (window.location.search && window.location.search.includes('mobile')) return true;
       const stored = localStorage.getItem('aurasync_mobile_mode');
       if (stored !== null) return stored === 'true';
       return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;

@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.42',
+  version = '1.0.43',
   theme = 'dark',
   onNavigateTab,
   onShowToast,

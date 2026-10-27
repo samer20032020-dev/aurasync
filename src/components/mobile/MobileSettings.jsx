@@ -218,7 +218,7 @@ function SettingItem({
 
 // ─── Main MobileSettings Component ───────────────────────────────────────────
 export default function MobileSettings({
-  version = '1.0.42',
+  version = '1.0.43',
   theme = 'dark',
   language: propLanguage,
   onSetLanguage,
@@ -418,19 +418,6 @@ export default function MobileSettings({
           >
             {isRtl ? 'تخصيص تجربة السحابة وخيارات المزامنة' : 'Preferences & Cloud Sync Options'}
           </p>
-        </div>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 800,
-            padding: '3px 8px',
-            borderRadius: 8,
-            background: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.1)',
-            color: isDark ? '#60a5fa' : '#2563eb',
-            border: `1px solid ${isDark ? 'rgba(59, 130, 246, 0.3)' : 'rgba(37, 99, 235, 0.2)'}`,
-          }}
-        >
-          v{version}
         </div>
       </div>
 

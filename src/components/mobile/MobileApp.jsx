@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.42',
+  version = '1.0.43',
   accounts = [],
   storage = {},
   stats = {},
@@ -336,7 +336,7 @@ export default function MobileApp({
           </div>
         </div>
 
-        {/* Header Right: Theme Switcher & Mobile Version Pill / Update Badge */}
+        {/* Header Right: Update Badge if available */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {availableUpdate?.hasUpdate && (
             <button
@@ -360,40 +360,6 @@ export default function MobileApp({
               <span>{isRtl ? `تحديث v${availableUpdate.latestVersion}` : `Update v${availableUpdate.latestVersion}`}</span>
             </button>
           )}
-
-          <button
-            onClick={handleToggleTheme}
-            title={isDark ? 'الوضع الفاتح' : 'الوضع الداكن'}
-            style={{
-              padding: '6px 10px', borderRadius: 12,
-              background: colors.surface,
-              border: `1px solid ${colors.border}`,
-              color: colors.text, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: 11, fontWeight: 700,
-            }}
-          >
-            {isDark ? '☀️' : '🌙'}
-          </button>
-
-          <div
-            onClick={() => {
-              if (availableUpdate?.hasUpdate) {
-                triggerHaptic(20);
-                setShowUpdateModal(true);
-              }
-            }}
-            style={{
-              padding: '4px 8px', borderRadius: 10,
-              background: availableUpdate?.hasUpdate ? 'rgba(16, 185, 129, 0.15)' : colors.surface,
-              border: `1px solid ${availableUpdate?.hasUpdate ? '#10b981' : colors.border}`,
-              fontFamily: 'monospace', fontSize: 10, fontWeight: 800,
-              color: availableUpdate?.hasUpdate ? '#10b981' : colors.textMuted,
-              cursor: availableUpdate?.hasUpdate ? 'pointer' : 'default',
-            }}
-          >
-            v{version}
-          </div>
         </div>
       </header>
 
