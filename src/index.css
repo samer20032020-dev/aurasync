@@ -105,6 +105,8 @@
     padding: 0;
     overflow: hidden;
     background: transparent !important;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {

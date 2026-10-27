@@ -17,7 +17,6 @@ import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.Environment;
 import android.app.PendingIntent;
-import android.content.IntentSender;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.view.Window;
@@ -73,7 +72,6 @@ import java.util.Map;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 
 public class MainActivity extends Activity {
     private static final int GOOGLE_PORT = 58291;
@@ -257,8 +255,36 @@ public class MainActivity extends Activity {
         // Configure edge-to-edge dark display
         configureWindowStyle();
 
-        // Initialize WebView
+        // Initialize WebView with full touch responsiveness and explicit layout parameters
         webView = new WebView(this);
+        webView.setLayoutParams(new android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.setClickable(true);
+        webView.setLongClickable(true);
+        webView.requestFocus(android.view.View.FOCUS_DOWN);
+        webView.requestFocusFromTouch();
+
+        // Ensure touch events immediately gain focus and dispatch cleanly
+        webView.setOnTouchListener(new android.view.View.OnTouchListener() {
+            @Override
+            public boolean onTouch(android.view.View v, android.view.MotionEvent event) {
+                switch (event.getAction()) {
+                    case android.view.MotionEvent.ACTION_DOWN:
+                    case android.view.MotionEvent.ACTION_UP:
+                        if (!v.hasFocus()) {
+                            v.requestFocus();
+                            v.requestFocusFromTouch();
+                        }
+                        break;
+                }
+                return false; // Return false so WebView processes touch and click events normally
+            }
+        });
+
         setupWebView();
         setContentView(webView);
 
@@ -309,7 +335,7 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(true);
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
-        settings.setLoadWithOverviewMode(true);
+        settings.setLoadWithOverviewMode(false);
         settings.setUseWideViewPort(true);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);

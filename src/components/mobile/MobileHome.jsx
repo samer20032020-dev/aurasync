@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.58',
+  version = '1.0.59',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -780,6 +780,7 @@ export default function MobileHome({
                 cursor: 'pointer',
                 padding: '5px 10px',
                 borderRadius: 10,
+                touchAction: 'manipulation',
               }}
             >
               {isRtl ? 'تبديل' : 'Change'}
@@ -905,6 +906,7 @@ export default function MobileHome({
               fontSize: 10,
               fontWeight: 700,
               cursor: 'pointer',
+              touchAction: 'manipulation',
             }}
             title={isRtl ? 'تحديث المزامنة' : 'Sync now'}
           >
@@ -981,6 +983,7 @@ export default function MobileHome({
               fontSize: 12,
               fontWeight: 800,
               cursor: isBackingUpGallery ? 'wait' : 'pointer',
+              touchAction: 'manipulation',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1055,6 +1058,7 @@ export default function MobileHome({
               fontSize: 12,
               fontWeight: 700,
               cursor: isBackingUpGallery ? 'wait' : 'pointer',
+              touchAction: 'manipulation',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

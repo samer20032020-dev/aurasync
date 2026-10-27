@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.58',
+  version = '1.0.59',
   accounts = [],
   storage = {},
   stats = {},
@@ -299,13 +299,19 @@ export default function MobileApp({
     <div
       dir={isRtl ? 'rtl' : 'ltr'}
       style={{
-        position: 'relative', display: 'flex', flexDirection: 'column',
-        width: '100%', height: '100%', minHeight: '100vh',
+        position: 'fixed',
+        inset: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%',
+        height: '100%',
         background: colors.bg,
         fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-        color: colors.text, overflowX: 'hidden',
+        color: colors.text,
+        overflow: 'hidden',
         WebkitFontSmoothing: 'antialiased',
         paddingTop: 'max(0px, env(safe-area-inset-top))',
+        touchAction: 'manipulation',
       }}
     >
       {/* ── Native Mobile Header (No switch to desktop, No X button) ─────── */}
@@ -549,6 +555,7 @@ export default function MobileApp({
                   background: active ? colors.accentLight : 'transparent',
                   color: active ? colors.accent : colors.textMuted,
                   cursor: 'pointer', outline: 'none', position: 'relative',
+                  touchAction: 'manipulation',
                   transform: isPressed ? 'scale(0.92)' : 'scale(1)',
                   transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
@@ -591,6 +598,7 @@ export default function MobileApp({
           color: '#ffffff', fontSize: 13, fontWeight: 800,
           boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
           display: 'flex', alignItems: 'center', gap: 10,
+          pointerEvents: 'none',
           animation: 'toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         }}>
           <span>{toast.type === 'success' ? '✓' : toast.type === 'warn' ? '⚠️' : 'ℹ️'}</span>
