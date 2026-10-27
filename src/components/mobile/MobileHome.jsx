@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.54',
+  version = '1.0.55',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -187,6 +187,17 @@ export default function MobileHome({
                 : `✓ Transferred ${successCount.toLocaleString()} files to ${targetFolderDisplay} in ${targetCloudName} and synced!`;
             }
             onShowToast(msg, 'success');
+
+            if (mobileEngine.settings.smartCleanAlert !== false) {
+              setTimeout(() => {
+                onShowToast(
+                  isRtl
+                    ? '🧹 اقتراح تفريغ المساحة: ملفاتك أصبحت بأمان في السحابة! يمكنك الآن تفريغ مساحة الهاتف من المعرض.'
+                    : '🧹 Free up space tip: Files backed up to cloud! You can now free up phone space.',
+                  'info'
+                );
+              }, 3000);
+            }
           }
         }
       }, 500);
@@ -441,6 +452,17 @@ export default function MobileHome({
                     : `✓ Copied full gallery (${res.successful.length.toLocaleString()} items) to ${AURASYNC_MOBILE_FOLDER}/galary!`,
                   'success'
                 );
+
+                if (mobileEngine.settings.smartCleanAlert !== false) {
+                  setTimeout(() => {
+                    onShowToast(
+                      isRtl
+                        ? '🧹 اقتراح تفريغ المساحة: تم حفظ كامل المعرض بالسحابة بأمان! يمكنك تفريغ مساحة الهاتف من المعرض.'
+                        : '🧹 Free up space tip: Full gallery backed up! You can now free up phone storage.',
+                      'info'
+                    );
+                  }, 3500);
+                }
               }
             }, 600);
           } else {

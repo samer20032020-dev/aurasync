@@ -71,6 +71,9 @@ class MobileEngine {
       setInterval(() => {
         if (this.accounts.length > 0 && !this.accounts[0].isOffline) {
           this.syncCloudFiles().catch(() => {});
+          if (this.settings.autoSyncNewMedia !== false) {
+            this.autoSyncNewCapturedMedia().catch(() => {});
+          }
         }
       }, 25000);
 
@@ -79,6 +82,9 @@ class MobileEngine {
         document.addEventListener('visibilitychange', () => {
           if (!document.hidden && this.accounts.length > 0) {
             this.syncCloudFiles().catch(() => {});
+            if (this.settings.autoSyncNewMedia !== false) {
+              this.autoSyncNewCapturedMedia().catch(() => {});
+            }
           }
         });
       }
@@ -797,6 +803,15 @@ class MobileEngine {
       return { successful: [], failed: [], noAccount: true };
     }
 
+    // Enforce Wi-Fi Only setting
+    if (this.settings.wifiOnly && !this.isWifiConnected()) {
+      throw new Error(
+        this.settings.language === 'en'
+          ? 'Sync paused: Wi-Fi Only is active and device is using mobile data. Connect to Wi-Fi to sync.'
+          : 'المزامنة متوقفة: خيار (المزامنة عبر Wi-Fi فقط) مفعّل وهاتفك متصل ببيانات الشريحة. اتصل بشبكة Wi-Fi للمتابعة.'
+      );
+    }
+
     const subFolder = options.subFolder ? String(options.subFolder).trim().replace(/^\/+|\/+$/g, '') : '';
     const destFolder = subFolder ? `${MOBILE_FOLDER_NAME}/${subFolder}` : MOBILE_FOLDER_NAME;
 
@@ -1026,6 +1041,15 @@ class MobileEngine {
   async pullEntireGalleryNative(options = {}) {
     const account = options.account || this.getPrimaryAccount();
     if (!account) throw new Error('No cloud account connected');
+
+    // Enforce Wi-Fi Only setting
+    if (this.settings.wifiOnly && !this.isWifiConnected()) {
+      throw new Error(
+        this.settings.language === 'en'
+          ? 'Sync paused: Wi-Fi Only is active and device is using mobile data. Connect to Wi-Fi to sync.'
+          : 'المزامنة متوقفة: خيار (المزامنة عبر Wi-Fi فقط) مفعّل وهاتفك متصل ببيانات الشريحة. اتصل بشبكة Wi-Fi للمتابعة.'
+      );
+    }
 
     this._isGalleryPullActive = true;
     this._isGalleryPullCancelled = false;
@@ -1353,6 +1377,85 @@ class MobileEngine {
       }
     }
     return set;
+  }
+
+  isWifiConnected() {
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.isWifiConnected) {
+      try {
+        return Boolean(window.AuraSyncAndroid.isWifiConnected());
+      } catch (_) {}
+    }
+    if (typeof navigator !== 'undefined' && navigator.connection) {
+      return navigator.connection.type === 'wifi';
+    }
+    return true;
+  }
+
+  async autoSyncNewCapturedMedia() {
+    if (this._isAutoSyncActive || this._isGalleryPullActive) return;
+    if (this.settings.autoSyncNewMedia === false) return;
+    if (this.settings.wifiOnly && !this.isWifiConnected()) return;
+    if (!this.accounts || this.accounts.length === 0 || this.accounts[0].isOffline) return;
+    if (typeof window === 'undefined' || !window.AuraSyncAndroid?.scanGalleryMedia) return;
+
+    this._isAutoSyncActive = true;
+    try {
+      const rawJson = window.AuraSyncAndroid.scanGalleryMedia(15, 0);
+      if (!rawJson) return;
+      const recentItems = JSON.parse(rawJson);
+      if (!Array.isArray(recentItems) || recentItems.length === 0) return;
+
+      const unbackedItems = [];
+      const uploadedKeys = this._getUploadedGalleryKeys();
+      for (const item of recentItems) {
+        const itemKey = `${item.id}_${item.name}_${item.size || 0}`;
+        if (!uploadedKeys.has(itemKey)) {
+          const already = (this.uploadedFiles || []).some(f => f.name === item.name);
+          if (!already) {
+            unbackedItems.push(item);
+          }
+        }
+      }
+
+      if (unbackedItems.length > 0) {
+        const account = this.getPrimaryAccount();
+        let galaryFolderId = null;
+        try {
+          galaryFolderId = await this.ensureCloudFolder(account.provider, 'galary');
+        } catch (_) {}
+
+        for (const item of unbackedItems) {
+          try {
+            const b64 = window.AuraSyncAndroid.getMediaItemBase64(item.type, item.id);
+            if (!b64 || b64.length === 0) continue;
+            const mime = item.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg');
+            const blob = this.base64ToBlob(b64, mime);
+            const file = new File([blob], item.name, { type: mime });
+
+            const uploadResult = await this.uploadFileToCloud(file, account, null, 'galary', false, galaryFolderId);
+            const itemKey = `${item.id}_${item.name}_${item.size || 0}`;
+            this._recordUploadedGalleryKey(itemKey);
+
+            const record = {
+              id: uploadResult.cloudId || `gallery_${Date.now()}_${item.id}`,
+              cloudId: uploadResult.cloudId,
+              name: item.name,
+              type: item.type === 'video' ? 'video' : 'image',
+              sizeMB: Number((file.size / (1024 * 1024)).toFixed(1)) || 1.0,
+              uploadedAt: Date.now(),
+              cloudFolder: `${MOBILE_FOLDER_NAME}/galary`,
+              cloudProvider: account.provider,
+              encrypted: true,
+              status: 'synced'
+            };
+            this.addUploadedFiles([record]);
+          } catch (_) {}
+        }
+      }
+    } catch (_) {
+    } finally {
+      this._isAutoSyncActive = false;
+    }
   }
 
   deleteMediaFromPhone(fileName) {

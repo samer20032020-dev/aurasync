@@ -58,6 +58,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import android.media.MediaScannerConnection;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -1674,31 +1679,43 @@ public class MainActivity extends Activity {
             if (fileName == null || fileName.trim().isEmpty()) return false;
             final String cleanName = fileName.trim();
             boolean deletedAny = false;
+            final List<String> pathsToScan = new ArrayList<>();
 
-            // 1. Direct filesystem check & deletion
-            try {
-                File[] checkDirs = new File[]{
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AuraSync"),
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
-                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
-                };
-                for (File dir : checkDirs) {
-                    if (dir != null && dir.exists()) {
-                        File target = new File(dir, cleanName);
-                        if (target.exists() && target.isFile()) {
-                            if (target.delete()) deletedAny = true;
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
-
-            // 2. MediaStore deletion
+            // 1. Query MediaStore to locate exact absolute paths across image & video tables
             try {
                 ContentResolver cr = getContentResolver();
                 String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? OR " + MediaStore.MediaColumns.DATA + " LIKE ?";
                 String[] args = new String[]{cleanName, "%/" + cleanName};
+
+                try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, new String[]{MediaStore.MediaColumns.DATA}, sel, args, null)) {
+                    if (c != null) {
+                        while (c.moveToNext()) {
+                            String p = c.getString(0);
+                            if (p != null) pathsToScan.add(p);
+                        }
+                    }
+                } catch (Exception ignored) {}
+
+                try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, new String[]{MediaStore.MediaColumns.DATA}, sel, args, null)) {
+                    if (cv != null) {
+                        while (cv.moveToNext()) {
+                            String p = cv.getString(0);
+                            if (p != null) pathsToScan.add(p);
+                        }
+                    }
+                } catch (Exception ignored) {}
+
+                // Physically delete the discovered files
+                for (String p : pathsToScan) {
+                    try {
+                        File f = new File(p);
+                        if (f.exists() && f.delete()) {
+                            deletedAny = true;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // Delete records from MediaStore content tables
                 try {
                     int d1 = cr.delete(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, sel, args);
                     if (d1 > 0) deletedAny = true;
@@ -1715,7 +1732,58 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) {}
 
+            // 2. Direct filesystem check across all primary storage directories
+            try {
+                File[] checkDirs = new File[]{
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AuraSync"),
+                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Screenshots"),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                };
+                for (File dir : checkDirs) {
+                    if (dir != null && dir.exists()) {
+                        File target = new File(dir, cleanName);
+                        if (target.exists() && target.isFile()) {
+                            String p = target.getAbsolutePath();
+                            if (target.delete()) {
+                                deletedAny = true;
+                                pathsToScan.add(p);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // 3. Notify Android MediaScanner so phone gallery updates immediately!
+            if (!pathsToScan.isEmpty()) {
+                try {
+                    MediaScannerConnection.scanFile(MainActivity.this, pathsToScan.toArray(new String[0]), null, null);
+                } catch (Exception ignored) {}
+            }
+
             return deletedAny;
+        }
+
+        @JavascriptInterface
+        public boolean isWifiConnected() {
+            try {
+                ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (cm == null) return false;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Network network = cm.getActiveNetwork();
+                    if (network == null) return false;
+                    NetworkCapabilities caps = cm.getNetworkCapabilities(network);
+                    return caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+                } else {
+                    NetworkInfo info = cm.getActiveNetworkInfo();
+                    return info != null && info.isConnected() && info.getType() == ConnectivityManager.TYPE_WIFI;
+                }
+            } catch (Exception ignored) {
+                return false;
+            }
         }
 
         /**
