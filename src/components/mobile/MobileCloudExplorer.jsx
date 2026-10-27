@@ -292,7 +292,7 @@ export default function MobileCloudExplorer({
         mobileEngine.syncCloudFiles().then(fresh => {
           if (fresh) setFiles(fresh);
         }).catch(() => {});
-      }, 500);
+      }, 1200);
     } catch (err) {
       if (onShowToast) {
         onShowToast(isRtl ? `تعذر الحذف: ${err.message}` : `Delete failed: ${err.message}`, 'error');
@@ -420,7 +420,7 @@ export default function MobileCloudExplorer({
         mobileEngine.syncCloudFiles().then(fresh => {
           if (fresh) setFiles(fresh);
         }).catch(() => {});
-      }, 500);
+      }, 1200);
     } catch (err) {
       if (onShowToast) {
         onShowToast(

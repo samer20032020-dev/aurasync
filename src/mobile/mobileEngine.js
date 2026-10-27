@@ -37,6 +37,7 @@ class MobileEngine {
     this.cloudFolderCache = {};
     this.isNative        = typeof window !== 'undefined' && Boolean(window.AuraSyncAndroid);
     this._recentlyDeletedCloudIds = new Set();
+    this._recentlyDeletedCloudNames = new Set();
 
     // Clear stale legacy name blacklist to restore visibility of valid files in cloud
     try {
@@ -1092,18 +1093,32 @@ class MobileEngine {
     } catch (_) {}
   }
 
-  // Transient deleted cloud ID tracking (expires in 25s so cloud index settling doesn't resurrect them)
+  // Transient deleted cloud ID & Name tracking (expires in 90s so cloud eventual consistency doesn't resurrect them)
   _recordRecentlyDeletedCloudId(id) {
     if (!id) return;
     this._recentlyDeletedCloudIds = this._recentlyDeletedCloudIds || new Set();
     this._recentlyDeletedCloudIds.add(String(id));
     setTimeout(() => {
       if (this._recentlyDeletedCloudIds) this._recentlyDeletedCloudIds.delete(String(id));
-    }, 25000);
+    }, 90000);
   }
 
   _isRecentlyDeletedCloudId(id) {
     return Boolean(this._recentlyDeletedCloudIds && this._recentlyDeletedCloudIds.has(String(id)));
+  }
+
+  _recordRecentlyDeletedCloudName(name) {
+    if (!name) return;
+    this._recentlyDeletedCloudNames = this._recentlyDeletedCloudNames || new Set();
+    this._recentlyDeletedCloudNames.add(String(name).toLowerCase().trim());
+    setTimeout(() => {
+      if (this._recentlyDeletedCloudNames) this._recentlyDeletedCloudNames.delete(String(name).toLowerCase().trim());
+    }, 90000);
+  }
+
+  _isRecentlyDeletedCloudName(name) {
+    if (!name) return false;
+    return Boolean(this._recentlyDeletedCloudNames && this._recentlyDeletedCloudNames.has(String(name).toLowerCase().trim()));
   }
 
   // Tracking for items deleted from cloud to safeguard against automatic background re-upload
@@ -1693,7 +1708,10 @@ class MobileEngine {
       const galleryKeys = this._getUploadedGalleryKeys();
       for (const f of filesToDelete) {
         if (f.localMediaId) galleryKeys.delete(`${f.localMediaId}_${f.name}_${f.size || 0}`);
-        if (f.name) this._recordDeletedFromCloud(f.name);
+        if (f.name) {
+          this._recordDeletedFromCloud(f.name);
+          this._recordRecentlyDeletedCloudName(f.name);
+        }
         if (f.id) this._recordRecentlyDeletedCloudId(f.id);
         if (f.cloudId) this._recordRecentlyDeletedCloudId(f.cloudId);
       }
@@ -1707,8 +1725,31 @@ class MobileEngine {
       this.saveUploadedFiles(updated);
       this.notifyListeners('files_updated', updated);
 
-      const account = this.getPrimaryAccount();
+      let account = this.getPrimaryAccount();
+      if (account && !account.isOffline && !account.accessToken && account.refreshToken) {
+        try {
+          account = await this.refreshAccessToken(account);
+        } catch (_) {}
+      }
+
       if (account && !account.isOffline) {
+        // First: Instant Native Android OS Deletion (bypasses WebView CORS & network restrictions)
+        if (typeof window !== 'undefined' && window.AuraSyncAndroid?.deleteCloudFileNative && account.accessToken) {
+          for (const f of filesToDelete) {
+            const targetCloudId = f.cloudId || f.id;
+            if (targetCloudId && !targetCloudId.startsWith('local_') && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_')) {
+              try {
+                window.AuraSyncAndroid.deleteCloudFileNative(account.provider, targetCloudId, account.accessToken);
+              } catch (_) {}
+            }
+            if (f.name) {
+              try {
+                window.AuraSyncAndroid.deleteCloudFileNative(account.provider, f.name, account.accessToken);
+              } catch (_) {}
+            }
+          }
+        }
+
         const deletePromises = filesToDelete.map(async (f) => {
           let targetCloudId = f.cloudId || f.id;
 
@@ -1719,17 +1760,21 @@ class MobileEngine {
                   `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`,
                   { method: 'DELETE' },
                   account
-                );
+                ).catch(() => null);
+
                 if (!r || !r.ok) {
                   r = await this.authenticatedFetch(
                     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`,
                     {
                       method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'X-HTTP-Method-Override': 'PATCH'
+                      },
                       body: JSON.stringify({ trashed: true })
                     },
                     account
-                  );
+                  ).catch(() => null);
                 }
                 return r;
               };
@@ -1748,15 +1793,21 @@ class MobileEngine {
                   const cleanName = f.name.replace(/'/g, "\\'");
                   const q = encodeURIComponent(`name = '${cleanName}' and trashed = false`);
                   const searchRes = await this.authenticatedFetch(
-                    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=100`,
+                    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=100`,
                     {},
                     account
-                  );
+                  ).catch(() => null);
+
                   if (searchRes && searchRes.ok) {
                     const data = await searchRes.json();
                     if (data.files && data.files.length > 0) {
                       for (const item of data.files) {
                         this._recordRecentlyDeletedCloudId(item.id);
+                        if (typeof window !== 'undefined' && window.AuraSyncAndroid?.deleteCloudFileNative && account.accessToken) {
+                          try {
+                            window.AuraSyncAndroid.deleteCloudFileNative('google', item.id, account.accessToken);
+                          } catch (_) {}
+                        }
                         await deleteGoogleFile(item.id).catch(() => {});
                       }
                     }
@@ -1904,8 +1955,8 @@ class MobileEngine {
           const duplicatesToClean = [];
 
           for (const f of rawFiles) {
-            // Check transient deleted IDs (only filters specific IDs deleted within last 25s)
-            if (this._isRecentlyDeletedCloudId(f.id)) continue;
+            // Check transient deleted IDs and Names (prevents eventual consistency lag from restoring deleted files)
+            if (this._isRecentlyDeletedCloudId(f.id) || this._isRecentlyDeletedCloudName(f.name)) continue;
 
             const existing = seenFilesByName.get(f.name);
             if (!existing) {
@@ -1997,7 +2048,9 @@ class MobileEngine {
 
         if (res && res.ok) {
           const data = await res.json();
-          const remoteFiles = (data.value || []).map(f => {
+          const remoteFiles = (data.value || [])
+            .filter(f => !this._isRecentlyDeletedCloudId(f.id) && !this._isRecentlyDeletedCloudName(f.name))
+            .map(f => {
             const isVideo = f.file?.mimeType && f.file.mimeType.startsWith('video');
             const isImage = f.file?.mimeType && f.file.mimeType.startsWith('image');
             const type = isImage ? 'image' : (isVideo ? 'video' : 'doc');

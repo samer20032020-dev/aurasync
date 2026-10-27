@@ -359,8 +359,9 @@ public class MainActivity extends Activity {
                 if (request != null && "OPTIONS".equalsIgnoreCase(request.getMethod())) {
                     Map<String, String> headers = new HashMap<>();
                     headers.put("Access-Control-Allow-Origin", "*");
-                    headers.put("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD");
-                    headers.put("Access-Control-Allow-Headers", "*");
+                    headers.put("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD");
+                    headers.put("Access-Control-Allow-Headers", "Authorization, Content-Type, Origin, Accept, X-Requested-With, Range, Cache-Control, X-HTTP-Method-Override");
+                    headers.put("Access-Control-Max-Age", "86400");
                     return new WebResourceResponse("text/plain", "utf-8", 200, "OK", headers, new ByteArrayInputStream(new byte[0]));
                 }
                 if (request != null && request.getUrl() != null) {
@@ -2085,6 +2086,145 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) {}
             return "";
+        }
+
+        @JavascriptInterface
+        public boolean deleteCloudFileNative(final String provider, final String fileIdOrName, final String accessToken) {
+            if (fileIdOrName == null || fileIdOrName.trim().isEmpty() || accessToken == null || accessToken.trim().isEmpty()) {
+                return false;
+            }
+            final String token = accessToken.trim();
+            final String target = fileIdOrName.trim();
+            final String prov = provider != null ? provider.toLowerCase(java.util.Locale.US) : "google";
+
+            try {
+                if ("google".equals(prov)) {
+                    boolean success = false;
+                    // If target does not look like a local identifier, attempt direct Drive delete by ID
+                    if (!target.startsWith("local_") && !target.startsWith("mobile_file_") && !target.startsWith("gallery_")) {
+                        try {
+                            URL delUrl = URI.create("https://www.googleapis.com/drive/v3/files/" + URLEncoder.encode(target, "UTF-8") + "?supportsAllDrives=true").toURL();
+                            HttpURLConnection conn = (HttpURLConnection) delUrl.openConnection();
+                            conn.setRequestMethod("DELETE");
+                            conn.setRequestProperty("Authorization", "Bearer " + token);
+                            conn.setConnectTimeout(10000);
+                            conn.setReadTimeout(10000);
+                            int code = conn.getResponseCode();
+                            if (code == 200 || code == 204) {
+                                success = true;
+                            } else {
+                                // Fallback: Trash file using POST with X-HTTP-Method-Override: PATCH
+                                HttpURLConnection patchConn = (HttpURLConnection) delUrl.openConnection();
+                                patchConn.setRequestMethod("POST");
+                                patchConn.setRequestProperty("X-HTTP-Method-Override", "PATCH");
+                                patchConn.setRequestProperty("Authorization", "Bearer " + token);
+                                patchConn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                                patchConn.setDoOutput(true);
+                                patchConn.setConnectTimeout(8000);
+                                patchConn.setReadTimeout(8000);
+                                OutputStream os = patchConn.getOutputStream();
+                                os.write("{\"trashed\":true}".getBytes(StandardCharsets.UTF_8));
+                                os.flush();
+                                os.close();
+                                int pCode = patchConn.getResponseCode();
+                                if (pCode >= 200 && pCode < 300) success = true;
+                            }
+                        } catch (Exception ignored) {}
+                    }
+
+                    // Also search Google Drive for any file with this name (if target is a filename or has an extension)
+                    try {
+                        String cleanName = target.replace("'", "\\'");
+                        String q = "name = '" + cleanName + "' and trashed = false";
+                        URL searchUrl = URI.create("https://www.googleapis.com/drive/v3/files?q=" + URLEncoder.encode(q, "UTF-8") + "&fields=files(id)&pageSize=50").toURL();
+                        HttpURLConnection sConn = (HttpURLConnection) searchUrl.openConnection();
+                        sConn.setRequestProperty("Authorization", "Bearer " + token);
+                        sConn.setConnectTimeout(10000);
+                        sConn.setReadTimeout(10000);
+                        if (sConn.getResponseCode() == 200) {
+                            BufferedReader br = new BufferedReader(new InputStreamReader(sConn.getInputStream(), StandardCharsets.UTF_8));
+                            StringBuilder sb = new StringBuilder();
+                            String l;
+                            while ((l = br.readLine()) != null) sb.append(l);
+                            br.close();
+                            JSONObject res = new JSONObject(sb.toString());
+                            JSONArray filesArr = res.optJSONArray("files");
+                            if (filesArr != null) {
+                                for (int i = 0; i < filesArr.length(); i++) {
+                                    JSONObject f = filesArr.optJSONObject(i);
+                                    if (f != null && f.has("id")) {
+                                        String fId = f.getString("id");
+                                        try {
+                                            URL itemDelUrl = URI.create("https://www.googleapis.com/drive/v3/files/" + URLEncoder.encode(fId, "UTF-8") + "?supportsAllDrives=true").toURL();
+                                            HttpURLConnection dConn = (HttpURLConnection) itemDelUrl.openConnection();
+                                            dConn.setRequestMethod("DELETE");
+                                            dConn.setRequestProperty("Authorization", "Bearer " + token);
+                                            dConn.setConnectTimeout(8000);
+                                            dConn.setReadTimeout(8000);
+                                            int c = dConn.getResponseCode();
+                                            if (c == 200 || c == 204) success = true;
+                                        } catch (Exception ignored) {}
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {}
+
+                    return success;
+                } else if ("onedrive".equals(prov)) {
+                    if (!target.startsWith("local_") && !target.startsWith("mobile_file_")) {
+                        URL delUrl = URI.create("https://graph.microsoft.com/v1.0/me/drive/items/" + URLEncoder.encode(target, "UTF-8")).toURL();
+                        HttpURLConnection conn = (HttpURLConnection) delUrl.openConnection();
+                        conn.setRequestMethod("DELETE");
+                        conn.setRequestProperty("Authorization", "Bearer " + token);
+                        conn.setConnectTimeout(10000);
+                        conn.setReadTimeout(10000);
+                        int code = conn.getResponseCode();
+                        return (code == 200 || code == 204);
+                    }
+                } else if ("dropbox".equals(prov)) {
+                    URL delUrl = URI.create("https://api.dropboxapi.com/2/files/delete_v2").toURL();
+                    HttpURLConnection conn = (HttpURLConnection) delUrl.openConnection();
+                    conn.setRequestMethod("POST");
+                    conn.setRequestProperty("Authorization", "Bearer " + token);
+                    conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                    conn.setDoOutput(true);
+                    conn.setConnectTimeout(10000);
+                    conn.setReadTimeout(10000);
+                    String path = target.startsWith("/") ? target : ("/aurasync-mobile/" + target);
+                    JSONObject body = new JSONObject();
+                    body.put("path", path);
+                    OutputStream os = conn.getOutputStream();
+                    os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+                    os.flush();
+                    os.close();
+                    int code = conn.getResponseCode();
+                    return (code >= 200 && code < 300);
+                }
+            } catch (Exception e) {
+                android.util.Log.e("AuraSyncCloud", "Native cloud delete failed: " + e.getMessage());
+            }
+            return false;
+        }
+
+        @JavascriptInterface
+        public boolean deleteCloudBatchNative(final String provider, final String jsonFilesArray, final String accessToken) {
+            if (jsonFilesArray == null || jsonFilesArray.trim().isEmpty() || accessToken == null || accessToken.trim().isEmpty()) {
+                return false;
+            }
+            try {
+                JSONArray arr = new JSONArray(jsonFilesArray);
+                for (int i = 0; i < arr.length(); i++) {
+                    String item = arr.optString(i, null);
+                    if (item != null && !item.isEmpty()) {
+                        deleteCloudFileNative(provider, item, accessToken);
+                    }
+                }
+                return true;
+            } catch (Exception e) {
+                android.util.Log.e("AuraSyncCloud", "Native batch delete error: " + e.getMessage());
+                return false;
+            }
         }
     }
 
