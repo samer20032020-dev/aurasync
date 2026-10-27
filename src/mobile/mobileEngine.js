@@ -391,7 +391,13 @@ class MobileEngine {
       return this.cloudFolderCache[cacheKey];
     }
 
-    const account = (this.accounts || []).find(a => a.id === providerId || a.provider === providerId) || this.getPrimaryAccount();
+    this._inFlightFolderPromises = this._inFlightFolderPromises || {};
+    if (this._inFlightFolderPromises[cacheKey]) {
+      return this._inFlightFolderPromises[cacheKey];
+    }
+
+    const task = (async () => {
+      const account = (this.accounts || []).find(a => a.id === providerId || a.provider === providerId) || this.getPrimaryAccount();
 
     // 1. Google Drive: search or create "aurasync-mobile" and optional subfolder (e.g., "galary")
     if (account && account.provider === 'google' && account.accessToken) {
@@ -552,6 +558,15 @@ class MobileEngine {
     const finalDest = cleanSub ? `${MOBILE_FOLDER_NAME}/${cleanSub}` : MOBILE_FOLDER_NAME;
     this.notifyListeners('cloud_folder_created', { folder: finalDest, providerId });
     return finalDest;
+    })();
+
+    this._inFlightFolderPromises[cacheKey] = task;
+    try {
+      const res = await task;
+      return res;
+    } finally {
+      delete this._inFlightFolderPromises[cacheKey];
+    }
   }
 
   async uploadFileToCloud(file, account, onProgress, subFolder = '', isRetry = false) {
@@ -896,6 +911,11 @@ class MobileEngine {
       return { successful: [], failed: [], totalCount: 0 };
     }
 
+    // Ensure dedicated galary folder exists once only when Option 2 is triggered
+    try {
+      await this.ensureCloudFolder(account.provider, 'galary');
+    } catch (_) {}
+
     const pageSize = 50;
     let offset = 0;
     let processed = 0;
@@ -1118,9 +1138,31 @@ class MobileEngine {
         const folderId = await this.ensureCloudFolder('google');
         if (!folderId) return this.uploadedFiles;
 
-        const galaryFolderId = await this.ensureCloudFolder('google', 'galary');
-        const parentFilter = galaryFolderId && galaryFolderId !== folderId
-          ? `('${folderId}' in parents or '${galaryFolderId}' in parents)`
+        // Search existing subfolders inside aurasync-mobile WITHOUT creating any new folder!
+        let existingSubfolderIds = [];
+        let galaryFolderId = this.cloudFolderCache && this.cloudFolderCache['google_galary'] ? this.cloudFolderCache['google_galary'] : null;
+
+        try {
+          const subSearchQ = encodeURIComponent(`mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`);
+          const subSearchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${subSearchQ}&fields=files(id,name)&spaces=drive`, {
+            headers: { Authorization: `Bearer ${account.accessToken}` }
+          });
+          if (subSearchRes.ok) {
+            const subData = await subSearchRes.json();
+            if (subData.files && subData.files.length > 0) {
+              existingSubfolderIds = subData.files.map(f => f.id);
+              const galaryItem = subData.files.find(f => f.name === 'galary');
+              if (galaryItem) {
+                galaryFolderId = galaryItem.id;
+                this.cloudFolderCache['google_galary'] = galaryItem.id;
+              }
+            }
+          }
+        } catch (_) {}
+
+        const allParentIds = [folderId, ...existingSubfolderIds];
+        const parentFilter = allParentIds.length > 1
+          ? `(${allParentIds.map(id => `'${id}' in parents`).join(' or ')})`
           : `'${folderId}' in parents`;
 
         const q = encodeURIComponent(`${parentFilter} and mimeType != 'application/vnd.google-apps.folder' and trashed = false`);

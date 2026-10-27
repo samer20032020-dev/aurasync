@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.45',
+  version = '1.0.46',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -60,6 +60,8 @@ export default function MobileHome({
   const [showAddModal, setShowAddModal] = useState(false);
   const [connectingProvider, setConnectingProvider] = useState(null);
   const [userEmailInput, setUserEmailInput] = useState('');
+  const [showGalleryConfirmModal, setShowGalleryConfirmModal] = useState(false);
+  const [detectedGalleryCount, setDetectedGalleryCount] = useState(0);
 
   // Gallery transfer & sync state
   const [isBackingUpGallery, setIsBackingUpGallery] = useState(false);
@@ -303,7 +305,7 @@ export default function MobileHome({
     executeTransfer(fileArray, '');
   }, [executeTransfer]);
 
-  // Option 2: سحب المعرض كامل (سحب كل الصور والفيديوهات تلقائياً إلى aurasync-mobile/galary)
+  // Option 2: سحب المعرض كامل — يطلب التأكيد أولاً ثم ينسخ كافة الصور والفيديوهات إلى aurasync-mobile/galary
   const handleStartGalleryTransfer = useCallback(async () => {
     triggerHaptic(25);
     if (accounts.length === 0) {
@@ -335,11 +337,8 @@ export default function MobileHome({
       return;
     }
 
-    setTransferMode('gallery');
-
-    // 1. Android Native automatic media pull (fetches all photos & videos from MediaStore)
+    // Permission verification
     if (typeof window !== 'undefined' && window.AuraSyncAndroid) {
-      // Permission verification
       if (window.AuraSyncAndroid.hasStoragePermissions && !window.AuraSyncAndroid.hasStoragePermissions()) {
         if (onShowToast) {
           onShowToast(
@@ -357,12 +356,29 @@ export default function MobileHome({
       try {
         nativeCount = window.AuraSyncAndroid.getGalleryMediaTotalCount();
       } catch (_) {}
+      setDetectedGalleryCount(nativeCount);
+    }
 
-      // If permissions were just requested, nativeCount will be 0.
-      // The onAuraSyncPermissionsResult callback will retry handleStartGalleryTransfer.
-      if (nativeCount <= 0 && window.AuraSyncAndroid.hasStoragePermissions && !window.AuraSyncAndroid.hasStoragePermissions()) {
-        // Permissions dialog just opened — wait for callback
-        return;
+    // Open confirmation modal so the user confirms full gallery copying
+    setShowGalleryConfirmModal(true);
+  }, [accounts, isRtl, onShowToast, triggerHaptic]);
+
+  const handleConfirmGalleryTransfer = useCallback(async () => {
+    setShowGalleryConfirmModal(false);
+    triggerHaptic(30);
+
+    const currentAcc = accounts[0];
+    if (!currentAcc) return;
+
+    setTransferMode('gallery');
+
+    // 1. Android Native automatic media pull (fetches all photos & videos from MediaStore)
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid) {
+      let nativeCount = detectedGalleryCount;
+      if (nativeCount <= 0) {
+        try {
+          nativeCount = window.AuraSyncAndroid.getGalleryMediaTotalCount();
+        } catch (_) {}
       }
 
       if (nativeCount > 0) {
@@ -393,8 +409,8 @@ export default function MobileHome({
               if (onShowToast) {
                 onShowToast(
                   isRtl
-                    ? `✓ تم سحب ونقل المعرض بالكامل (${res.successful.length.toLocaleString()} ملف) إلى مجلد ${AURASYNC_MOBILE_FOLDER}/galary في ${currentAcc.label || 'السحابة'} بنجاح ومزامنته!`
-                    : `✓ Pulled and synced ${res.successful.length.toLocaleString()} items to ${AURASYNC_MOBILE_FOLDER}/galary!`,
+                    ? `✓ تم نسخ ونقل المعرض بالكامل (${res.successful.length.toLocaleString()} ملف) إلى مجلد ${AURASYNC_MOBILE_FOLDER}/galary في ${currentAcc.label || 'السحابة'} بنجاح!`
+                    : `✓ Copied full gallery (${res.successful.length.toLocaleString()} items) to ${AURASYNC_MOBILE_FOLDER}/galary!`,
                   'success'
                 );
               }
@@ -416,7 +432,7 @@ export default function MobileHome({
         } catch (err) {
           setIsBackingUpGallery(false);
           if (onShowToast) {
-            onShowToast(isRtl ? `خطأ أثناء سحب المعرض: ${err.message}` : `Gallery pull error: ${err.message}`, 'error');
+            onShowToast(isRtl ? `خطأ أثناء نسخ المعرض: ${err.message}` : `Gallery copy error: ${err.message}`, 'error');
           }
           return;
         }
@@ -441,7 +457,7 @@ export default function MobileHome({
     if (galleryInputRef.current) {
       galleryInputRef.current.click();
     }
-  }, [accounts, isRtl, onShowToast, triggerHaptic]);
+  }, [accounts, detectedGalleryCount, isRtl, onShowToast, triggerHaptic]);
 
   // Hook into native permissions result callback
   useEffect(() => {
@@ -1172,6 +1188,86 @@ export default function MobileHome({
                   <div style={{ fontSize: 10, color: colors.textMuted }}>2 GB مجاناً • إنشاء {AURASYNC_MOBILE_FOLDER}</div>
                 </div>
                 <span>→</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 7. Gallery Full Copy Confirmation Modal ───────────────────────── */}
+      {showGalleryConfirmModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 95,
+          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(12px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 360,
+            background: colors.card, borderRadius: 28, padding: 24,
+            border: `1.5px solid ${isDark ? 'rgba(124, 58, 237, 0.4)' : 'rgba(124, 58, 237, 0.25)'}`,
+            boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              width: 54, height: 54, borderRadius: 18,
+              background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 26, margin: '0 auto 16px',
+              boxShadow: '0 8px 24px rgba(124, 58, 237, 0.4)',
+            }}>
+              📸
+            </div>
+
+            <h3 style={{ fontSize: 17, fontWeight: 900, color: colors.text, margin: '0 0 10px' }}>
+              {isRtl ? 'نسخ نسخة كاملة من المعرض إلى السحابة؟' : 'Copy Full Gallery to Cloud?'}
+            </h3>
+
+            <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 16px', lineHeight: 1.6 }}>
+              {isRtl
+                ? `هل تريد بدء فحص ونسخ جميع الصور والفيديوهات الموجودة في معرض هاتفك${detectedGalleryCount > 0 ? ` (${detectedGalleryCount.toLocaleString()} ملف)` : ''}، وحفظها بجودتها الأصلية الكاملة في مجلد galary بالسحابة؟`
+                : `Do you want to copy all photos & videos${detectedGalleryCount > 0 ? ` (${detectedGalleryCount.toLocaleString()} items)` : ''} from your gallery to the cloud galary folder?`}
+            </p>
+
+            {/* Destination Pill */}
+            <div style={{
+              padding: '10px 14px', borderRadius: 14,
+              background: isDark ? 'rgba(124, 58, 237, 0.12)' : '#f5f3ff',
+              border: `1px solid ${isDark ? 'rgba(124, 58, 237, 0.3)' : 'rgba(124, 58, 237, 0.2)'}`,
+              marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              fontSize: 11, fontWeight: 700, color: '#a855f7',
+            }}>
+              <span>📁 {isRtl ? 'مجلد الوجهة:' : 'Target:'}</span>
+              <span style={{ direction: 'ltr', fontFamily: 'monospace' }}>
+                {AURASYNC_MOBILE_FOLDER}/galary
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                onClick={handleConfirmGalleryTransfer}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: 16,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                  color: '#ffffff', fontSize: 13, fontWeight: 900,
+                  cursor: 'pointer',
+                  boxShadow: '0 6px 20px rgba(37, 99, 235, 0.4)',
+                }}
+              >
+                {isRtl ? '✓ نعم، ابدأ النسخ الآن' : '✓ Yes, Start Copy Now'}
+              </button>
+
+              <button
+                onClick={() => setShowGalleryConfirmModal(false)}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: 16,
+                  border: `1px solid ${colors.cardBorder}`,
+                  background: 'transparent',
+                  color: colors.textMuted, fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
               </button>
             </div>
           </div>
