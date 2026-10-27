@@ -2226,6 +2226,23 @@ public class MainActivity extends Activity {
                 return false;
             }
         }
+
+        @JavascriptInterface
+        public void openExternalUrl(final String url) {
+            if (url == null || url.trim().isEmpty()) return;
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url.trim()));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                    } catch (Exception e) {
+                        showToast("تعذر فتح الرابط: " + e.getMessage());
+                    }
+                }
+            });
+        }
     }
 
     // ─── Real Android OAuth 2.0 Loopback Engine ──────────────────────────────

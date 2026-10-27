@@ -218,7 +218,7 @@ function SettingItem({
 
 // ─── Main MobileSettings Component ───────────────────────────────────────────
 export default function MobileSettings({
-  version = '1.0.62',
+  version = '1.0.63',
   theme = 'dark',
   language: propLanguage,
   onSetLanguage,
@@ -405,6 +405,42 @@ export default function MobileSettings({
     }
   }, [onSignOut, isRtl, onShowToast, triggerHaptic]);
 
+  // Open cloud drive in official browser or Google Drive app
+  const handleOpenCloudDrive = useCallback(() => {
+    triggerHaptic(20);
+    const acc = accounts[0];
+    let url = 'https://drive.google.com/drive/my-drive';
+    if (acc) {
+      if (acc.provider === 'google') {
+        if (acc.email && acc.email.includes('@')) {
+          url = `https://accounts.google.com/AccountChooser?Email=${encodeURIComponent(acc.email)}&continue=${encodeURIComponent('https://drive.google.com/drive/my-drive')}`;
+        } else {
+          url = 'https://drive.google.com/drive/my-drive';
+        }
+      } else if (acc.provider === 'onedrive') {
+        url = 'https://onedrive.live.com';
+      } else if (acc.provider === 'dropbox') {
+        url = 'https://www.dropbox.com/home';
+      } else if (acc.provider === 'mega') {
+        url = 'https://mega.nz';
+      }
+    }
+
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.openExternalUrl) {
+      window.AuraSyncAndroid.openExternalUrl(url);
+    } else {
+      window.open(url, '_blank');
+    }
+
+    if (onShowToast) {
+      const providerLabel = acc?.label || 'Google Drive';
+      onShowToast(
+        isRtl ? `✓ جاري فتح ${providerLabel} في المتصفح...` : `✓ Opening ${providerLabel}...`,
+        'info'
+      );
+    }
+  }, [accounts, isRtl, onShowToast, triggerHaptic]);
+
   const activeAccount = accounts[0];
 
   return (
@@ -571,6 +607,106 @@ export default function MobileSettings({
             >
               <span>🚪</span>
               <span>{isRtl ? 'تبديل' : 'Switch'}</span>
+            </button>
+          </div>
+
+          {/* Open Cloud Drive in Browser Row */}
+          <div
+            style={{
+              padding: '12px 16px',
+              borderTop: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              background: isDark ? 'rgba(37, 99, 235, 0.05)' : 'rgba(37, 99, 235, 0.02)',
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#3b82f6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+                </svg>
+                <span style={{ fontSize: 13, fontWeight: 800, color: isDark ? '#ffffff' : '#0f172a' }}>
+                  {isRtl ? 'فتح السحابة في المتصفح' : 'Open Cloud in Browser'}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: isDark ? '#94a3b8' : '#64748b', marginTop: 2 }}>
+                {isRtl
+                  ? `عرض وإدارة ملفاتك وصورك مباشرة في ${activeAccount.label || 'Google Drive'}`
+                  : `View and manage your files directly on ${activeAccount.label || 'Google Drive'}`}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenCloudDrive}
+              style={{
+                border: 'none',
+                background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                color: '#ffffff',
+                fontSize: 12,
+                fontWeight: 800,
+                padding: '8px 14px',
+                borderRadius: 12,
+                cursor: 'pointer',
+                flexShrink: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                boxShadow: '0 3px 12px rgba(37, 99, 235, 0.35)',
+                touchAction: 'manipulation',
+              }}
+            >
+              <span>{isRtl ? 'فتح السحابة' : 'Open'}</span>
+              <span style={{ fontSize: 13 }}>↗</span>
+            </button>
+          </div>
+        </SettingsCard>
+      )}
+
+      {!activeAccount && (
+        <SettingsCard isDark={isDark} title={isRtl ? 'سحابة التخزين' : 'Cloud Storage'}>
+          <div
+            style={{
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: isDark ? '#ffffff' : '#0f172a' }}>
+                {isRtl ? 'فتح سحابة جوجل في المتصفح' : 'Open Google Drive in Browser'}
+              </div>
+              <div style={{ fontSize: 11, color: isDark ? '#94a3b8' : '#64748b', marginTop: 2 }}>
+                {isRtl ? 'فتح Google Drive لعرض الملفات والمجلدات' : 'Open Google Drive to view files and folders'}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenCloudDrive}
+              style={{
+                border: 'none',
+                background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                color: '#ffffff',
+                fontSize: 12,
+                fontWeight: 800,
+                padding: '8px 14px',
+                borderRadius: 12,
+                cursor: 'pointer',
+                flexShrink: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                boxShadow: '0 3px 12px rgba(37, 99, 235, 0.35)',
+                touchAction: 'manipulation',
+              }}
+            >
+              <span>{isRtl ? 'فتح جوجل' : 'Open Drive'}</span>
+              <span style={{ fontSize: 13 }}>↗</span>
             </button>
           </div>
         </SettingsCard>
