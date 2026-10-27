@@ -1300,9 +1300,67 @@ class MobileEngine {
     return updated;
   }
 
-  deleteUploadedFile(fileId) {
-    const updated = this.uploadedFiles.filter(f => f.id !== fileId);
+  getLocalMediaNames() {
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.getLocalMediaFileNames) {
+      try {
+        const raw = window.AuraSyncAndroid.getLocalMediaFileNames();
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          return new Set(arr);
+        }
+      } catch (_) {}
+    }
+    return new Set();
+  }
+
+  async deleteUploadedFile(fileId) {
+    const updated = (this.uploadedFiles || []).filter(f => f.id !== fileId);
     this.saveUploadedFiles(updated);
+
+    const account = this.getPrimaryAccount();
+    if (account && account.accessToken && fileId && !fileId.startsWith('local_')) {
+      try {
+        if (account.provider === 'google') {
+          fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${account.accessToken}` }
+          }).catch(() => {});
+        } else if (account.provider === 'onedrive') {
+          fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(fileId)}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${account.accessToken}` }
+          }).catch(() => {});
+        }
+      } catch (_) {}
+    }
+    return updated;
+  }
+
+  async deleteUploadedFiles(fileIds = []) {
+    if (!fileIds || fileIds.length === 0) return this.uploadedFiles;
+    const idSet = new Set(fileIds);
+    const updated = (this.uploadedFiles || []).filter(f => !idSet.has(f.id));
+    this.saveUploadedFiles(updated);
+
+    const account = this.getPrimaryAccount();
+    if (account && account.accessToken) {
+      for (const id of fileIds) {
+        if (!id || id.startsWith('local_')) continue;
+        try {
+          if (account.provider === 'google') {
+            fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${account.accessToken}` }
+            }).catch(() => {});
+          } else if (account.provider === 'onedrive') {
+            fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(id)}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${account.accessToken}` }
+            }).catch(() => {});
+          }
+        } catch (_) {}
+      }
+    }
     return updated;
   }
 

@@ -1384,6 +1384,52 @@ public class MainActivity extends Activity {
             return total;
         }
 
+        @JavascriptInterface
+        public String getLocalMediaFileNames() {
+            JSONArray arr = new JSONArray();
+            try {
+                ContentResolver cr = getContentResolver();
+                String[] proj = new String[]{MediaStore.MediaColumns.DISPLAY_NAME};
+                try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, null)) {
+                    if (c != null) {
+                        int nameIdx = c.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
+                        while (c.moveToNext()) {
+                            String name = c.getString(nameIdx);
+                            if (name != null && !name.isEmpty()) arr.put(name);
+                        }
+                    }
+                }
+                try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, null, null, null)) {
+                    if (cv != null) {
+                        int nameIdx = cv.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME);
+                        while (cv.moveToNext()) {
+                            String name = cv.getString(nameIdx);
+                            if (name != null && !name.isEmpty()) arr.put(name);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+            return arr.toString();
+        }
+
+        @JavascriptInterface
+        public boolean isMediaFileOnPhone(String fileName) {
+            if (fileName == null || fileName.isEmpty()) return false;
+            try {
+                ContentResolver cr = getContentResolver();
+                String[] proj = new String[]{MediaStore.MediaColumns._ID};
+                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=?";
+                String[] args = new String[]{fileName};
+                try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
+                    if (c != null && c.getCount() > 0) return true;
+                }
+                try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
+                    if (cv != null && cv.getCount() > 0) return true;
+                }
+            } catch (Exception ignored) {}
+            return false;
+        }
+
         /**
          * scanGalleryMedia — Returns a page of media items using correct global LIMIT+OFFSET
          * across the unified images+videos list (sorted newest-first per type).

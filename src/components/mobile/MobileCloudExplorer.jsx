@@ -20,6 +20,13 @@ export default function MobileCloudExplorer({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // Local phone media state & selection mode
+  const [localMediaNames, setLocalMediaNames] = useState(() => mobileEngine.getLocalMediaNames());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedFileIds, setSelectedFileIds] = useState(new Set());
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
+
   const triggerHaptic = useCallback((ms = 15) => {
     try {
       if (window.AuraSyncAndroid?.vibrate) window.AuraSyncAndroid.vibrate(ms);
@@ -27,8 +34,16 @@ export default function MobileCloudExplorer({
     } catch (_) {}
   }, []);
 
+  const refreshLocalMedia = useCallback(() => {
+    try {
+      const names = mobileEngine.getLocalMediaNames();
+      setLocalMediaNames(names);
+    } catch (_) {}
+  }, []);
+
   // Sync cloud files on mount and subscribe to updates
   useEffect(() => {
+    refreshLocalMedia();
     mobileEngine.syncCloudFiles().catch(() => {});
     const unsub = mobileEngine.subscribe((event, data) => {
       if (event === 'files_updated') {
@@ -38,8 +53,24 @@ export default function MobileCloudExplorer({
         setAccounts(data || []);
       }
     });
-    return unsub;
-  }, []);
+
+    const handleFocus = () => refreshLocalMedia();
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') refreshLocalMedia();
+    });
+
+    return () => {
+      unsub();
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [refreshLocalMedia]);
+
+  // Fast helper to verify if file exists on phone
+  const isItemOnPhone = useCallback((fileName) => {
+    if (!fileName || !localMediaNames || localMediaNames.size === 0) return false;
+    return localMediaNames.has(fileName);
+  }, [localMediaNames]);
 
   // Manual Trigger to re-sync across all devices
   const handleSyncCloud = useCallback(async () => {
@@ -47,6 +78,7 @@ export default function MobileCloudExplorer({
     setIsSyncing(true);
     triggerHaptic(20);
     try {
+      refreshLocalMedia();
       const updated = await mobileEngine.syncCloudFiles();
       if (updated) setFiles(updated);
       if (onShowToast) {
@@ -64,7 +96,7 @@ export default function MobileCloudExplorer({
     } finally {
       setIsSyncing(false);
     }
-  }, [isRtl, isSyncing, onShowToast, triggerHaptic]);
+  }, [isRtl, isSyncing, onShowToast, triggerHaptic, refreshLocalMedia]);
 
   // Handle file selection from phone
   const handleSelectFiles = (e) => {
@@ -126,6 +158,7 @@ export default function MobileCloudExplorer({
     }).then((result) => {
       setUploadProgress(100);
       mobileEngine.syncCloudFiles().catch(() => {});
+      refreshLocalMedia();
       setTimeout(() => {
         setIsUploading(false);
         setUploadProgress(0);
@@ -176,6 +209,7 @@ export default function MobileCloudExplorer({
     triggerHaptic(20);
     try {
       await mobileEngine.downloadFileToPhone(file);
+      refreshLocalMedia();
       if (onShowToast) {
         onShowToast(
           isRtl
@@ -201,17 +235,58 @@ export default function MobileCloudExplorer({
     }
   };
 
-  const handleDeleteFile = (fileId) => {
+  // Delete single file from cloud only (preserves local phone storage)
+  const handleDeleteFile = async (fileId) => {
     triggerHaptic(30);
-    mobileEngine.deleteUploadedFile(fileId);
-    setSelectedFile(null);
-    if (onShowToast) {
-      onShowToast(
-        isRtl ? 'تم حذف الملف من السحابة' : 'File deleted from cloud',
-        'info'
-      );
+    try {
+      await mobileEngine.deleteUploadedFile(fileId);
+      setSelectedFile(null);
+      refreshLocalMedia();
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? '✓ تم حذف الملف من السحابة فقط (لا يزال محفوظاً على هاتفك)'
+            : '✓ File deleted from cloud only (kept on your phone)',
+          'info'
+        );
+      }
+    } catch (err) {
+      if (onShowToast) {
+        onShowToast(isRtl ? `تعذر الحذف: ${err.message}` : `Delete failed: ${err.message}`, 'error');
+      }
     }
   };
+
+  // Selection mode helpers
+  const handleToggleSelectMode = useCallback(() => {
+    triggerHaptic(15);
+    setIsSelectionMode(prev => {
+      if (prev) {
+        setSelectedFileIds(new Set());
+        return false;
+      }
+      return true;
+    });
+  }, [triggerHaptic]);
+
+  const handleExitSelectMode = useCallback(() => {
+    triggerHaptic(15);
+    setIsSelectionMode(false);
+    setSelectedFileIds(new Set());
+  }, [triggerHaptic]);
+
+  const handleToggleFileSelection = useCallback((fileId) => {
+    triggerHaptic(10);
+    setSelectedFileIds(prev => {
+      const next = new Set(prev);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  }, [triggerHaptic]);
 
   // Filtered files
   const filteredFiles = files.filter(f => {
@@ -221,8 +296,52 @@ export default function MobileCloudExplorer({
     if (activeFilter === 'videos') return f.type === 'video';
     if (activeFilter === 'audio') return f.type === 'audio';
     if (activeFilter === 'docs') return f.type === 'doc';
+    if (activeFilter === 'both') return isItemOnPhone(f.name);
+    if (activeFilter === 'cloud_only') return !isItemOnPhone(f.name);
     return true;
   });
+
+  const handleSelectAll = useCallback(() => {
+    triggerHaptic(15);
+    if (selectedFileIds.size === filteredFiles.length && filteredFiles.length > 0) {
+      setSelectedFileIds(new Set());
+    } else {
+      setSelectedFileIds(new Set(filteredFiles.map(f => f.id)));
+    }
+  }, [filteredFiles, selectedFileIds.size, triggerHaptic]);
+
+  // Confirm and execute batch deletion from cloud only
+  const handleConfirmBatchDelete = async () => {
+    if (selectedFileIds.size === 0 || isBatchDeleting) return;
+    setIsBatchDeleting(true);
+    triggerHaptic(30);
+    const idsToDelete = Array.from(selectedFileIds);
+    const count = idsToDelete.length;
+    try {
+      await mobileEngine.deleteUploadedFiles(idsToDelete);
+      setSelectedFileIds(new Set());
+      setIsSelectionMode(false);
+      setShowBatchDeleteModal(false);
+      refreshLocalMedia();
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `✓ تم حذف ${count} ملف من السحابة فقط (محفوظة بأمان على هاتفك)`
+            : `✓ Deleted ${count} file(s) from cloud only (safe on your phone)`,
+          'success'
+        );
+      }
+    } catch (err) {
+      if (onShowToast) {
+        onShowToast(
+          isRtl ? `تعذر حذف الملفات: ${err.message}` : `Delete failed: ${err.message}`,
+          'error'
+        );
+      }
+    } finally {
+      setIsBatchDeleting(false);
+    }
+  };
 
   const colors = {
     card: isDark ? '#111726' : '#ffffff',
@@ -235,11 +354,16 @@ export default function MobileCloudExplorer({
     tileBg: isDark ? 'rgba(255, 255, 255, 0.04)' : '#f1f5f9',
   };
 
+  const bothCount = files.filter(f => isItemOnPhone(f.name)).length;
+  const cloudOnlyCount = files.filter(f => !isItemOnPhone(f.name)).length;
+
   const filterChips = [
-    { id: 'all',    ar: 'الكل',       en: 'All',    count: files.length },
-    { id: 'photos', ar: 'الصور',      en: 'Photos', count: files.filter(f => f.type === 'image').length },
-    { id: 'videos', ar: 'الفيديوهات', en: 'Videos', count: files.filter(f => f.type === 'video').length },
-    { id: 'docs',   ar: 'المستندات',  en: 'Docs',   count: files.filter(f => f.type === 'doc').length },
+    { id: 'all',        ar: 'الكل',               en: 'All',           count: files.length },
+    { id: 'both',       ar: '🟢 الهاتف والسحابة',  en: '🟢 Phone & Cloud', count: bothCount },
+    { id: 'cloud_only', ar: '🟡 في السحابة فقط',  en: '🟡 Cloud Only', count: cloudOnlyCount },
+    { id: 'photos',     ar: 'الصور',              en: 'Photos',        count: files.filter(f => f.type === 'image').length },
+    { id: 'videos',     ar: 'الفيديوهات',        en: 'Videos',        count: files.filter(f => f.type === 'video').length },
+    { id: 'docs',       ar: 'المستندات',         en: 'Docs',          count: files.filter(f => f.type === 'doc').length },
   ];
 
   return (
@@ -248,6 +372,10 @@ export default function MobileCloudExplorer({
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        @keyframes fadeInHeader {
+          from { opacity: 0; transform: translateY(-4px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
       {/* Hidden Native File Input */}
@@ -260,87 +388,192 @@ export default function MobileCloudExplorer({
         onChange={handleSelectFiles}
       />
 
-      {/* ── Top Bar: Clean, Minimalist & Soft Header ─────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <h2 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 3px', color: colors.text }}>
-            {isRtl ? 'معرض الصور والملفات' : 'Cloud Gallery & Media'}
-          </h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: colors.textMuted }}>
-            {accounts.length > 0 && !accounts[0].isOffline && !accounts[0].accessToken && !accounts[0].refreshToken ? (
-              <div
-                onClick={() => {
-                  triggerHaptic(20);
-                  if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
-                    window.AuraSyncAndroid.startRealOAuth(accounts[0].provider || 'google');
-                  }
-                }}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
-              >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 6px rgba(245,158,11,0.7)' }} />
-                <span style={{ color: '#f59e0b', fontWeight: 700 }}>
-                  {isRtl ? `تسجيل الدخول مطلوب في ${accounts[0].label || 'السحابة'}` : `Sign-in required for ${accounts[0].label || 'Cloud'}`}
-                </span>
+      {/* ── Top Bar: Selection Mode Active vs Normal Mode ── */}
+      {isSelectionMode ? (
+        /* Selection Management Header */
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px', borderRadius: 16, marginBottom: 16,
+          background: isDark ? 'rgba(37,99,235,0.16)' : '#eff6ff',
+          border: '1px solid rgba(59,130,246,0.35)',
+          boxShadow: '0 4px 18px rgba(37,99,235,0.12)',
+          animation: 'fadeInHeader 0.2s ease',
+        }}>
+          {/* Close/Cancel (X) Button + Selected Counter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={handleExitSelectMode}
+              style={{
+                width: 34, height: 34, borderRadius: 10,
+                background: isDark ? 'rgba(255,255,255,0.12)' : '#ffffff',
+                border: `1px solid ${colors.border}`,
+                color: colors.text,
+                fontSize: 15, fontWeight: 800,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                transition: 'all 0.15s',
+              }}
+              title={isRtl ? 'إلغاء التحديد والخروج (✕)' : 'Cancel selection (✕)'}
+            >
+              ✕
+            </button>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: colors.text }}>
+                {selectedFileIds.size > 0
+                  ? (isRtl ? `تم تحديد ${selectedFileIds.size} ملف` : `${selectedFileIds.size} selected`)
+                  : (isRtl ? 'اضغط لتحديد الصور...' : 'Select photos...')}
               </div>
-            ) : (
-              <>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px rgba(16,185,129,0.7)' }} />
-                <span>
-                  {files.length > 0
-                    ? (isRtl ? `${files.length} ملف متزامن مع كافة الأجهزة` : `${files.length} files synced with all devices`)
-                    : (isRtl ? `متصل مع ${accounts[0]?.label || 'السحابة'} • متزامن` : `Connected to ${accounts[0]?.label || 'Cloud'} • Synced`)}
-                </span>
-              </>
-            )}
+              <div style={{ fontSize: 10, color: '#3b82f6', fontWeight: 600 }}>
+                {isRtl ? 'الحذف يمسح من السحابة فقط وتبقى بهاتفك' : 'Deletes from cloud only, keeps on phone'}
+              </div>
+            </div>
+          </div>
+
+          {/* Actions: Select All + Delete from Cloud */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={handleSelectAll}
+              style={{
+                padding: '6px 11px', borderRadius: 10,
+                background: isDark ? 'rgba(255,255,255,0.08)' : '#ffffff',
+                border: `1px solid ${colors.border}`,
+                color: colors.text, fontSize: 11, fontWeight: 700,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              {selectedFileIds.size === filteredFiles.length && filteredFiles.length > 0
+                ? (isRtl ? 'إلغاء الكل' : 'Deselect')
+                : (isRtl ? 'تحديد الكل' : 'Select All')}
+            </button>
+
+            <button
+              onClick={() => {
+                if (selectedFileIds.size > 0) {
+                  triggerHaptic(20);
+                  setShowBatchDeleteModal(true);
+                }
+              }}
+              disabled={selectedFileIds.size === 0}
+              style={{
+                padding: '7px 13px', borderRadius: 10,
+                background: selectedFileIds.size > 0 ? '#ef4444' : (isDark ? 'rgba(239,68,68,0.2)' : '#fca5a5'),
+                border: 'none',
+                color: '#ffffff', fontSize: 11, fontWeight: 800,
+                cursor: selectedFileIds.size > 0 ? 'pointer' : 'not-allowed',
+                display: 'flex', alignItems: 'center', gap: 5,
+                opacity: selectedFileIds.size > 0 ? 1 : 0.45,
+                boxShadow: selectedFileIds.size > 0 ? '0 3px 12px rgba(239,68,68,0.35)' : 'none',
+                transition: 'all 0.2s',
+              }}
+            >
+              <span>🗑️</span>
+              <span>{isRtl ? `حذف (${selectedFileIds.size})` : `Delete (${selectedFileIds.size})`}</span>
+            </button>
           </div>
         </div>
+      ) : (
+        /* Normal Header: Title + Select + Sync + Upload */
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 3px', color: colors.text }}>
+              {isRtl ? 'معرض الصور والملفات' : 'Cloud Gallery & Media'}
+            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: colors.textMuted }}>
+              {accounts.length > 0 && !accounts[0].isOffline && !accounts[0].accessToken && !accounts[0].refreshToken ? (
+                <div
+                  onClick={() => {
+                    triggerHaptic(20);
+                    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.startRealOAuth) {
+                      window.AuraSyncAndroid.startRealOAuth(accounts[0].provider || 'google');
+                    }
+                  }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 6px rgba(245,158,11,0.7)' }} />
+                  <span style={{ color: '#f59e0b', fontWeight: 700 }}>
+                    {isRtl ? `تسجيل الدخول مطلوب في ${accounts[0].label || 'السحابة'}` : `Sign-in required for ${accounts[0].label || 'Cloud'}`}
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px rgba(16,185,129,0.7)' }} />
+                  <span>
+                    {files.length > 0
+                      ? (isRtl ? `${files.length} ملف متزامن مع كافة الأجهزة` : `${files.length} files synced with all devices`)
+                      : (isRtl ? `متصل مع ${accounts[0]?.label || 'السحابة'} • متزامن` : `Connected to ${accounts[0]?.label || 'Cloud'} • Synced`)}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Sync Button */}
-          <button
-            onClick={handleSyncCloud}
-            disabled={isSyncing}
-            style={{
-              width: 38, height: 38, borderRadius: 12,
-              background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
-              border: `1px solid ${colors.border}`,
-              color: colors.text,
-              cursor: isSyncing ? 'wait' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.2s',
-            }}
-            title={isRtl ? 'مزامنة وتحديث الملفات' : 'Sync & refresh files'}
-          >
-            <span style={{
-              display: 'inline-block',
-              animation: isSyncing ? 'spin 1s linear infinite' : 'none',
-              fontSize: 14,
-            }}>
-              🔄
-            </span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Multi-select toggle button */}
+            {files.length > 0 && (
+              <button
+                onClick={handleToggleSelectMode}
+                style={{
+                  height: 38, padding: '0 12px', borderRadius: 12,
+                  background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
+                  border: `1px solid ${colors.border}`,
+                  color: colors.text,
+                  fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                  transition: 'all 0.2s',
+                }}
+                title={isRtl ? 'تحديد صور وحذفها من السحابة فقط' : 'Select items'}
+              >
+                <span style={{ fontSize: 13 }}>☑️</span>
+                <span>{isRtl ? 'تحديد' : 'Select'}</span>
+              </button>
+            )}
 
-          {/* Upload Button */}
-          <button
-            onClick={() => {
-              triggerHaptic(20);
-              if (fileInputRef.current) fileInputRef.current.click();
-            }}
-            style={{
-              padding: '8px 14px', borderRadius: 12,
-              background: '#2563eb',
-              border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-              boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
-            }}
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            <span>{isRtl ? 'رفع صور' : 'Upload'}</span>
-          </button>
+            {/* Sync Button */}
+            <button
+              onClick={handleSyncCloud}
+              disabled={isSyncing}
+              style={{
+                width: 38, height: 38, borderRadius: 12,
+                background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
+                border: `1px solid ${colors.border}`,
+                color: colors.text,
+                cursor: isSyncing ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.2s',
+              }}
+              title={isRtl ? 'مزامنة وتحديث الملفات' : 'Sync & refresh files'}
+            >
+              <span style={{
+                display: 'inline-block',
+                animation: isSyncing ? 'spin 1s linear infinite' : 'none',
+                fontSize: 14,
+              }}>
+                🔄
+              </span>
+            </button>
+
+            {/* Upload Button */}
+            <button
+              onClick={() => {
+                triggerHaptic(20);
+                if (fileInputRef.current) fileInputRef.current.click();
+              }}
+              style={{
+                padding: '8px 14px', borderRadius: 12,
+                background: '#2563eb',
+                border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              <span>{isRtl ? 'رفع صور' : 'Upload'}</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Uploading Progress Indicator */}
       {isUploading && (
@@ -419,7 +652,7 @@ export default function MobileCloudExplorer({
 
       {/* ── Content View: High-Utility Empty State OR Media Grid ───── */}
       {files.length === 0 ? (
-        /* Soft, Minimalist, Truly Useful Empty State */
+        /* Soft, Minimalist Empty State */
         <div style={{
           borderRadius: 24,
           padding: '36px 20px',
@@ -491,7 +724,7 @@ export default function MobileCloudExplorer({
             </div>
           )}
 
-          {/* Primary Action Button: Fast Native Upload */}
+          {/* Primary Action Button */}
           <button
             onClick={() => {
               triggerHaptic(20);
@@ -513,7 +746,7 @@ export default function MobileCloudExplorer({
             <span>{isRtl ? 'رفع صور أو فيديوهات الآن' : 'Upload Photos & Videos Now'}</span>
           </button>
 
-          {/* Secondary Action Button: Pull from other devices */}
+          {/* Secondary Action Button */}
           <button
             onClick={handleSyncCloud}
             disabled={isSyncing}
@@ -538,7 +771,7 @@ export default function MobileCloudExplorer({
             </span>
           </button>
 
-          {/* 3 Soft Highlights */}
+          {/* 3 Highlights */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             gap: 12, fontSize: 10, color: colors.textMuted,
@@ -566,7 +799,7 @@ export default function MobileCloudExplorer({
           </p>
         </div>
       ) : (
-        /* Files Grid (Google Photos Experience) */
+        /* Files Grid with Status Dots & Selection */
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
@@ -575,13 +808,26 @@ export default function MobileCloudExplorer({
           {filteredFiles.map(file => {
             const isImage = file.type === 'image';
             const isVideo = file.type === 'video';
+            const onPhone = isItemOnPhone(file.name);
+            const isSelected = selectedFileIds.has(file.id);
 
             return (
               <div
                 key={file.id}
                 onClick={() => {
-                  triggerHaptic(12);
-                  setSelectedFile(file);
+                  if (isSelectionMode) {
+                    handleToggleFileSelection(file.id);
+                  } else {
+                    triggerHaptic(12);
+                    setSelectedFile(file);
+                  }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (!isSelectionMode) {
+                    setIsSelectionMode(true);
+                    handleToggleFileSelection(file.id);
+                  }
                 }}
                 style={{
                   position: 'relative',
@@ -590,7 +836,10 @@ export default function MobileCloudExplorer({
                   background: colors.tileBg,
                   overflow: 'hidden',
                   cursor: 'pointer',
-                  border: `1px solid ${colors.border}`,
+                  border: isSelected ? '2px solid #2563eb' : `1px solid ${colors.border}`,
+                  boxShadow: isSelected ? '0 0 0 2px rgba(37,99,235,0.35)' : 'none',
+                  transform: isSelected ? 'scale(0.97)' : 'none',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 {/* Image / Thumbnail Preview */}
@@ -631,18 +880,61 @@ export default function MobileCloudExplorer({
                   </div>
                 )}
 
-                {/* Cloud Sync badge in top corner */}
-                <div style={{
-                  position: 'absolute', top: 5, right: 5,
-                  width: 16, height: 16, borderRadius: '50%',
-                  background: 'rgba(16,185,129,0.9)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontSize: 10,
-                }}>
-                  ✓
+                {/* Status Indicator Dot / Badge (Top-Left): 🟢 Phone+Cloud vs 🟡 Cloud Only */}
+                <div
+                  title={
+                    onPhone
+                      ? (isRtl ? '🟢 محفوظ على الهاتف والسحابة معاً' : '🟢 Saved on Phone & Cloud')
+                      : (isRtl ? '🟡 في السحابة فقط (غير موجود بالهاتف - وفر مساحة)' : '🟡 In Cloud only (Freed from phone)')
+                  }
+                  style={{
+                    position: 'absolute', top: 5, left: 5,
+                    padding: '2px 5px', borderRadius: 99,
+                    background: onPhone ? 'rgba(16, 185, 129, 0.92)' : 'rgba(245, 158, 11, 0.95)',
+                    backdropFilter: 'blur(4px)',
+                    display: 'flex', alignItems: 'center', gap: 3,
+                    color: '#ffffff', fontSize: 8, fontWeight: 800,
+                    boxShadow: onPhone ? '0 2px 6px rgba(16,185,129,0.4)' : '0 2px 6px rgba(245,158,11,0.4)',
+                    zIndex: 3,
+                  }}
+                >
+                  <span style={{
+                    width: 5, height: 5, borderRadius: '50%',
+                    background: '#ffffff', display: 'inline-block',
+                  }} />
+                  <span>{onPhone ? (isRtl ? 'هاتف+سحابة' : 'Phone') : (isRtl ? 'سحابة فقط' : 'Cloud')}</span>
                 </div>
 
-                {/* Video Play Badge if video */}
+                {/* Selection Checkbox (Top-Right) OR Cloud Icon */}
+                {isSelectionMode ? (
+                  <div
+                    style={{
+                      position: 'absolute', top: 5, right: 5,
+                      width: 22, height: 22, borderRadius: '50%',
+                      background: isSelected ? '#2563eb' : 'rgba(0,0,0,0.5)',
+                      border: isSelected ? '2px solid #ffffff' : '2px solid rgba(255,255,255,0.7)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#ffffff', fontSize: 11, fontWeight: 900,
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                      zIndex: 4,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {isSelected && '✓'}
+                  </div>
+                ) : (
+                  <div style={{
+                    position: 'absolute', top: 5, right: 5,
+                    width: 17, height: 17, borderRadius: '50%',
+                    background: 'rgba(37,99,235,0.85)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: 9, zIndex: 3,
+                  }}>
+                    ☁️
+                  </div>
+                )}
+
+                {/* Video Play Badge */}
                 {isVideo && (
                   <div style={{
                     position: 'absolute', bottom: 5, left: 5,
@@ -670,7 +962,7 @@ export default function MobileCloudExplorer({
         </div>
       )}
 
-      {/* ── File Preview Modal / Sheet ───────────────────────────────── */}
+      {/* ── Single File Preview Modal / Sheet ───────────────────────────────── */}
       {selectedFile && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 85,
@@ -688,7 +980,7 @@ export default function MobileCloudExplorer({
             animation: 'slideUpSheet 0.28s cubic-bezier(0.16,1,0.3,1) both',
           }}>
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ overflow: 'hidden', paddingRight: 8 }}>
                 <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0, color: colors.text, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                   {selectedFile.name}
@@ -708,6 +1000,28 @@ export default function MobileCloudExplorer({
               </button>
             </div>
 
+            {/* Storage Location Status Banner */}
+            {(() => {
+              const onPhone = isItemOnPhone(selectedFile.name);
+              return (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '9px 12px', borderRadius: 12, marginBottom: 14,
+                  background: onPhone ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                  border: `1px solid ${onPhone ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                  fontSize: 11, fontWeight: 700,
+                  color: onPhone ? '#10b981' : '#f59e0b',
+                }}>
+                  <span style={{ fontSize: 14 }}>{onPhone ? '🟢' : '🟡'}</span>
+                  <span>
+                    {onPhone
+                      ? (isRtl ? 'محفوظ على الهاتف والسحابة معاً' : 'Available on Phone & Cloud')
+                      : (isRtl ? 'في السحابة فقط (غير موجود بذاكرة الهاتف - تم توفير مساحته)' : 'In Cloud only (Freed from phone storage)')}
+                  </span>
+                </div>
+              );
+            })()}
+
             {/* Media Image Preview */}
             {selectedFile.preview && (
               <div style={{
@@ -723,7 +1037,7 @@ export default function MobileCloudExplorer({
               </div>
             )}
 
-            {/* Actions: Download to phone / Share / Delete */}
+            {/* Actions: Download to phone / Share */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
               <button
                 onClick={() => handleDownloadFile(selectedFile)}
@@ -759,7 +1073,7 @@ export default function MobileCloudExplorer({
               </button>
             </div>
 
-            {/* Delete button */}
+            {/* Delete button: Only from Cloud */}
             <button
               onClick={() => handleDeleteFile(selectedFile.id)}
               style={{
@@ -773,8 +1087,76 @@ export default function MobileCloudExplorer({
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
               </svg>
-              <span>{isRtl ? 'حذف من السحابة' : 'Delete from Cloud'}</span>
+              <span>{isRtl ? 'حذف من السحابة فقط (الإبقاء على الهاتف)' : 'Delete from Cloud Only (Keep on phone)'}</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Batch Delete Confirmation Modal ────────────────────────────── */}
+      {showBatchDeleteModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20,
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 360,
+            background: colors.card,
+            borderRadius: 24, padding: '24px 20px',
+            border: `1px solid ${colors.border}`,
+            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: 16,
+              background: 'rgba(239,68,68,0.12)',
+              color: '#ef4444', fontSize: 24,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 14px',
+            }}>
+              🗑️
+            </div>
+            <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 8px', color: colors.text }}>
+              {isRtl ? `حذف ${selectedFileIds.size} ملف من السحابة فقط؟` : `Delete ${selectedFileIds.size} files from cloud only?`}
+            </h3>
+            <p style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.6, margin: '0 0 20px' }}>
+              {isRtl
+                ? '🔒 ستبقى جميع هذه الصور والملفات محفوظة بأمان على هاتفك وفي الاستوديو ولن يتم مسها أبداً. سيتم حذفها فقط من مساحتك السحابية لتوفير المساحة.'
+                : '🔒 All these files will remain completely safe on your phone and gallery. They will only be removed from cloud storage.'}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <button
+                onClick={() => setShowBatchDeleteModal(false)}
+                disabled={isBatchDeleting}
+                style={{
+                  padding: '12px', borderRadius: 14,
+                  background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+                  border: `1px solid ${colors.border}`,
+                  color: colors.text, fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                onClick={handleConfirmBatchDelete}
+                disabled={isBatchDeleting}
+                style={{
+                  padding: '12px', borderRadius: 14,
+                  background: '#ef4444',
+                  border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
+                  cursor: isBatchDeleting ? 'wait' : 'pointer',
+                  boxShadow: '0 4px 14px rgba(239,68,68,0.35)',
+                }}
+              >
+                {isBatchDeleting
+                  ? (isRtl ? 'جاري الحذف...' : 'Deleting...')
+                  : (isRtl ? 'تأكيد الحذف' : 'Confirm Delete')}
+              </button>
+            </div>
           </div>
         </div>
       )}
