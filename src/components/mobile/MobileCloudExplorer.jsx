@@ -28,6 +28,26 @@ export default function MobileCloudExplorer({
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [deleteTargetMode, setDeleteTargetMode] = useState('both'); // 'cloud' | 'phone' | 'both'
 
+  // Trash / Recycle Bin state (سلة المهملات السحابية)
+  const [isTrashView, setIsTrashView] = useState(false);
+  const [trashFiles, setTrashFiles] = useState(() => mobileEngine.trashFiles || []);
+  const [isLoadingTrash, setIsLoadingTrash] = useState(false);
+  const [selectedTrashIds, setSelectedTrashIds] = useState(new Set());
+  const [showEmptyTrashConfirm, setShowEmptyTrashConfirm] = useState(false);
+
+  // One-Tap Full Restore state (استعادة كافة ملفات السحابة للهاتف)
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [isRestoringToPhone, setIsRestoringToPhone] = useState(false);
+  const [restoreProgress, setRestoreProgress] = useState({
+    percent: 0,
+    currentFileName: '',
+    fileIndex: 0,
+    totalFiles: 0,
+    restoredCount: 0,
+    speedMBps: 0
+  });
+  const [restoreResult, setRestoreResult] = useState(null);
+
   const triggerHaptic = useCallback((ms = 15) => {
     try {
       if (window.AuraSyncAndroid?.vibrate) window.AuraSyncAndroid.vibrate(ms);
@@ -52,7 +72,23 @@ export default function MobileCloudExplorer({
       if (event === 'accounts_updated') {
         setAccounts(data || []);
       }
+      if (event === 'trash_updated') {
+        setTrashFiles(data || []);
+      }
     });
+
+    // Check if opened with flag from settings
+    if (typeof window !== 'undefined') {
+      if (window.__openCloudTrash) {
+        delete window.__openCloudTrash;
+        setIsTrashView(true);
+        mobileEngine.getCloudTrashFiles(true).then(tf => setTrashFiles(tf)).catch(() => {});
+      }
+      if (window.__openCloudRestore) {
+        delete window.__openCloudRestore;
+        setShowRestoreModal(true);
+      }
+    }
 
     mobileEngine.syncCloudFiles().then(fresh => {
       if (fresh && Array.isArray(fresh)) setFiles(fresh);
@@ -298,6 +334,143 @@ export default function MobileCloudExplorer({
         onShowToast(isRtl ? `تعذر الحذف: ${err.message}` : `Delete failed: ${err.message}`, 'error');
       }
     }
+  };
+
+  // ─── Trash / Recycle Bin Handlers (سلة المهملات السحابية) ─────────────────
+  const handleToggleTrashView = useCallback(() => {
+    triggerHaptic(15);
+    setIsTrashView(prev => {
+      const next = !prev;
+      if (next) {
+        setIsLoadingTrash(true);
+        mobileEngine.getCloudTrashFiles(true)
+          .then(tf => setTrashFiles(tf))
+          .catch(() => {})
+          .finally(() => setIsLoadingTrash(false));
+      }
+      return next;
+    });
+  }, [triggerHaptic]);
+
+  const handleRestoreFromTrash = async (item) => {
+    triggerHaptic(20);
+    try {
+      await mobileEngine.restoreFromCloudTrash([item.id], [item]);
+      setTrashFiles(prev => prev.filter(t => t.id !== item.id && t.cloudId !== item.id));
+      if (onShowToast) {
+        onShowToast(isRtl ? `✓ تم استعادة "${item.name}" إلى السحابة بنجاح` : `✓ Restored "${item.name}" to cloud`, 'success');
+      }
+      mobileEngine.syncCloudFiles().then(fresh => { if (fresh) setFiles(fresh); }).catch(() => {});
+    } catch (err) {
+      if (onShowToast) onShowToast(err.message, 'error');
+    }
+  };
+
+  const handlePermanentDeleteFromTrash = async (item) => {
+    triggerHaptic(25);
+    try {
+      await mobileEngine.permanentlyDeleteFromTrash([item.id], [item]);
+      setTrashFiles(prev => prev.filter(t => t.id !== item.id && t.cloudId !== item.id));
+      if (onShowToast) {
+        onShowToast(isRtl ? `✓ تم حذف "${item.name}" نهائياً من السحابة` : `✓ Permanently deleted "${item.name}"`, 'info');
+      }
+    } catch (err) {
+      if (onShowToast) onShowToast(err.message, 'error');
+    }
+  };
+
+  const handleRestoreSelectedTrash = async () => {
+    if (selectedTrashIds.size === 0) return;
+    triggerHaptic(20);
+    try {
+      const ids = Array.from(selectedTrashIds);
+      const targetItems = trashFiles.filter(t => selectedTrashIds.has(t.id));
+      await mobileEngine.restoreFromCloudTrash(ids, targetItems);
+      setTrashFiles(prev => prev.filter(t => !selectedTrashIds.has(t.id)));
+      setSelectedTrashIds(new Set());
+      if (onShowToast) {
+        onShowToast(isRtl ? `✓ تم استعادة ${ids.length} ملف إلى السحابة بنجاح` : `✓ Restored ${ids.length} files to cloud`, 'success');
+      }
+      mobileEngine.syncCloudFiles().then(fresh => { if (fresh) setFiles(fresh); }).catch(() => {});
+    } catch (err) {
+      if (onShowToast) onShowToast(err.message, 'error');
+    }
+  };
+
+  const handlePermanentDeleteSelectedTrash = async () => {
+    if (selectedTrashIds.size === 0) return;
+    triggerHaptic(30);
+    try {
+      const ids = Array.from(selectedTrashIds);
+      const targetItems = trashFiles.filter(t => selectedTrashIds.has(t.id));
+      await mobileEngine.permanentlyDeleteFromTrash(ids, targetItems);
+      setTrashFiles(prev => prev.filter(t => !selectedTrashIds.has(t.id)));
+      setSelectedTrashIds(new Set());
+      if (onShowToast) {
+        onShowToast(isRtl ? `✓ تم حذف ${ids.length} ملف نهائياً من السحابة` : `✓ Permanently deleted ${ids.length} files`, 'info');
+      }
+    } catch (err) {
+      if (onShowToast) onShowToast(err.message, 'error');
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    triggerHaptic(35);
+    setShowEmptyTrashConfirm(false);
+    try {
+      await mobileEngine.emptyCloudTrash();
+      setTrashFiles([]);
+      setSelectedTrashIds(new Set());
+      if (onShowToast) {
+        onShowToast(isRtl ? '✓ تم إفراغ سلة المهملات بالكامل' : '✓ Cloud trash emptied completely', 'success');
+      }
+    } catch (err) {
+      if (onShowToast) onShowToast(err.message, 'error');
+    }
+  };
+
+  // ─── One-Tap Full Restore Handlers (استعادة كافة ملفات السحابة) ───────────
+  const handleStartFullRestore = async () => {
+    triggerHaptic(25);
+    setIsRestoringToPhone(true);
+    setRestoreResult(null);
+    setRestoreProgress({
+      percent: 0,
+      currentFileName: '',
+      fileIndex: 0,
+      totalFiles: 0,
+      restoredCount: 0,
+      speedMBps: 0
+    });
+
+    try {
+      const res = await mobileEngine.restoreAllCloudFilesToPhone({
+        onlyCloudExclusive: true,
+        onProgress: (prog) => {
+          setRestoreProgress(prog);
+        }
+      });
+      setRestoreResult(res);
+      refreshLocalMedia();
+      if (onShowToast) {
+        onShowToast(
+          isRtl
+            ? `✓ تم استعادة ${res.restoredCount} ملف بنجاح إلى المعرض!`
+            : `✓ Restored ${res.restoredCount} files directly to gallery!`,
+          'success'
+        );
+      }
+    } catch (err) {
+      if (onShowToast) onShowToast(`Restore error: ${err.message}`, 'error');
+    } finally {
+      setIsRestoringToPhone(false);
+    }
+  };
+
+  const handleCancelFullRestore = () => {
+    triggerHaptic(20);
+    mobileEngine.cancelRestore();
+    setIsRestoringToPhone(false);
   };
 
   // Selection mode helpers
@@ -659,6 +832,61 @@ export default function MobileCloudExplorer({
                 <path d="M2.5 11.5a9 9 0 0 1 15.36-5.86L21.5 8M21.5 12.5a9 9 0 0 1-15.36 5.86L2.5 16" />
               </svg>
             </button>
+
+            {/* Cloud Recycle Bin Toggle Button */}
+            <button
+              onClick={handleToggleTrashView}
+              style={{
+                height: 38, padding: '0 11px', borderRadius: 12,
+                background: isTrashView
+                  ? 'rgba(239, 68, 68, 0.18)'
+                  : (isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9'),
+                border: isTrashView ? '1px solid #ef4444' : `1px solid ${colors.border}`,
+                color: isTrashView ? '#ef4444' : colors.text,
+                fontSize: 12, fontWeight: 700,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                transition: 'all 0.2s',
+              }}
+              title={isRtl ? 'سلة المهملات السحابية' : 'Cloud Trash'}
+            >
+              <span>🗑️</span>
+              <span>{isRtl ? 'السلة' : 'Trash'}</span>
+              {trashFiles.length > 0 && (
+                <span style={{
+                  fontSize: 10, fontWeight: 800,
+                  padding: '1px 5px', borderRadius: 999,
+                  background: '#ef4444', color: '#fff',
+                }}>
+                  {trashFiles.length}
+                </span>
+              )}
+            </button>
+
+            {/* One-Tap Full Backup Restore to Phone Button */}
+            <button
+              onClick={() => {
+                triggerHaptic(20);
+                setShowRestoreModal(true);
+              }}
+              style={{
+                height: 38, padding: '0 12px', borderRadius: 12,
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: 12, fontWeight: 800,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                boxShadow: '0 3px 10px rgba(16,185,129,0.3)',
+                transition: 'all 0.2s',
+              }}
+              title={isRtl ? 'استعادة ملفات السحابة للهاتف' : 'Restore cloud files to phone'}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>{isRtl ? 'استعادة الكل' : 'Restore All'}</span>
+            </button>
           </div>
         </div>
       )}
@@ -738,8 +966,311 @@ export default function MobileCloudExplorer({
         </>
       )}
 
-      {/* ── Content View: High-Utility Empty State OR Media Grid ───── */}
-      {files.length === 0 ? (
+      {/* ── Smart One-Tap Full Restore Banner ── */}
+      {!isTrashView && cloudOnlyCount > 0 && (
+        <div style={{
+          marginBottom: 14, padding: '12px 14px', borderRadius: 16,
+          background: isDark
+            ? 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.08))'
+            : 'linear-gradient(135deg, #ecfdf5, #f0fdf4)',
+          border: '1px solid rgba(16,185,129,0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 10,
+          boxShadow: '0 4px 14px rgba(16,185,129,0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 12,
+              background: 'rgba(16,185,129,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, flexShrink: 0
+            }}>
+              ⚡
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: isDark ? '#34d399' : '#065f46' }}>
+                {isRtl
+                  ? `لديك ${cloudOnlyCount} ملف في السحابة غير موجود على هاتفك`
+                  : `${cloudOnlyCount} cloud files not on your phone`}
+              </div>
+              <div style={{ fontSize: 10, color: colors.textMuted }}>
+                {isRtl
+                  ? 'استرجع كافة صورك وملفاتك إلى معرض الهاتف بنقرة واحدة فائقة السرعة'
+                  : 'Restore all your media to phone gallery with high-speed download'}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic(20);
+              setShowRestoreModal(true);
+            }}
+            style={{
+              padding: '7px 14px', borderRadius: 10,
+              background: '#10b981', border: 'none',
+              color: '#fff', fontSize: 11, fontWeight: 800,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+              boxShadow: '0 3px 10px rgba(16,185,129,0.3)',
+              flexShrink: 0
+            }}
+          >
+            {isRtl ? 'استعادة الآن' : 'Restore Now'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Main View: Recycle Bin View OR Standard Media Grid ── */}
+      {isTrashView ? (
+        <div style={{ animation: 'fadeInHeader 0.25s ease' }}>
+          {/* Recycle Bin Top Bar */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 16px', borderRadius: 18, marginBottom: 16,
+            background: isDark ? 'rgba(239, 68, 68, 0.12)' : '#fef2f2',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                type="button"
+                onClick={handleToggleTrashView}
+                style={{
+                  height: 34, padding: '0 12px', borderRadius: 10,
+                  background: isDark ? 'rgba(255,255,255,0.1)' : '#ffffff',
+                  border: `1px solid ${colors.border}`,
+                  color: colors.text, fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
+                }}
+              >
+                <span>{isRtl ? '← المعرض' : '← Gallery'}</span>
+              </button>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#ef4444' }}>
+                  {isRtl ? `سلة المهملات السحابية (${trashFiles.length})` : `Cloud Trash (${trashFiles.length})`}
+                </div>
+                <div style={{ fontSize: 10, color: colors.textMuted }}>
+                  {isRtl ? 'العناصر المحذوفة محفوظة في السحابة مؤقتاً' : 'Temporarily trashed cloud items'}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {selectedTrashIds.size > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleRestoreSelectedTrash}
+                    style={{
+                      padding: '7px 12px', borderRadius: 10,
+                      background: '#10b981', border: 'none',
+                      color: '#fff', fontSize: 11, fontWeight: 800,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
+                    }}
+                  >
+                    <span>↩️</span>
+                    <span>{isRtl ? `استعادة (${selectedTrashIds.size})` : `Restore (${selectedTrashIds.size})`}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePermanentDeleteSelectedTrash}
+                    style={{
+                      padding: '7px 12px', borderRadius: 10,
+                      background: '#ef4444', border: 'none',
+                      color: '#fff', fontSize: 11, fontWeight: 800,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
+                    }}
+                  >
+                    <span>🗑️</span>
+                    <span>{isRtl ? `حذف نهائي (${selectedTrashIds.size})` : `Purge (${selectedTrashIds.size})`}</span>
+                  </button>
+                </>
+              ) : (
+                trashFiles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic(25);
+                      setShowEmptyTrashConfirm(true);
+                    }}
+                    style={{
+                      padding: '7px 13px', borderRadius: 10,
+                      background: isDark ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      color: '#ef4444', fontSize: 11, fontWeight: 800,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5
+                    }}
+                  >
+                    <span>🗑️</span>
+                    <span>{isRtl ? 'إفراغ السلة بالكامل' : 'Empty Trash'}</span>
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+
+          {/* Trash Items Grid or Empty State */}
+          {isLoadingTrash ? (
+            <div style={{ padding: 40, textAlign: 'center', color: colors.textMuted }}>
+              <div style={{ fontSize: 24, marginBottom: 8, animation: 'spin 1s infinite linear' }}>⏳</div>
+              <div>{isRtl ? 'جاري فحص سلة المهملات السحابية...' : 'Loading trash items...'}</div>
+            </div>
+          ) : trashFiles.length === 0 ? (
+            <div style={{
+              borderRadius: 24, padding: '40px 20px', textAlign: 'center',
+              background: colors.card, border: `1px solid ${colors.border}`,
+              display: 'flex', flexDirection: 'column', alignItems: 'center'
+            }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: 22,
+                background: isDark ? 'rgba(239,68,68,0.1)' : '#fee2e2',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 28, marginBottom: 14
+              }}>
+                🗑️
+              </div>
+              <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 6px', color: colors.text }}>
+                {isRtl ? 'سلة المهملات فارغة تماماً' : 'Recycle Bin is Empty'}
+              </h3>
+              <p style={{ fontSize: 11, color: colors.textMuted, maxWidth: 300, margin: '0 0 16px', lineHeight: 1.6 }}>
+                {isRtl
+                  ? 'لا توجد أي ملفات محذوفة في السحابة حالياً. عند حذف ملفات من السحابة ستظهر هنا لحمايتها من الفقدان.'
+                  : 'No deleted items found in cloud trash. Trashed files appear here so you can easily restore them.'}
+              </p>
+              <button
+                type="button"
+                onClick={handleToggleTrashView}
+                style={{
+                  padding: '10px 20px', borderRadius: 12,
+                  background: '#2563eb', border: 'none',
+                  color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                {isRtl ? 'العودة إلى المعرض' : 'Back to Gallery'}
+              </button>
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gap: 12
+            }}>
+              {trashFiles.map((item) => {
+                const isSelected = selectedTrashIds.has(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      triggerHaptic(10);
+                      setSelectedTrashIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      });
+                    }}
+                    style={{
+                      borderRadius: 16,
+                      background: colors.card,
+                      border: isSelected ? '2px solid #ef4444' : `1px solid ${colors.border}`,
+                      overflow: 'hidden',
+                      position: 'relative',
+                      boxShadow: colors.cardGlow,
+                      cursor: 'pointer',
+                      display: 'flex', flexDirection: 'column'
+                    }}
+                  >
+                    {/* Thumbnail */}
+                    <div style={{
+                      width: '100%', height: 110,
+                      background: isDark ? 'rgba(0,0,0,0.3)' : '#f8fafc',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      position: 'relative', overflow: 'hidden'
+                    }}>
+                      {item.preview ? (
+                        <img
+                          src={item.preview}
+                          alt={item.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span style={{ fontSize: 32 }}>
+                          {item.type === 'image' ? '🖼️' : (item.type === 'video' ? '🎬' : '📄')}
+                        </span>
+                      )}
+                      {/* Checkbox badge */}
+                      <div style={{
+                        position: 'absolute', top: 6, right: isRtl ? undefined : 6, left: isRtl ? 6 : undefined,
+                        width: 22, height: 22, borderRadius: 6,
+                        background: isSelected ? '#ef4444' : 'rgba(0,0,0,0.4)',
+                        border: '2px solid #fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontSize: 12, fontWeight: 900
+                      }}>
+                        {isSelected && '✓'}
+                      </div>
+                    </div>
+
+                    {/* Metadata & Actions */}
+                    <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{
+                        fontSize: 11, fontWeight: 700, color: colors.text,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                      }}>
+                        {item.name}
+                      </div>
+                      <div style={{ fontSize: 10, color: colors.textMuted }}>
+                        {item.sizeMB ? `${item.sizeMB} MB` : '1.5 MB'}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRestoreFromTrash(item);
+                          }}
+                          style={{
+                            padding: '6px 4px', borderRadius: 8,
+                            background: 'rgba(16,185,129,0.15)',
+                            border: '1px solid rgba(16,185,129,0.3)',
+                            color: '#10b981', fontSize: 10, fontWeight: 800,
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3
+                          }}
+                          title={isRtl ? 'استعادة للسحابة' : 'Restore'}
+                        >
+                          <span>↩️</span>
+                          <span>{isRtl ? 'استعادة' : 'Restore'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePermanentDeleteFromTrash(item);
+                          }}
+                          style={{
+                            padding: '6px 4px', borderRadius: 8,
+                            background: 'rgba(239,68,68,0.15)',
+                            border: '1px solid rgba(239,68,68,0.3)',
+                            color: '#ef4444', fontSize: 10, fontWeight: 800,
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3
+                          }}
+                          title={isRtl ? 'حذف نهائي' : 'Purge'}
+                        >
+                          <span>🗑️</span>
+                          <span>{isRtl ? 'نهائي' : 'Delete'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* ── Content View: High-Utility Empty State OR Media Grid ───── */}
+          {files.length === 0 ? (
         /* Soft, Minimalist Empty State */
         <div style={{
           borderRadius: 24,
@@ -1062,6 +1593,8 @@ export default function MobileCloudExplorer({
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* ── Single File Preview Modal / Sheet ───────────────────────────────── */}
@@ -1420,6 +1953,266 @@ export default function MobileCloudExplorer({
                       ? (deleteTargetMode === 'both' ? 'حذف من الاثنين' : (deleteTargetMode === 'phone' ? 'حذف من الهاتف' : 'حذف من السحابة'))
                       : (deleteTargetMode === 'both' ? 'Delete Both' : (deleteTargetMode === 'phone' ? 'Delete from Phone' : 'Delete from Cloud'))
                     )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── One-Tap Full Restore Modal (استعادة السحابة للهاتف) ── */}
+      {showRestoreModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 120,
+          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 380, borderRadius: 24,
+            background: colors.card, border: `1px solid ${colors.border}`,
+            padding: 22, boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+            boxSizing: 'border-box', animation: 'fadeInHeader 0.2s ease'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 12,
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 20, color: '#fff', boxShadow: '0 4px 12px rgba(16,185,129,0.3)'
+                }}>
+                  ⚡
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: colors.text }}>
+                    {isRtl ? 'استعادة السحابة إلى الهاتف' : 'Restore Cloud to Phone'}
+                  </h3>
+                  <div style={{ fontSize: 10, color: colors.textMuted }}>
+                    {isRtl ? 'تنزيل مباشر إلى المعرض (Pictures/AuraSync)' : 'Direct download to Gallery'}
+                  </div>
+                </div>
+              </div>
+              {!isRestoringToPhone && (
+                <button
+                  type="button"
+                  onClick={() => setShowRestoreModal(false)}
+                  style={{
+                    width: 32, height: 32, borderRadius: 10, border: 'none',
+                    background: isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9',
+                    color: colors.text, fontSize: 14, fontWeight: 800, cursor: 'pointer'
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Body */}
+            {restoreResult ? (
+              /* Success Result View */
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: '50%',
+                  background: 'rgba(16,185,129,0.18)', color: '#10b981',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 28, margin: '0 auto 12px'
+                }}>
+                  ✓
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: colors.text, marginBottom: 6 }}>
+                  {isRtl ? 'اكتملت الاستعادة بنجاح!' : 'Restore Completed!'}
+                </div>
+                <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 18, lineHeight: 1.5 }}>
+                  {isRtl
+                    ? `تم حفظ ${restoreResult.restoredCount} ملف مباشرة في معرض هاتفك في ألبوم Pictures/AuraSync.`
+                    : `Successfully saved ${restoreResult.restoredCount} files to your phone gallery.`}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRestoreModal(false);
+                    setRestoreResult(null);
+                    refreshLocalMedia();
+                  }}
+                  style={{
+                    width: '100%', padding: '13px', borderRadius: 14,
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    border: 'none', color: '#fff', fontSize: 13, fontWeight: 800,
+                    cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.3)'
+                  }}
+                >
+                  {isRtl ? 'تم • رائع' : 'Done'}
+                </button>
+              </div>
+            ) : isRestoringToPhone ? (
+              /* In Progress View */
+              <div style={{ padding: '8px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#10b981' }}>
+                    {isRtl ? `جاري التنزيل (${restoreProgress.fileIndex}/${restoreProgress.totalFiles})` : `Downloading (${restoreProgress.fileIndex}/${restoreProgress.totalFiles})`}
+                  </span>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: colors.text }}>
+                    {restoreProgress.overallPercent}%
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div style={{
+                  width: '100%', height: 8, borderRadius: 99,
+                  background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
+                  overflow: 'hidden', marginBottom: 12
+                }}>
+                  <div style={{
+                    width: `${restoreProgress.overallPercent}%`, height: '100%',
+                    background: 'linear-gradient(90deg, #10b981, #3b82f6)',
+                    transition: 'width 0.25s ease'
+                  }} />
+                </div>
+
+                <div style={{
+                  fontSize: 11, color: colors.textMuted,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  marginBottom: 10
+                }}>
+                  📁 {restoreProgress.currentFileName || (isRtl ? 'جاري الاتصال بالسحابة...' : 'Connecting...')}
+                </div>
+
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  padding: '8px 12px', borderRadius: 12,
+                  background: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc',
+                  marginBottom: 16, fontSize: 11
+                }}>
+                  <span style={{ color: colors.textMuted }}>{isRtl ? 'سرعة النقل:' : 'Speed:'}</span>
+                  <span style={{ fontWeight: 800, color: '#10b981' }}>⚡ {restoreProgress.speedMBps} MB/s</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCancelFullRestore}
+                  style={{
+                    width: '100%', padding: '11px', borderRadius: 12,
+                    background: isDark ? 'rgba(239,68,68,0.12)' : '#fee2e2',
+                    border: '1px solid rgba(239,68,68,0.25)',
+                    color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                  }}
+                >
+                  {isRtl ? 'إلغاء العملية' : 'Cancel'}
+                </button>
+              </div>
+            ) : (
+              /* Idle Confirmation View */
+              <div>
+                <p style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.6, margin: '0 0 16px' }}>
+                  {isRtl
+                    ? `سيقوم AuraSync بفحص مكتبة السحابة واسترجاع كافة الملفات التي تنقص هاتفك (${cloudOnlyCount > 0 ? `${cloudOnlyCount} ملف حصري بالسحابة` : `${files.length} ملف إجمالي`}) مباشرة إلى معرض الصور بأعلى دقة وبدون تكرار.`
+                    : `AuraSync will scan your cloud and download any missing files (${cloudOnlyCount > 0 ? `${cloudOnlyCount} cloud-exclusive files` : `${files.length} total files`}) directly to your phone gallery.`}
+                </p>
+
+                <div style={{
+                  padding: '10px 14px', borderRadius: 14,
+                  background: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc',
+                  border: `1px solid ${colors.border}`,
+                  marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: colors.textMuted }}>{isRtl ? 'الملفات المتاحة بالسحابة:' : 'Cloud files:'}</span>
+                    <span style={{ fontWeight: 700, color: colors.text }}>{files.length} ملف</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: colors.textMuted }}>{isRtl ? 'غير متوفرة بالهاتف:' : 'Missing on phone:'}</span>
+                    <span style={{ fontWeight: 800, color: '#10b981' }}>{cloudOnlyCount} ملف</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: colors.textMuted }}>{isRtl ? 'مكان الحفظ:' : 'Save location:'}</span>
+                    <span style={{ fontWeight: 600, color: '#3b82f6' }}>Pictures/AuraSync</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowRestoreModal(false)}
+                    style={{
+                      padding: '12px', borderRadius: 14,
+                      background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+                      border: `1px solid ${colors.border}`,
+                      color: colors.text, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                    }}
+                  >
+                    {isRtl ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStartFullRestore}
+                    style={{
+                      padding: '12px', borderRadius: 14,
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      border: 'none', color: '#fff', fontSize: 12, fontWeight: 800,
+                      cursor: 'pointer', boxShadow: '0 4px 14px rgba(16,185,129,0.35)'
+                    }}
+                  >
+                    {isRtl ? 'ابدأ الاستعادة الآن' : 'Start Restore'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Empty Trash Confirmation Modal ── */}
+      {showEmptyTrashConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 125,
+          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 340, borderRadius: 22,
+            background: colors.card, border: `1px solid ${colors.border}`,
+            padding: 20, textAlign: 'center', animation: 'fadeInHeader 0.2s ease'
+          }}>
+            <div style={{
+              width: 50, height: 50, borderRadius: '50%',
+              background: 'rgba(239,68,68,0.15)', color: '#ef4444',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 24, margin: '0 auto 12px'
+            }}>
+              ⚠️
+            </div>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 6px', color: colors.text }}>
+              {isRtl ? 'إفراغ سلة المهملات بالكامل؟' : 'Empty Cloud Trash?'}
+            </h3>
+            <p style={{ fontSize: 11, color: colors.textMuted, margin: '0 0 16px', lineHeight: 1.5 }}>
+              {isRtl
+                ? 'سيتم حذف جميع العناصر الموجودة في سلة المهملات السحابية نهائياً ولن تتمكن من استعادتها.'
+                : 'All items in cloud trash will be permanently deleted and cannot be recovered.'}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setShowEmptyTrashConfirm(false)}
+                style={{
+                  padding: '11px', borderRadius: 12,
+                  background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+                  border: `1px solid ${colors.border}`,
+                  color: colors.text, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleEmptyTrash}
+                style={{
+                  padding: '11px', borderRadius: 12,
+                  background: '#ef4444', border: 'none',
+                  color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer',
+                  boxShadow: '0 3px 12px rgba(239,68,68,0.35)'
+                }}
+              >
+                {isRtl ? 'نعم، إفراغ' : 'Yes, Empty'}
               </button>
             </div>
           </div>

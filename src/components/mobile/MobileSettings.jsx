@@ -218,7 +218,7 @@ function SettingItem({
 
 // ─── Main MobileSettings Component ───────────────────────────────────────────
 export default function MobileSettings({
-  version = '1.0.63',
+  version = '1.0.64',
   theme = 'dark',
   language: propLanguage,
   onSetLanguage,
@@ -227,6 +227,7 @@ export default function MobileSettings({
   availableUpdate = null,
   onTriggerUpdate,
   onSignOut,
+  onNavigateTab,
 }) {
   const i18n = useTranslation();
   const currentLang = propLanguage || i18n.language || 'ar';
@@ -440,6 +441,26 @@ export default function MobileSettings({
       );
     }
   }, [accounts, isRtl, onShowToast, triggerHaptic]);
+
+  const handleOpenCloudTrash = useCallback(() => {
+    triggerHaptic(20);
+    if (typeof window !== 'undefined') window.__openCloudTrash = true;
+    if (onNavigateTab) {
+      onNavigateTab('files');
+    } else if (onShowToast) {
+      onShowToast(isRtl ? 'تم فتح سلة المهملات في تبويب الملفات' : 'Opened Trash in Files', 'info');
+    }
+  }, [onNavigateTab, onShowToast, isRtl, triggerHaptic]);
+
+  const handleOpenFullRestore = useCallback(() => {
+    triggerHaptic(20);
+    if (typeof window !== 'undefined') window.__openCloudRestore = true;
+    if (onNavigateTab) {
+      onNavigateTab('files');
+    } else if (onShowToast) {
+      onShowToast(isRtl ? 'تم فتح أداة الاستعادة في تبويب الملفات' : 'Opened Restore in Files', 'info');
+    }
+  }, [onNavigateTab, onShowToast, isRtl, triggerHaptic]);
 
   const activeAccount = accounts[0];
 
@@ -660,6 +681,105 @@ export default function MobileSettings({
             >
               <span>{isRtl ? 'فتح السحابة' : 'Open'}</span>
               <span style={{ fontSize: 13 }}>↗</span>
+            </button>
+          </div>
+
+          {/* Cloud Recycle Bin Row */}
+          <div
+            style={{
+              padding: '12px 16px',
+              borderTop: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              background: isDark ? 'rgba(239, 68, 68, 0.04)' : 'rgba(239, 68, 68, 0.02)',
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 16 }}>🗑️</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: isDark ? '#ffffff' : '#0f172a' }}>
+                  {isRtl ? 'سلة المهملات السحابية' : 'Cloud Recycle Bin'}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: isDark ? '#94a3b8' : '#64748b', marginTop: 2 }}>
+                {isRtl
+                  ? 'عرض واسترجاع الملفات المحذوفة مؤقتاً في السحابة أو حذفها نهائياً'
+                  : 'View, restore, or permanently purge trashed cloud media'}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenCloudTrash}
+              style={{
+                border: isDark ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(239, 68, 68, 0.25)',
+                background: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fee2e2',
+                color: '#ef4444',
+                fontSize: 12,
+                fontWeight: 800,
+                padding: '8px 14px',
+                borderRadius: 12,
+                cursor: 'pointer',
+                flexShrink: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                touchAction: 'manipulation',
+              }}
+            >
+              <span>{isRtl ? 'فتح السلة' : 'Open Trash'}</span>
+            </button>
+          </div>
+
+          {/* Full Restore to Phone Row */}
+          <div
+            style={{
+              padding: '12px 16px',
+              borderTop: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              background: isDark ? 'rgba(16, 185, 129, 0.05)' : 'rgba(16, 185, 129, 0.02)',
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 16 }}>⚡</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: isDark ? '#ffffff' : '#0f172a' }}>
+                  {isRtl ? 'استعادة كافة ملفات السحابة للهاتف' : 'Full Backup Restore to Phone'}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: isDark ? '#94a3b8' : '#64748b', marginTop: 2 }}>
+                {isRtl
+                  ? 'تنزيل فائق السرعة لكافة الصور والملفات غير الموجودة بالهاتف مباشرة للمعرض'
+                  : 'High-speed one-tap download of all cloud files directly to your gallery'}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenFullRestore}
+              style={{
+                border: 'none',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                color: '#ffffff',
+                fontSize: 12,
+                fontWeight: 800,
+                padding: '8px 14px',
+                borderRadius: 12,
+                cursor: 'pointer',
+                flexShrink: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                boxShadow: '0 3px 12px rgba(16, 185, 129, 0.3)',
+                touchAction: 'manipulation',
+              }}
+            >
+              <span>{isRtl ? 'استعادة الكل' : 'Restore All'}</span>
             </button>
           </div>
         </SettingsCard>

@@ -22,6 +22,7 @@
 const STORAGE_KEY_SETTINGS     = 'aurasync_mobile_settings';
 const STORAGE_KEY_ACCOUNTS     = 'aurasync_mobile_accounts';
 const STORAGE_KEY_FILES        = 'aurasync_mobile_uploaded_files';
+const STORAGE_KEY_TRASH        = 'aurasync_mobile_trash';
 const STORAGE_KEY_STAGED       = 'aurasync_mobile_staged_share';
 const MOBILE_FOLDER_NAME       = 'aurasync-mobile';
 
@@ -33,6 +34,7 @@ class MobileEngine {
     this.settings        = this.loadSettings();
     this.accounts        = this.loadAccounts();
     this.uploadedFiles   = this.loadUploadedFiles();
+    this.trashFiles      = this.loadTrashFiles();
     this.stagedShareFiles = this.loadStagedShareFiles();
     this.cloudFolderCache = {};
     this.isNative        = typeof window !== 'undefined' && Boolean(window.AuraSyncAndroid);
@@ -1121,6 +1123,14 @@ class MobileEngine {
     return Boolean(this._recentlyDeletedCloudNames && this._recentlyDeletedCloudNames.has(String(name).toLowerCase().trim()));
   }
 
+  _unrecordRecentlyDeletedCloudId(id) {
+    if (this._recentlyDeletedCloudIds) this._recentlyDeletedCloudIds.delete(String(id));
+  }
+
+  _unrecordRecentlyDeletedCloudName(name) {
+    if (this._recentlyDeletedCloudNames) this._recentlyDeletedCloudNames.delete(String(name).toLowerCase().trim());
+  }
+
   // Tracking for items deleted from cloud to safeguard against automatic background re-upload
   _getDeletedFromCloudNames() {
     if (this._deletedFromCloudNames) return this._deletedFromCloudNames;
@@ -1497,6 +1507,376 @@ class MobileEngine {
     this.notifyListeners('files_updated', files);
   }
 
+  // ─── Trash / Recycle Bin (سلة المهملات السحابية) ──────────────────────────
+
+  loadTrashFiles() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_TRASH);
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return [];
+  }
+
+  saveTrashFiles(files) {
+    this.trashFiles = files;
+    try {
+      localStorage.setItem(STORAGE_KEY_TRASH, JSON.stringify(files));
+    } catch (_) {}
+    this.notifyListeners('trash_updated', files);
+  }
+
+  async getCloudTrashFiles(forceRefresh = false) {
+    let account = this.getPrimaryAccount();
+    if (account && !account.isOffline && !account.accessToken && account.refreshToken) {
+      try {
+        account = await this.refreshAccessToken(account);
+      } catch (_) {}
+    }
+
+    if (!account || account.isOffline || !account.accessToken) {
+      return this.trashFiles || [];
+    }
+
+    try {
+      if (account.provider === 'google') {
+        const q = encodeURIComponent("trashed = true and mimeType != 'application/vnd.google-apps.folder'");
+        const res = await this.authenticatedFetch(
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,webContentLink)&pageSize=100`,
+          {},
+          account
+        );
+        if (res && res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.files)) {
+            const cloudTrash = data.files.map(f => {
+              const name = f.name || `file_${f.id}`;
+              const ext = name.split('.').pop().toLowerCase();
+              const isImage = ['jpg','jpeg','png','webp','gif','heic'].includes(ext);
+              const isVideo = ['mp4','mov','avi','mkv','webm'].includes(ext);
+              return {
+                id: f.id,
+                cloudId: f.id,
+                name: name,
+                sizeMB: f.size ? Number((f.size / (1024 * 1024)).toFixed(1)) : 1.5,
+                type: isImage ? 'image' : (isVideo ? 'video' : 'doc'),
+                trashedAt: f.modifiedTime ? new Date(f.modifiedTime).getTime() : Date.now(),
+                preview: f.thumbnailLink || null,
+                cloudProvider: 'google',
+                trashedInCloud: true
+              };
+            });
+
+            const cloudIdSet = new Set(cloudTrash.map(c => c.id));
+            const merged = [...cloudTrash];
+            for (const localItem of (this.trashFiles || [])) {
+              if (!cloudIdSet.has(localItem.id) && !cloudIdSet.has(localItem.cloudId)) {
+                merged.push(localItem);
+              }
+            }
+            this.trashFiles = merged;
+            this.saveTrashFiles(merged);
+            return merged;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('getCloudTrashFiles error:', err);
+    }
+    return this.trashFiles || [];
+  }
+
+  async restoreFromCloudTrash(fileIds = [], files = []) {
+    const idSet = new Set(fileIds || []);
+    const targetFiles = (files && files.length > 0)
+      ? files
+      : (this.trashFiles || []).filter(f => idSet.has(f.id) || idSet.has(f.cloudId));
+
+    if (targetFiles.length === 0) return { restored: 0 };
+
+    let account = this.getPrimaryAccount();
+    if (account && !account.isOffline && !account.accessToken && account.refreshToken) {
+      try {
+        account = await this.refreshAccessToken(account);
+      } catch (_) {}
+    }
+
+    const restoredRecords = [];
+    for (const f of targetFiles) {
+      const targetId = f.cloudId || f.id;
+      let restoredOk = false;
+      if (account && account.provider === 'google' && account.accessToken && targetId) {
+        if (typeof window !== 'undefined' && window.AuraSyncAndroid?.restoreCloudFileNative) {
+          try {
+            restoredOk = window.AuraSyncAndroid.restoreCloudFileNative('google', targetId, account.accessToken);
+          } catch (_) {}
+        }
+        if (!restoredOk) {
+          try {
+            const res = await this.authenticatedFetch(
+              `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(targetId)}?supportsAllDrives=true`,
+              {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'X-HTTP-Method-Override': 'PATCH' },
+                body: JSON.stringify({ trashed: false })
+              },
+              account
+            );
+            if (res && res.ok) restoredOk = true;
+          } catch (_) {}
+        }
+      } else {
+        restoredOk = true;
+      }
+
+      if (restoredOk) {
+        if (f.name) {
+          this._clearDeletedFromCloud(f.name);
+          this._unrecordRecentlyDeletedCloudName(f.name);
+        }
+        if (f.id) this._unrecordRecentlyDeletedCloudId(f.id);
+        if (f.cloudId) this._unrecordRecentlyDeletedCloudId(f.cloudId);
+
+        restoredRecords.push({
+          ...f,
+          status: 'synced',
+          restoredAt: Date.now()
+        });
+      }
+    }
+
+    const restoredTargetIds = new Set(targetFiles.map(f => f.id).concat(targetFiles.map(f => f.cloudId)).filter(Boolean));
+    const newTrash = (this.trashFiles || []).filter(f => !restoredTargetIds.has(f.id) && !restoredTargetIds.has(f.cloudId));
+    this.saveTrashFiles(newTrash);
+
+    if (restoredRecords.length > 0) {
+      const updatedUploaded = [...restoredRecords, ...this.uploadedFiles];
+      this.saveUploadedFiles(updatedUploaded);
+      this.syncCloudFiles().catch(() => {});
+    }
+
+    return { restored: restoredRecords.length };
+  }
+
+  async permanentlyDeleteFromTrash(fileIds = [], files = []) {
+    const idSet = new Set(fileIds || []);
+    const targetFiles = (files && files.length > 0)
+      ? files
+      : (this.trashFiles || []).filter(f => idSet.has(f.id) || idSet.has(f.cloudId));
+
+    if (targetFiles.length === 0) return { deleted: 0 };
+
+    let account = this.getPrimaryAccount();
+    if (account && !account.isOffline && !account.accessToken && account.refreshToken) {
+      try {
+        account = await this.refreshAccessToken(account);
+      } catch (_) {}
+    }
+
+    for (const f of targetFiles) {
+      const targetId = f.cloudId || f.id;
+      if (account && account.provider === 'google' && account.accessToken && targetId) {
+        if (typeof window !== 'undefined' && window.AuraSyncAndroid?.deleteCloudFileNative) {
+          try {
+            window.AuraSyncAndroid.deleteCloudFileNative('google', targetId, account.accessToken);
+          } catch (_) {}
+        }
+        try {
+          await this.authenticatedFetch(
+            `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(targetId)}?supportsAllDrives=true`,
+            { method: 'DELETE' },
+            account
+          );
+        } catch (_) {}
+      }
+    }
+
+    const targetIdSet = new Set(targetFiles.map(f => f.id).concat(targetFiles.map(f => f.cloudId)).filter(Boolean));
+    const newTrash = (this.trashFiles || []).filter(f => !targetIdSet.has(f.id) && !targetIdSet.has(f.cloudId));
+    this.saveTrashFiles(newTrash);
+
+    return { deleted: targetFiles.length };
+  }
+
+  async emptyCloudTrash() {
+    let account = this.getPrimaryAccount();
+    if (account && !account.isOffline && !account.accessToken && account.refreshToken) {
+      try {
+        account = await this.refreshAccessToken(account);
+      } catch (_) {}
+    }
+
+    if (account && account.provider === 'google' && account.accessToken) {
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.emptyTrashNative) {
+        try {
+          window.AuraSyncAndroid.emptyTrashNative('google', account.accessToken);
+        } catch (_) {}
+      }
+      try {
+        await this.authenticatedFetch(
+          'https://www.googleapis.com/drive/v3/files/trash',
+          { method: 'DELETE' },
+          account
+        );
+      } catch (_) {}
+    }
+
+    this.saveTrashFiles([]);
+    return { success: true };
+  }
+
+  // ─── One-Tap Full Restore to Phone (استعادة كافة ملفات السحابة للهاتف) ─────
+
+  async restoreAllCloudFilesToPhone(options = {}) {
+    const onProgress = options.onProgress || null;
+    const onlyCloudExclusive = options.onlyCloudExclusive !== false;
+
+    let account = this.getPrimaryAccount();
+    if (!account) throw new Error('لا يوجد حساب سحابي متصل');
+
+    if (!account.isOffline && !account.accessToken && account.refreshToken) {
+      try {
+        account = await this.refreshAccessToken(account);
+      } catch (_) {}
+    }
+
+    this.acquireWakeLock(1800000);
+    this._isRestoreActive = true;
+    this._isRestoreCancelled = false;
+
+    try {
+      const allCloudFiles = (this.uploadedFiles || []).filter(f => f && (f.cloudId || f.name));
+      const localNames = this.getLocalMediaNames();
+
+      const candidateFiles = onlyCloudExclusive
+        ? allCloudFiles.filter(f => {
+            const name = f.name || '';
+            return !localNames.has(name) && !localNames.has(name.toLowerCase());
+          })
+        : allCloudFiles;
+
+      const totalCount = candidateFiles.length;
+      if (totalCount === 0) {
+        return { totalCount: 0, restoredCount: 0, skippedCount: allCloudFiles.length, cancelled: false };
+      }
+
+      let processed = 0;
+      let restoredCount = 0;
+      let totalBytesRestored = 0;
+      const startTime = Date.now();
+      let lastNotificationTime = 0;
+
+      const CONCURRENCY = 2;
+      let currentIndex = 0;
+
+      const worker = async () => {
+        while (currentIndex < candidateFiles.length) {
+          if (this._isRestoreCancelled) break;
+          const idx = currentIndex++;
+          const item = candidateFiles[idx];
+          if (!item) continue;
+
+          const fileName = item.name || `restored_${Date.now()}_${idx}.jpg`;
+          const fileId = item.cloudId || item.id;
+          const mimeType = item.type === 'video' ? 'video/mp4' : (item.type === 'image' ? 'image/jpeg' : 'application/octet-stream');
+
+          try {
+            if (typeof window !== 'undefined' && window.AuraSyncAndroid?.downloadCloudFileDirectNative) {
+              const resJson = window.AuraSyncAndroid.downloadCloudFileDirectNative(
+                account.provider || 'google',
+                fileId,
+                fileName,
+                mimeType,
+                account.accessToken || ''
+              );
+              let parsed = null;
+              try { parsed = JSON.parse(resJson); } catch (_) {}
+              if (parsed && parsed.success) {
+                restoredCount++;
+                totalBytesRestored += (parsed.bytesRead || (item.sizeMB ? item.sizeMB * 1024 * 1024 : 1024 * 1024));
+              }
+            } else {
+              if (account.accessToken && fileId && account.provider === 'google') {
+                const res = await this.authenticatedFetch(
+                  `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+                  {},
+                  account
+                );
+                if (res && res.ok) {
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = fileName;
+                  document.body.appendChild(a);
+                  a.click();
+                  setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }, 1500);
+                  restoredCount++;
+                  totalBytesRestored += blob.size;
+                }
+              }
+            }
+          } catch (itemErr) {
+            console.warn(`Restore failed for ${fileName}:`, itemErr);
+          }
+
+          processed++;
+          const elapsedSec = (Date.now() - startTime) / 1000;
+          const overallPercent = Math.min(100, Math.round((processed / totalCount) * 100));
+          const speedMBps = elapsedSec > 0 ? Number((totalBytesRestored / (1024 * 1024) / elapsedSec).toFixed(1)) : 6.0;
+
+          if (onProgress && !this._isRestoreCancelled) {
+            onProgress({
+              overallPercent,
+              currentFileName: fileName,
+              fileIndex: processed,
+              totalFiles: totalCount,
+              restoredCount,
+              speedMBps: Math.max(0.5, speedMBps)
+            });
+          }
+
+          const now = Date.now();
+          if (now - lastNotificationTime > 1200 && !this._isRestoreCancelled) {
+            lastNotificationTime = now;
+            if (typeof window !== 'undefined' && window.AuraSyncAndroid?.showProgressNotification) {
+              const title = 'AuraSync — استعادة السحابة للهاتف';
+              const msg = `${processed}/${totalCount} (${overallPercent}%) • ${speedMBps} MB/s`;
+              window.AuraSyncAndroid.showProgressNotification(title, msg, overallPercent, 100);
+            }
+          }
+        }
+      };
+
+      const workers = Array.from({ length: Math.min(CONCURRENCY, candidateFiles.length) }, () => worker());
+      await Promise.all(workers);
+
+      return {
+        totalCount,
+        restoredCount,
+        skippedCount: allCloudFiles.length - candidateFiles.length,
+        cancelled: Boolean(this._isRestoreCancelled)
+      };
+    } finally {
+      this._isRestoreActive = false;
+      this.releaseWakeLock();
+      if (typeof window !== 'undefined' && window.AuraSyncAndroid?.dismissProgressNotification) {
+        try { window.AuraSyncAndroid.dismissProgressNotification(); } catch (_) {}
+      }
+    }
+  }
+
+  cancelRestore() {
+    this._isRestoreCancelled = true;
+    this._isRestoreActive = false;
+    this.releaseWakeLock();
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.dismissProgressNotification) {
+      try { window.AuraSyncAndroid.dismissProgressNotification(); } catch (_) {}
+    }
+  }
+
   addUploadedFiles(rawFiles) {
     const list = Array.isArray(rawFiles) ? rawFiles : [rawFiles];
     const newItems = list.map((f, i) => {
@@ -1724,6 +2104,23 @@ class MobileEngine {
       this.uploadedFiles = updated;
       this.saveUploadedFiles(updated);
       this.notifyListeners('files_updated', updated);
+
+      // Save to Cloud Trash (Recycle Bin) unless explicitly permanent
+      if (options.permanent !== true) {
+        const trashedEntries = filesToDelete.map(f => ({
+          ...f,
+          trashedAt: Date.now(),
+          trashedInCloud: true
+        }));
+        const existingTrashIds = new Set((this.trashFiles || []).map(t => t.id).concat((this.trashFiles || []).map(t => t.cloudId)).filter(Boolean));
+        const newTrashList = [...(this.trashFiles || [])];
+        for (const item of trashedEntries) {
+          if (!existingTrashIds.has(item.id) && !existingTrashIds.has(item.cloudId)) {
+            newTrashList.unshift(item);
+          }
+        }
+        this.saveTrashFiles(newTrashList);
+      }
 
       let account = this.getPrimaryAccount();
       if (account && !account.isOffline && !account.accessToken && account.refreshToken) {

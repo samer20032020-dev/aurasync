@@ -1532,6 +1532,112 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean downloadCloudFileDirectNative(final String provider, final String fileIdOrUrl, final String fileName, final String mimeType, final String accessToken) {
+            if (fileIdOrUrl == null || fileIdOrUrl.trim().isEmpty() || fileName == null || fileName.trim().isEmpty()) {
+                return false;
+            }
+            final String cleanName = fileName.trim();
+            final String cleanMime = (mimeType != null && !mimeType.trim().isEmpty()) ? mimeType.trim() : "image/jpeg";
+            final boolean isImage = cleanMime.startsWith("image/");
+            final boolean isVideo = cleanMime.startsWith("video/");
+            final String prov = provider != null ? provider.toLowerCase(java.util.Locale.US) : "google";
+            final String token = accessToken != null ? accessToken.trim() : "";
+
+            InputStream inStream = null;
+            HttpURLConnection conn = null;
+            try {
+                String downloadUrl;
+                if (fileIdOrUrl.startsWith("http://") || fileIdOrUrl.startsWith("https://")) {
+                    downloadUrl = fileIdOrUrl;
+                } else if ("google".equals(prov)) {
+                    downloadUrl = "https://www.googleapis.com/drive/v3/files/" + URLEncoder.encode(fileIdOrUrl, "UTF-8") + "?alt=media&supportsAllDrives=true";
+                } else if ("onedrive".equals(prov)) {
+                    downloadUrl = "https://graph.microsoft.com/v1.0/me/drive/items/" + URLEncoder.encode(fileIdOrUrl, "UTF-8") + "/content";
+                } else {
+                    downloadUrl = fileIdOrUrl;
+                }
+
+                URL url = URI.create(downloadUrl).toURL();
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                if (!token.isEmpty()) {
+                    conn.setRequestProperty("Authorization", "Bearer " + token);
+                }
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(30000);
+                int code = conn.getResponseCode();
+                if (code < 200 || code >= 300) {
+                    return false;
+                }
+                inStream = conn.getInputStream();
+
+                // 1. Android 10+ (API 29+) MediaStore direct insertion
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.MediaColumns.DISPLAY_NAME, cleanName);
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, cleanMime);
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+                    Uri collectionUri = isImage
+                        ? MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                        : (isVideo ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI : MediaStore.Downloads.EXTERNAL_CONTENT_URI);
+
+                    String relPath = isImage
+                        ? Environment.DIRECTORY_PICTURES + "/AuraSync"
+                        : (isVideo ? Environment.DIRECTORY_MOVIES + "/AuraSync" : Environment.DIRECTORY_DOWNLOADS + "/AuraSync");
+                    values.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+
+                    ContentResolver cr = getContentResolver();
+                    Uri itemUri = cr.insert(collectionUri, values);
+                    if (itemUri != null) {
+                        try (OutputStream os = cr.openOutputStream(itemUri)) {
+                            if (os != null) {
+                                byte[] buf = new byte[32768];
+                                int len;
+                                while ((len = inStream.read(buf)) > 0) {
+                                    os.write(buf, 0, len);
+                                }
+                                os.flush();
+                            }
+                        }
+                        values.clear();
+                        values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                        cr.update(itemUri, values, null, null);
+                        return true;
+                    }
+                }
+
+                // 2. Legacy / Direct disk write fallback
+                File targetDir = isImage
+                    ? new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AuraSync")
+                    : (isVideo ? new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "AuraSync")
+                               : Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS));
+                if (!targetDir.exists()) targetDir.mkdirs();
+                File targetFile = new File(targetDir, cleanName);
+                try (FileOutputStream fos = new FileOutputStream(targetFile)) {
+                    byte[] buf = new byte[32768];
+                    int len;
+                    while ((len = inStream.read(buf)) > 0) {
+                        fos.write(buf, 0, len);
+                    }
+                    fos.flush();
+                }
+                android.media.MediaScannerConnection.scanFile(MainActivity.this, new String[]{targetFile.getAbsolutePath()}, new String[]{cleanMime}, null);
+                return true;
+            } catch (Exception e) {
+                android.util.Log.e("AuraSyncDownload", "downloadCloudFileDirectNative error: " + e.getMessage());
+                return false;
+            } finally {
+                if (inStream != null) {
+                    try { inStream.close(); } catch (Exception ignored) {}
+                }
+                if (conn != null) {
+                    try { conn.disconnect(); } catch (Exception ignored) {}
+                }
+            }
+        }
+
+        @JavascriptInterface
         public void downloadCloudFile(String fileName, String base64Data, String mimeType) {
             saveCloudFileToPhone(fileName, base64Data, mimeType);
         }
@@ -2242,6 +2348,62 @@ public class MainActivity extends Activity {
                     }
                 }
             });
+        }
+
+        @JavascriptInterface
+        public boolean restoreCloudFileNative(final String provider, final String fileId, final String accessToken) {
+            if (fileId == null || fileId.trim().isEmpty() || accessToken == null || accessToken.trim().isEmpty()) {
+                return false;
+            }
+            final String token = accessToken.trim();
+            final String fId = fileId.trim();
+            final String prov = provider != null ? provider.toLowerCase(java.util.Locale.US) : "google";
+
+            try {
+                if ("google".equals(prov)) {
+                    URL patchUrl = URI.create("https://www.googleapis.com/drive/v3/files/" + URLEncoder.encode(fId, "UTF-8") + "?supportsAllDrives=true").toURL();
+                    HttpURLConnection patchConn = (HttpURLConnection) patchUrl.openConnection();
+                    patchConn.setRequestMethod("POST");
+                    patchConn.setRequestProperty("X-HTTP-Method-Override", "PATCH");
+                    patchConn.setRequestProperty("Authorization", "Bearer " + token);
+                    patchConn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                    patchConn.setDoOutput(true);
+                    patchConn.setConnectTimeout(10000);
+                    patchConn.setReadTimeout(10000);
+                    OutputStream os = patchConn.getOutputStream();
+                    os.write("{\"trashed\":false}".getBytes(StandardCharsets.UTF_8));
+                    os.flush();
+                    os.close();
+                    int pCode = patchConn.getResponseCode();
+                    return (pCode >= 200 && pCode < 300);
+                }
+            } catch (Exception e) {
+                android.util.Log.e("AuraSyncTrash", "restoreCloudFileNative error: " + e.getMessage());
+            }
+            return false;
+        }
+
+        @JavascriptInterface
+        public boolean emptyTrashNative(final String provider, final String accessToken) {
+            if (accessToken == null || accessToken.trim().isEmpty()) return false;
+            final String token = accessToken.trim();
+            final String prov = provider != null ? provider.toLowerCase(java.util.Locale.US) : "google";
+
+            try {
+                if ("google".equals(prov)) {
+                    URL url = URI.create("https://www.googleapis.com/drive/v3/files/trash").toURL();
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("DELETE");
+                    conn.setRequestProperty("Authorization", "Bearer " + token);
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(15000);
+                    int code = conn.getResponseCode();
+                    return (code == 200 || code == 204);
+                }
+            } catch (Exception e) {
+                android.util.Log.e("AuraSyncTrash", "emptyTrashNative error: " + e.getMessage());
+            }
+            return false;
         }
     }
 

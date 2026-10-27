@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.63',
+  version = '1.0.64',
   accounts = [],
   storage = {},
   stats = {},
@@ -409,6 +409,7 @@ export default function MobileApp({
                 onShowToast={showToast}
                 availableUpdate={availableUpdate}
                 onTriggerUpdate={() => setShowUpdateModal(true)}
+                onNavigateTab={setActiveTab}
                 onSignOut={() => {
                   mobileEngine.saveAccounts([]);
                   setEngineAccounts([]);
