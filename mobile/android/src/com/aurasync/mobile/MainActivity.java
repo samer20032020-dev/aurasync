@@ -467,10 +467,12 @@ public class MainActivity extends Activity {
         // Native MediaStore direct stream interceptor for seamless high-speed gallery pull
         if (path.contains("api/mediastore/")) {
             try {
-                String[] parts = path.split("/");
-                if (parts.length >= 4) {
-                    String mediaType = parts[parts.length - 2];
-                    long mediaId = Long.parseLong(parts[parts.length - 1]);
+                int idx = path.indexOf("api/mediastore/");
+                String sub = path.substring(idx + "api/mediastore/".length());
+                String[] parts = sub.split("/");
+                if (parts.length >= 2) {
+                    String mediaType = parts[0];
+                    long mediaId = Long.parseLong(parts[1]);
                     Uri contentUri = "video".equalsIgnoreCase(mediaType)
                             ? ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId)
                             : ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId);
@@ -840,6 +842,41 @@ public class MainActivity extends Activity {
                 return checkSelfPermission("android.permission.READ_EXTERNAL_STORAGE") == PackageManager.PERMISSION_GRANTED;
             }
             return true;
+        }
+
+        @JavascriptInterface
+        public boolean hasAllFilesPermission() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    return Environment.isExternalStorageManager();
+                } catch (Exception ignored) {
+                    return false;
+                }
+            }
+            return hasStoragePermissions();
+        }
+
+        @JavascriptInterface
+        public void requestAllFilesPermission() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        try {
+                            Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                            intent.setData(Uri.parse("package:" + getPackageName()));
+                            startActivity(intent);
+                        } catch (Exception e) {
+                            try {
+                                Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                                startActivity(intent);
+                            } catch (Exception ignored) {}
+                        }
+                    } else {
+                        requestStoragePermissions();
+                    }
+                }
+            });
         }
 
         @JavascriptInterface
@@ -1674,47 +1711,99 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean deleteMediaById(final String mediaType, final long mediaId) {
+            boolean deleted = false;
+            try {
+                ContentResolver cr = getContentResolver();
+                Uri contentUri = "video".equalsIgnoreCase(mediaType)
+                    ? ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId)
+                    : ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId);
+
+                String dataPath = null;
+                try (Cursor c = cr.query(contentUri, new String[]{MediaStore.MediaColumns.DATA}, null, null, null)) {
+                    if (c != null && c.moveToFirst()) {
+                        dataPath = c.getString(0);
+                    }
+                } catch (Exception ignored) {}
+
+                if (dataPath != null && !dataPath.trim().isEmpty()) {
+                    try {
+                        File f = new File(dataPath);
+                        if (f.exists() && f.delete()) {
+                            deleted = true;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                try {
+                    int rows = cr.delete(contentUri, null, null);
+                    if (rows > 0) deleted = true;
+                } catch (Exception ignored) {}
+
+                if (dataPath != null) {
+                    try {
+                        MediaScannerConnection.scanFile(MainActivity.this, new String[]{dataPath}, null, null);
+                    } catch (Exception ignored) {}
+                }
+            } catch (Exception ignored) {}
+            return deleted;
+        }
+
+        @JavascriptInterface
         public boolean deleteMediaFileFromPhone(final String fileName) {
             if (fileName == null || fileName.trim().isEmpty()) return false;
             final String cleanName = fileName.trim();
             boolean deletedAny = false;
             final List<String> pathsToScan = new ArrayList<>();
+            final List<Uri> urisToDelete = new ArrayList<>();
 
-            // 1. Query MediaStore to locate exact absolute paths across image & video tables
+            ContentResolver cr = getContentResolver();
+
+            // 1. Query MediaStore for Images & Videos with exact & case-insensitive matches
             try {
-                ContentResolver cr = getContentResolver();
-                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? OR " + MediaStore.MediaColumns.DATA + " LIKE ?";
-                String[] args = new String[]{cleanName, "%/" + cleanName};
+                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? OR LOWER(" + MediaStore.MediaColumns.DISPLAY_NAME + ")=LOWER(?) OR " + MediaStore.MediaColumns.DATA + " LIKE ?";
+                String[] args = new String[]{cleanName, cleanName, "%/" + cleanName};
+                String[] proj = new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DATA};
 
-                try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, new String[]{MediaStore.MediaColumns.DATA}, sel, args, null)) {
+                try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
                     if (c != null) {
+                        int idIdx = c.getColumnIndex(MediaStore.MediaColumns._ID);
+                        int dataIdx = c.getColumnIndex(MediaStore.MediaColumns.DATA);
                         while (c.moveToNext()) {
-                            String p = c.getString(0);
+                            long id = idIdx >= 0 ? c.getLong(idIdx) : -1L;
+                            if (id > 0) {
+                                urisToDelete.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id));
+                            }
+                            String p = dataIdx >= 0 ? c.getString(dataIdx) : null;
                             if (p != null) pathsToScan.add(p);
                         }
                     }
                 } catch (Exception ignored) {}
 
-                try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, new String[]{MediaStore.MediaColumns.DATA}, sel, args, null)) {
+                try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
                     if (cv != null) {
+                        int idIdx = cv.getColumnIndex(MediaStore.MediaColumns._ID);
+                        int dataIdx = cv.getColumnIndex(MediaStore.MediaColumns.DATA);
                         while (cv.moveToNext()) {
-                            String p = cv.getString(0);
+                            long id = idIdx >= 0 ? cv.getLong(idIdx) : -1L;
+                            if (id > 0) {
+                                urisToDelete.add(ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id));
+                            }
+                            String p = dataIdx >= 0 ? cv.getString(dataIdx) : null;
                             if (p != null) pathsToScan.add(p);
                         }
                     }
                 } catch (Exception ignored) {}
 
-                // Physically delete the discovered files
-                for (String p : pathsToScan) {
+                // Delete each specific URI
+                for (Uri u : urisToDelete) {
                     try {
-                        File f = new File(p);
-                        if (f.exists() && f.delete()) {
-                            deletedAny = true;
-                        }
+                        int r = cr.delete(u, null, null);
+                        if (r > 0) deletedAny = true;
                     } catch (Exception ignored) {}
                 }
 
-                // Delete records from MediaStore content tables
+                // Delete table rows by selection
                 try {
                     int d1 = cr.delete(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, sel, args);
                     if (d1 > 0) deletedAny = true;
@@ -1731,14 +1820,24 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) {}
 
-            // 2. Direct filesystem check across all primary storage directories
+            // 2. Direct filesystem deletion across discovered paths
+            for (String p : pathsToScan) {
+                try {
+                    File f = new File(p);
+                    if (f.exists() && f.delete()) {
+                        deletedAny = true;
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            // 3. Direct filesystem search across standard folders
             try {
                 File[] checkDirs = new File[]{
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
                     new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"),
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
                     new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AuraSync"),
                     new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Screenshots"),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
                 };
@@ -1756,7 +1855,7 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) {}
 
-            // 3. Notify Android MediaScanner so phone gallery updates immediately!
+            // 4. Force MediaScanner refresh on all touched paths
             if (!pathsToScan.isEmpty()) {
                 try {
                     MediaScannerConnection.scanFile(MainActivity.this, pathsToScan.toArray(new String[0]), null, null);

@@ -262,6 +262,7 @@ export default function MobileCloudExplorer({
     triggerHaptic(30);
     try {
       await mobileEngine.deleteUploadedFile(fileId);
+      setFiles(prev => prev.filter(f => f.id !== fileId));
       setSelectedFile(null);
       refreshLocalMedia();
       if (onShowToast) {
@@ -343,12 +344,51 @@ export default function MobileCloudExplorer({
     const fromCloud = deleteTargetMode === 'cloud' || deleteTargetMode === 'both';
     const fromPhone = deleteTargetMode === 'phone' || deleteTargetMode === 'both';
 
+    // Check all-files permission on Android if deleting from phone
+    if (fromPhone && typeof window !== 'undefined' && window.AuraSyncAndroid?.hasAllFilesPermission) {
+      try {
+        if (!window.AuraSyncAndroid.hasAllFilesPermission()) {
+          window.AuraSyncAndroid.requestAllFilesPermission();
+          if (onShowToast) {
+            onShowToast(
+              isRtl
+                ? 'ℹ️ لحذف الصور من ذاكرة الهاتف، يرجى تفعيل إذن (الوصول إلى جميع الملفات) بالنافذة المفتوحة ثم إعادة الضغط على حذف'
+                : 'ℹ️ Please grant All Files Access to delete photos directly from phone memory',
+              'info'
+            );
+          }
+          setIsBatchDeleting(false);
+          return;
+        }
+      } catch (_) {}
+    }
+
     try {
+      const filesMap = new Map((files || []).map(f => [f.id, f]));
       await mobileEngine.deleteUploadedFiles(idsToDelete, { fromCloud, fromPhone });
+
+      // Immediate UI synchronization:
+      if (fromCloud) {
+        setFiles(prev => prev.filter(f => !selectedFileIds.has(f.id)));
+      }
+      if (fromPhone) {
+        setLocalMediaNames(prev => {
+          const next = new Set(prev);
+          for (const id of idsToDelete) {
+            const f = filesMap.get(id);
+            if (f && f.name) {
+              next.delete(f.name);
+              next.delete(f.name.toLowerCase());
+            }
+          }
+          return next;
+        });
+      }
+
       setSelectedFileIds(new Set());
       setIsSelectionMode(false);
       setShowBatchDeleteModal(false);
-      refreshLocalMedia();
+      setTimeout(() => refreshLocalMedia(), 300);
 
       let msg = '';
       if (deleteTargetMode === 'both') {
@@ -1305,6 +1345,36 @@ export default function MobileCloudExplorer({
                 </div>
               </div>
             </div>
+
+            {/* Android All-Files Permission Notice if deleting from phone */}
+            {(deleteTargetMode === 'phone' || deleteTargetMode === 'both') &&
+             typeof window !== 'undefined' &&
+             window.AuraSyncAndroid?.hasAllFilesPermission &&
+             !window.AuraSyncAndroid.hasAllFilesPermission() && (
+              <div style={{
+                marginBottom: 12, padding: '9px 12px', borderRadius: 12,
+                background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8
+              }}>
+                <div style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>
+                  {isRtl ? '⚠️ يتطلب أندرويد تفعيل إذن (إدارة الملفات) لحذفها من الهاتف' : '⚠️ Android requires All Files Access to delete from phone'}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic(20);
+                    window.AuraSyncAndroid.requestAllFilesPermission();
+                  }}
+                  style={{
+                    padding: '4px 10px', borderRadius: 8, border: 'none',
+                    background: '#f59e0b', color: '#fff', fontSize: 10, fontWeight: 700,
+                    cursor: 'pointer', whiteSpace: 'nowrap'
+                  }}
+                >
+                  {isRtl ? 'تفعيل الآن' : 'Enable Now'}
+                </button>
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <button

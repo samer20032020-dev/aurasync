@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.56',
+  version = '1.0.57',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -465,6 +465,21 @@ export default function MobileHome({
                 }
               }
             }, 600);
+          } else if (res.alreadySyncedCount && res.alreadySyncedCount > 0 && (!res.failed || res.failed.length === 0)) {
+            setGalleryProgress(100);
+            triggerHaptic(40);
+            setTimeout(() => {
+              setIsBackingUpGallery(false);
+              setGalleryDone(true);
+              if (onShowToast) {
+                onShowToast(
+                  isRtl
+                    ? `✓ كافة ملفات المعرض (${res.alreadySyncedCount.toLocaleString()} ملف) منسوخة ومحفوظة مسبقاً في السحابة بأمان!`
+                    : `✓ All gallery media (${res.alreadySyncedCount.toLocaleString()} items) already synced and safe in cloud!`,
+                  'success'
+                );
+              }
+            }, 400);
           } else {
             setIsBackingUpGallery(false);
             setGalleryDone(false);

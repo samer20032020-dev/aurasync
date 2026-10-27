@@ -1078,6 +1078,7 @@ class MobileEngine {
     const pageSize = 100;
     let offset = 0;
     let processed = 0;
+    let alreadySyncedCount = 0;
     const successful = [];
     const failed = [];
     const startTime = Date.now();
@@ -1117,6 +1118,7 @@ class MobileEngine {
 
           // Deduplication: if already uploaded, skip immediately!
           if (uploadedKeys.has(itemKey)) {
+            alreadySyncedCount++;
             processed++;
             continue;
           }
@@ -1161,6 +1163,7 @@ class MobileEngine {
 
             const record = {
               id: uploadResult.cloudId || `gallery_${Date.now()}_${item.id}`,
+              cloudId: uploadResult.cloudId || null,
               name: item.name,
               type: item.type === 'video' ? 'video' : 'image',
               sizeMB: Number((file.size / (1024 * 1024)).toFixed(1)) || 1.0,
@@ -1168,7 +1171,9 @@ class MobileEngine {
               cloudFolder: `${MOBILE_FOLDER_NAME}/galary`,
               cloudProvider: account.provider,
               encrypted: true,
-              status: 'synced'
+              status: 'synced',
+              localMediaId: item.id,
+              localMediaType: item.type
             };
             successful.push(record);
           } catch (itemErr) {
@@ -1260,6 +1265,7 @@ class MobileEngine {
       successful,
       failed,
       totalCount,
+      alreadySyncedCount,
       cancelled: false
     };
   }
@@ -1480,6 +1486,11 @@ class MobileEngine {
     // 1. Delete from local phone storage & gallery if requested
     if (options.fromPhone) {
       for (const f of filesToDelete) {
+        if (f.localMediaId && typeof window !== 'undefined' && window.AuraSyncAndroid?.deleteMediaById) {
+          try {
+            window.AuraSyncAndroid.deleteMediaById(f.localMediaType || f.type || 'image', f.localMediaId);
+          } catch (_) {}
+        }
         if (f.name) {
           this.deleteMediaFromPhone(f.name);
         }
@@ -1494,12 +1505,16 @@ class MobileEngine {
       const account = this.getPrimaryAccount();
       if (account) {
         let token = account.accessToken;
-        if (!token && account.refreshToken) {
-          try {
-            const refreshed = await this.refreshAccessToken(account);
-            token = refreshed.accessToken;
-          } catch (_) {}
-        }
+        const refreshTokenIfNeeded = async () => {
+          if (account.refreshToken) {
+            try {
+              const refreshed = await this.refreshAccessToken(account);
+              token = refreshed.accessToken;
+              return token;
+            } catch (_) {}
+          }
+          return token;
+        };
 
         if (token) {
           for (const f of filesToDelete) {
@@ -1507,35 +1522,72 @@ class MobileEngine {
 
             try {
               if (account.provider === 'google') {
+                const deleteGoogleFile = async (fileId, authToken) => {
+                  return fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${authToken}` }
+                  });
+                };
+
+                // If targetCloudId is a placeholder, search Google Drive by exact filename
                 if (!targetCloudId || targetCloudId.startsWith('mobile_file_') || targetCloudId.startsWith('gallery_') || targetCloudId.startsWith('local_')) {
                   try {
-                    const folderId = await this.ensureCloudFolder('google');
-                    const q = encodeURIComponent(`'${folderId}' in parents and name = '${f.name.replace(/'/g, "\\'")}' and trashed = false`);
-                    const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`, {
+                    const q = encodeURIComponent(`name = '${f.name.replace(/'/g, "\\'")}' and trashed = false`);
+                    let searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=10`, {
                       headers: { Authorization: `Bearer ${token}` }
                     });
+                    if (searchRes.status === 401) {
+                      token = await refreshTokenIfNeeded();
+                      searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=10`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                      });
+                    }
                     if (searchRes.ok) {
                       const data = await searchRes.json();
                       if (data.files && data.files.length > 0) {
-                        targetCloudId = data.files[0].id;
+                        for (const item of data.files) {
+                          await deleteGoogleFile(item.id, token).catch(() => {});
+                        }
+                        continue;
                       }
                     }
                   } catch (_) {}
                 }
 
+                // If we have a valid cloudId, delete it directly
                 if (targetCloudId && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_') && !targetCloudId.startsWith('local_')) {
-                  await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(targetCloudId)}?supportsAllDrives=true`, {
-                    method: 'DELETE',
-                    headers: { Authorization: `Bearer ${token}` }
-                  }).catch(() => {});
+                  let delRes = await deleteGoogleFile(targetCloudId, token);
+                  if (delRes.status === 401) {
+                    token = await refreshTokenIfNeeded();
+                    await deleteGoogleFile(targetCloudId, token);
+                  }
                 }
               } else if (account.provider === 'onedrive') {
-                if (targetCloudId && !targetCloudId.startsWith('local_')) {
-                  await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(targetCloudId)}`, {
+                const deleteOneDriveFile = async (fileId, authToken) => {
+                  return fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(fileId)}`, {
                     method: 'DELETE',
-                    headers: { Authorization: `Bearer ${token}` }
-                  }).catch(() => {});
+                    headers: { Authorization: `Bearer ${authToken}` }
+                  });
+                };
+                if (targetCloudId && !targetCloudId.startsWith('local_') && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_')) {
+                  let delRes = await deleteOneDriveFile(targetCloudId, token);
+                  if (delRes.status === 401) {
+                    token = await refreshTokenIfNeeded();
+                    await deleteOneDriveFile(targetCloudId, token);
+                  }
                 }
+              } else if (account.provider === 'dropbox') {
+                try {
+                  const filePath = f.cloudFolder ? `/${f.cloudFolder}/${f.name}` : `/${MOBILE_FOLDER_NAME}/${f.name}`;
+                  await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ path: filePath })
+                  }).catch(() => {});
+                } catch (_) {}
               }
             } catch (_) {}
           }
