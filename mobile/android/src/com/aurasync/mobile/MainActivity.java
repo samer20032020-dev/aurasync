@@ -16,6 +16,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.Environment;
+import android.app.PendingIntent;
+import android.content.IntentSender;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.view.Window;
@@ -127,6 +129,7 @@ public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
     private static final int PERMISSION_REQUEST_CODE = 1002;
     private static final int NATIVE_MEDIA_PICKER_REQUEST_CODE = 1003;
+    private static final int MEDIA_DELETE_REQUEST_CODE = 1004;
 
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
@@ -768,6 +771,17 @@ public class MainActivity extends Activity {
             }
             if (!results.isEmpty()) {
                 parseAndStageUris(results);
+            }
+        } else if (requestCode == MEDIA_DELETE_REQUEST_CODE) {
+            if (resultCode == Activity.RESULT_OK) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (webView != null) {
+                            webView.evaluateJavascript("if (window.onAuraSyncMediaDeleted) window.onAuraSyncMediaDeleted(true);", null);
+                        }
+                    }
+                });
             }
         } else {
             super.onActivityResult(requestCode, resultCode, data);
@@ -1750,87 +1764,68 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public boolean deleteMediaFileFromPhone(final String fileName) {
-            if (fileName == null || fileName.trim().isEmpty()) return false;
-            final String cleanName = fileName.trim();
-            boolean deletedAny = false;
+        public boolean deleteMediaBatch(final String fileNamesJson) {
+            if (fileNamesJson == null || fileNamesJson.trim().isEmpty()) return false;
+            final List<String> fileNames = new ArrayList<>();
+            try {
+                JSONArray arr = new JSONArray(fileNamesJson);
+                for (int i = 0; i < arr.length(); i++) {
+                    String n = arr.optString(i);
+                    if (n != null && !n.trim().isEmpty()) {
+                        fileNames.add(n.trim());
+                    }
+                }
+            } catch (Exception e) {
+                fileNames.add(fileNamesJson.trim());
+            }
+
+            if (fileNames.isEmpty()) return false;
+
             final List<String> pathsToScan = new ArrayList<>();
             final List<Uri> urisToDelete = new ArrayList<>();
+            boolean deletedAny = false;
+            final ContentResolver cr = getContentResolver();
 
-            ContentResolver cr = getContentResolver();
+            // 1. Gather MediaStore URIs and file paths
+            for (String cleanName : fileNames) {
+                try {
+                    String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? OR LOWER(" + MediaStore.MediaColumns.DISPLAY_NAME + ")=LOWER(?) OR " + MediaStore.MediaColumns.DATA + " LIKE ?";
+                    String[] args = new String[]{cleanName, cleanName, "%/" + cleanName};
+                    String[] proj = new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DATA};
 
-            // 1. Query MediaStore for Images & Videos with exact & case-insensitive matches
-            try {
-                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? OR LOWER(" + MediaStore.MediaColumns.DISPLAY_NAME + ")=LOWER(?) OR " + MediaStore.MediaColumns.DATA + " LIKE ?";
-                String[] args = new String[]{cleanName, cleanName, "%/" + cleanName};
-                String[] proj = new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DATA};
-
-                try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
-                    if (c != null) {
-                        int idIdx = c.getColumnIndex(MediaStore.MediaColumns._ID);
-                        int dataIdx = c.getColumnIndex(MediaStore.MediaColumns.DATA);
-                        while (c.moveToNext()) {
-                            long id = idIdx >= 0 ? c.getLong(idIdx) : -1L;
-                            if (id > 0) {
-                                urisToDelete.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id));
+                    try (Cursor c = cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
+                        if (c != null) {
+                            int idIdx = c.getColumnIndex(MediaStore.MediaColumns._ID);
+                            int dataIdx = c.getColumnIndex(MediaStore.MediaColumns.DATA);
+                            while (c.moveToNext()) {
+                                long id = idIdx >= 0 ? c.getLong(idIdx) : -1L;
+                                if (id > 0) {
+                                    urisToDelete.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id));
+                                }
+                                String p = dataIdx >= 0 ? c.getString(dataIdx) : null;
+                                if (p != null) pathsToScan.add(p);
                             }
-                            String p = dataIdx >= 0 ? c.getString(dataIdx) : null;
-                            if (p != null) pathsToScan.add(p);
                         }
-                    }
-                } catch (Exception ignored) {}
+                    } catch (Exception ignored) {}
 
-                try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
-                    if (cv != null) {
-                        int idIdx = cv.getColumnIndex(MediaStore.MediaColumns._ID);
-                        int dataIdx = cv.getColumnIndex(MediaStore.MediaColumns.DATA);
-                        while (cv.moveToNext()) {
-                            long id = idIdx >= 0 ? cv.getLong(idIdx) : -1L;
-                            if (id > 0) {
-                                urisToDelete.add(ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id));
+                    try (Cursor cv = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj, sel, args, null)) {
+                        if (cv != null) {
+                            int idIdx = cv.getColumnIndex(MediaStore.MediaColumns._ID);
+                            int dataIdx = cv.getColumnIndex(MediaStore.MediaColumns.DATA);
+                            while (cv.moveToNext()) {
+                                long id = idIdx >= 0 ? cv.getLong(idIdx) : -1L;
+                                if (id > 0) {
+                                    urisToDelete.add(ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id));
+                                }
+                                String p = dataIdx >= 0 ? cv.getString(dataIdx) : null;
+                                if (p != null) pathsToScan.add(p);
                             }
-                            String p = dataIdx >= 0 ? cv.getString(dataIdx) : null;
-                            if (p != null) pathsToScan.add(p);
                         }
-                    }
-                } catch (Exception ignored) {}
-
-                // Delete each specific URI
-                for (Uri u : urisToDelete) {
-                    try {
-                        int r = cr.delete(u, null, null);
-                        if (r > 0) deletedAny = true;
                     } catch (Exception ignored) {}
-                }
-
-                // Delete table rows by selection
-                try {
-                    int d1 = cr.delete(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, sel, args);
-                    if (d1 > 0) deletedAny = true;
-                } catch (Exception ignored) {}
-                try {
-                    int d2 = cr.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, sel, args);
-                    if (d2 > 0) deletedAny = true;
-                } catch (Exception ignored) {}
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    try {
-                        int d3 = cr.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI, sel, args);
-                        if (d3 > 0) deletedAny = true;
-                    } catch (Exception ignored) {}
-                }
-            } catch (Exception ignored) {}
-
-            // 2. Direct filesystem deletion across discovered paths
-            for (String p : pathsToScan) {
-                try {
-                    File f = new File(p);
-                    if (f.exists() && f.delete()) {
-                        deletedAny = true;
-                    }
                 } catch (Exception ignored) {}
             }
 
-            // 3. Direct filesystem search across standard folders
+            // 2. Direct filesystem search across standard folders (Camera, DCIM, Pictures, Screenshots, Downloads, Movies)
             try {
                 File[] checkDirs = new File[]{
                     new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera"),
@@ -1841,28 +1836,68 @@ public class MainActivity extends Activity {
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
                 };
-                for (File dir : checkDirs) {
-                    if (dir != null && dir.exists()) {
-                        File target = new File(dir, cleanName);
-                        if (target.exists() && target.isFile()) {
-                            String p = target.getAbsolutePath();
-                            if (target.delete()) {
-                                deletedAny = true;
-                                pathsToScan.add(p);
+                for (String cleanName : fileNames) {
+                    for (File dir : checkDirs) {
+                        if (dir != null && dir.exists()) {
+                            File target = new File(dir, cleanName);
+                            if (target.exists() && target.isFile()) {
+                                pathsToScan.add(target.getAbsolutePath());
                             }
                         }
                     }
                 }
             } catch (Exception ignored) {}
 
-            // 4. Force MediaScanner refresh on all touched paths
+            // 3. Try direct deletion first (if All-Files permission granted or older Android)
+            for (String p : pathsToScan) {
+                try {
+                    File f = new File(p);
+                    if (f.exists() && f.delete()) {
+                        deletedAny = true;
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            for (Uri u : urisToDelete) {
+                try {
+                    int r = cr.delete(u, null, null);
+                    if (r > 0) deletedAny = true;
+                } catch (Exception ignored) {}
+            }
+
+            // 4. Android 11+ fallback: create native delete request prompt if direct deletion was restricted
+            if (!deletedAny && !urisToDelete.isEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            PendingIntent pi = MediaStore.createDeleteRequest(cr, urisToDelete);
+                            startIntentSenderForResult(pi.getIntentSender(), MEDIA_DELETE_REQUEST_CODE, null, 0, 0, 0);
+                        } catch (Exception ignored) {}
+                    }
+                });
+            }
+
+            // 5. Force MediaScanner refresh on all touched paths
             if (!pathsToScan.isEmpty()) {
                 try {
                     MediaScannerConnection.scanFile(MainActivity.this, pathsToScan.toArray(new String[0]), null, null);
                 } catch (Exception ignored) {}
             }
 
-            return deletedAny;
+            return deletedAny || !urisToDelete.isEmpty();
+        }
+
+        @JavascriptInterface
+        public boolean deleteMediaFileFromPhone(final String fileName) {
+            if (fileName == null || fileName.trim().isEmpty()) return false;
+            try {
+                JSONArray arr = new JSONArray();
+                arr.put(fileName.trim());
+                return deleteMediaBatch(arr.toString());
+            } catch (Exception e) {
+                return false;
+            }
         }
 
         @JavascriptInterface

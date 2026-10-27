@@ -385,6 +385,33 @@ class MobileEngine {
     } catch (_) {}
   }
 
+  async authenticatedFetch(url, options = {}, account = null) {
+    let acc = account || this.getPrimaryAccount();
+    if (!acc) throw new Error('No cloud account available');
+
+    let token = acc.accessToken;
+    const reqHeaders = new Headers(options.headers || {});
+    if (token && !reqHeaders.has('Authorization')) {
+      reqHeaders.set('Authorization', `Bearer ${token}`);
+    }
+    const fetchOptions = { ...options, headers: reqHeaders };
+
+    let res = await fetch(url, fetchOptions);
+    if (res.status === 401 && acc.refreshToken) {
+      try {
+        const refreshed = await this.refreshAccessToken(acc);
+        if (refreshed && refreshed.accessToken) {
+          reqHeaders.set('Authorization', `Bearer ${refreshed.accessToken}`);
+          fetchOptions.headers = reqHeaders;
+          res = await fetch(url, fetchOptions);
+        }
+      } catch (refreshErr) {
+        console.warn('authenticatedFetch token refresh failed:', refreshErr);
+      }
+    }
+    return res;
+  }
+
   getPrimaryAccount() {
     if (!this.accounts || this.accounts.length === 0) return null;
     const cloudAcc = this.accounts.find(a => a.accessToken && (a.provider === 'google' || a.provider === 'onedrive' || a.provider === 'dropbox'));
@@ -984,6 +1011,46 @@ class MobileEngine {
     } catch (_) {}
   }
 
+  // Tracking for items deleted from cloud to safeguard against automatic background re-upload
+  _getDeletedFromCloudNames() {
+    if (this._deletedFromCloudNames) return this._deletedFromCloudNames;
+    try {
+      const raw = localStorage.getItem('aurasync_deleted_from_cloud');
+      if (raw) {
+        this._deletedFromCloudNames = new Set(JSON.parse(raw));
+        return this._deletedFromCloudNames;
+      }
+    } catch (_) {}
+    this._deletedFromCloudNames = new Set();
+    return this._deletedFromCloudNames;
+  }
+
+  _recordDeletedFromCloud(fileName) {
+    if (!fileName) return;
+    const set = this._getDeletedFromCloudNames();
+    set.add(fileName.trim());
+    try {
+      localStorage.setItem('aurasync_deleted_from_cloud', JSON.stringify(Array.from(set).slice(-50000)));
+    } catch (_) {}
+  }
+
+  _clearDeletedFromCloud(fileName) {
+    if (!fileName) return;
+    const set = this._getDeletedFromCloudNames();
+    if (set.has(fileName.trim())) {
+      set.delete(fileName.trim());
+      try {
+        localStorage.setItem('aurasync_deleted_from_cloud', JSON.stringify(Array.from(set)));
+      } catch (_) {}
+    }
+  }
+
+  _isDeletedFromCloud(fileName) {
+    if (!fileName) return false;
+    const set = this._getDeletedFromCloudNames();
+    return set.has(fileName.trim());
+  }
+
   // Pending session tracking (so if app is killed by Android, re-opening prompts the user)
   getPendingGallerySession() {
     try {
@@ -1415,7 +1482,7 @@ class MobileEngine {
       const uploadedKeys = this._getUploadedGalleryKeys();
       for (const item of recentItems) {
         const itemKey = `${item.id}_${item.name}_${item.size || 0}`;
-        if (!uploadedKeys.has(itemKey)) {
+        if (!uploadedKeys.has(itemKey) && !this._isDeletedFromCloud(item.name)) {
           const already = (this.uploadedFiles || []).some(f => f.name === item.name);
           if (!already) {
             unbackedItems.push(item);
@@ -1479,119 +1546,131 @@ class MobileEngine {
   }
 
   async deleteUploadedFiles(fileIds = [], options = { fromCloud: true, fromPhone: false }) {
-    if (!fileIds || fileIds.length === 0) return this.uploadedFiles;
-    const idSet = new Set(fileIds);
-    const filesToDelete = (this.uploadedFiles || []).filter(f => idSet.has(f.id));
+    if ((!fileIds || fileIds.length === 0) && (!options.files || options.files.length === 0)) {
+      return this.uploadedFiles;
+    }
+    const idSet = new Set(fileIds || []);
+    let filesToDelete = [];
+    if (Array.isArray(options.files) && options.files.length > 0) {
+      filesToDelete = options.files;
+    } else {
+      filesToDelete = (this.uploadedFiles || []).filter(f => 
+        idSet.has(f.id) || idSet.has(f.cloudId) || idSet.has(f.name)
+      );
+    }
+
+    if (filesToDelete.length === 0 && idSet.size > 0) {
+      filesToDelete = Array.from(idSet).map(id => ({ id, name: id }));
+    }
 
     // 1. Delete from local phone storage & gallery if requested
     if (options.fromPhone) {
-      for (const f of filesToDelete) {
-        if (f.localMediaId && typeof window !== 'undefined' && window.AuraSyncAndroid?.deleteMediaById) {
-          try {
-            window.AuraSyncAndroid.deleteMediaById(f.localMediaType || f.type || 'image', f.localMediaId);
-          } catch (_) {}
-        }
-        if (f.name) {
-          this.deleteMediaFromPhone(f.name);
+      const fileNames = filesToDelete.map(f => f.name).filter(Boolean);
+      if (fileNames.length > 0 && typeof window !== 'undefined' && window.AuraSyncAndroid?.deleteMediaBatch) {
+        try {
+          window.AuraSyncAndroid.deleteMediaBatch(JSON.stringify(fileNames));
+        } catch (_) {}
+      } else {
+        for (const f of filesToDelete) {
+          if (f.localMediaId && typeof window !== 'undefined' && window.AuraSyncAndroid?.deleteMediaById) {
+            try {
+              window.AuraSyncAndroid.deleteMediaById(f.localMediaType || f.type || 'image', f.localMediaId);
+            } catch (_) {}
+          }
+          if (f.name) {
+            this.deleteMediaFromPhone(f.name);
+          }
         }
       }
     }
 
     // 2. Delete from cloud storage if requested
     if (options.fromCloud !== false) {
-      const updated = (this.uploadedFiles || []).filter(f => !idSet.has(f.id));
+      const deletedIds = new Set(filesToDelete.map(f => f.id).concat(filesToDelete.map(f => f.cloudId).filter(Boolean)));
+      for (const id of idSet) deletedIds.add(id);
+      const deletedNames = new Set(filesToDelete.map(f => f.name).filter(Boolean));
+
+      // Remove from uploaded gallery keys and record in deleted set so background sync never restores them
+      const galleryKeys = this._getUploadedGalleryKeys();
+      for (const f of filesToDelete) {
+        if (f.localMediaId) galleryKeys.delete(`${f.localMediaId}_${f.name}_${f.size || 0}`);
+        if (f.name) this._recordDeletedFromCloud(f.name);
+      }
+      this._saveUploadedGalleryKeys();
+
+      // Immediately prune from local storage and in-memory list
+      const updated = (this.uploadedFiles || []).filter(f => 
+        !deletedIds.has(f.id) && !deletedIds.has(f.cloudId) && !deletedNames.has(f.name)
+      );
+      this.uploadedFiles = updated;
       this.saveUploadedFiles(updated);
+      this.notifyListeners('files_updated', updated);
 
       const account = this.getPrimaryAccount();
-      if (account) {
-        let token = account.accessToken;
-        const refreshTokenIfNeeded = async () => {
-          if (account.refreshToken) {
-            try {
-              const refreshed = await this.refreshAccessToken(account);
-              token = refreshed.accessToken;
-              return token;
-            } catch (_) {}
-          }
-          return token;
-        };
+      if (account && !account.isOffline) {
+        const deletePromises = filesToDelete.map(async (f) => {
+          let targetCloudId = f.cloudId || f.id;
 
-        if (token) {
-          for (const f of filesToDelete) {
-            let targetCloudId = f.cloudId || f.id;
+          try {
+            if (account.provider === 'google') {
+              const deleteGoogleFile = async (fileId) => {
+                return this.authenticatedFetch(
+                  `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`,
+                  { method: 'DELETE' },
+                  account
+                );
+              };
 
-            try {
-              if (account.provider === 'google') {
-                const deleteGoogleFile = async (fileId, authToken) => {
-                  return fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`, {
-                    method: 'DELETE',
-                    headers: { Authorization: `Bearer ${authToken}` }
-                  });
-                };
-
-                // If targetCloudId is a placeholder, search Google Drive by exact filename
-                if (!targetCloudId || targetCloudId.startsWith('mobile_file_') || targetCloudId.startsWith('gallery_') || targetCloudId.startsWith('local_')) {
-                  try {
-                    const q = encodeURIComponent(`name = '${f.name.replace(/'/g, "\\'")}' and trashed = false`);
-                    let searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=10`, {
-                      headers: { Authorization: `Bearer ${token}` }
-                    });
-                    if (searchRes.status === 401) {
-                      token = await refreshTokenIfNeeded();
-                      searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=10`, {
-                        headers: { Authorization: `Bearer ${token}` }
-                      });
-                    }
-                    if (searchRes.ok) {
-                      const data = await searchRes.json();
-                      if (data.files && data.files.length > 0) {
-                        for (const item of data.files) {
-                          await deleteGoogleFile(item.id, token).catch(() => {});
-                        }
-                        continue;
-                      }
-                    }
-                  } catch (_) {}
-                }
-
-                // If we have a valid cloudId, delete it directly
-                if (targetCloudId && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_') && !targetCloudId.startsWith('local_')) {
-                  let delRes = await deleteGoogleFile(targetCloudId, token);
-                  if (delRes.status === 401) {
-                    token = await refreshTokenIfNeeded();
-                    await deleteGoogleFile(targetCloudId, token);
-                  }
-                }
-              } else if (account.provider === 'onedrive') {
-                const deleteOneDriveFile = async (fileId, authToken) => {
-                  return fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(fileId)}`, {
-                    method: 'DELETE',
-                    headers: { Authorization: `Bearer ${authToken}` }
-                  });
-                };
-                if (targetCloudId && !targetCloudId.startsWith('local_') && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_')) {
-                  let delRes = await deleteOneDriveFile(targetCloudId, token);
-                  if (delRes.status === 401) {
-                    token = await refreshTokenIfNeeded();
-                    await deleteOneDriveFile(targetCloudId, token);
-                  }
-                }
-              } else if (account.provider === 'dropbox') {
+              // If targetCloudId is a placeholder, search Google Drive by exact filename across all folders
+              if (!targetCloudId || targetCloudId.startsWith('mobile_file_') || targetCloudId.startsWith('gallery_') || targetCloudId.startsWith('local_')) {
                 try {
-                  const filePath = f.cloudFolder ? `/${f.cloudFolder}/${f.name}` : `/${MOBILE_FOLDER_NAME}/${f.name}`;
-                  await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
-                    method: 'POST',
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ path: filePath })
-                  }).catch(() => {});
+                  const q = encodeURIComponent(`name = '${f.name.replace(/'/g, "\\'")}' and trashed = false`);
+                  const searchRes = await this.authenticatedFetch(
+                    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=10`,
+                    {},
+                    account
+                  );
+                  if (searchRes && searchRes.ok) {
+                    const data = await searchRes.json();
+                    if (data.files && data.files.length > 0) {
+                      for (const item of data.files) {
+                        await deleteGoogleFile(item.id).catch(() => {});
+                      }
+                      return;
+                    }
+                  }
                 } catch (_) {}
               }
-            } catch (_) {}
-          }
-        }
+
+              if (targetCloudId && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_') && !targetCloudId.startsWith('local_')) {
+                await deleteGoogleFile(targetCloudId).catch(() => {});
+              }
+            } else if (account.provider === 'onedrive') {
+              if (targetCloudId && !targetCloudId.startsWith('local_') && !targetCloudId.startsWith('mobile_file_') && !targetCloudId.startsWith('gallery_')) {
+                await this.authenticatedFetch(
+                  `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(targetCloudId)}`,
+                  { method: 'DELETE' },
+                  account
+                ).catch(() => {});
+              }
+            } else if (account.provider === 'dropbox') {
+              try {
+                const filePath = f.cloudFolder ? `/${f.cloudFolder}/${f.name}` : `/${MOBILE_FOLDER_NAME}/${f.name}`;
+                await this.authenticatedFetch(
+                  'https://api.dropboxapi.com/2/files/delete_v2',
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: filePath })
+                  },
+                  account
+                ).catch(() => {});
+              } catch (_) {}
+            }
+          } catch (_) {}
+        });
+
+        await Promise.allSettled(deletePromises);
       }
       return updated;
     }
@@ -1607,51 +1686,114 @@ class MobileEngine {
   // ─── Cross-Device Cloud Synchronization (مزامنة فورية بين جميع الهواتف والحاسوب) ───
 
   async syncCloudFiles() {
-    const account = this.getPrimaryAccount();
-    if (!account || !account.accessToken || account.isOffline) {
+    let account = this.getPrimaryAccount();
+    if (!account || account.isOffline) {
+      return this.uploadedFiles;
+    }
+
+    if (!account.accessToken && account.refreshToken) {
+      try {
+        account = await this.refreshAccessToken(account);
+      } catch (_) {}
+    }
+
+    if (!account.accessToken) {
       return this.uploadedFiles;
     }
 
     try {
-      // 1. Google Drive: Fetch all files from aurasync-mobile folder across all devices
+      // 1. Google Drive: Fetch all files from AuraSync folders across all devices
       if (account.provider === 'google') {
-        const folderId = await this.ensureCloudFolder('google');
-        if (!folderId) return this.uploadedFiles;
-
-        // Search existing subfolders inside aurasync-mobile WITHOUT creating any new folder!
-        let existingSubfolderIds = [];
+        let allParentIds = [];
         let galaryFolderId = this.cloudFolderCache && this.cloudFolderCache['google_galary'] ? this.cloudFolderCache['google_galary'] : null;
 
+        // Search for all AuraSync folders (aurasync-mobile, AuraSync, AuraSync_Mobile)
         try {
-          const subSearchQ = encodeURIComponent(`mimeType = 'application/vnd.google-apps.folder' and '${folderId}' in parents and trashed = false`);
-          const subSearchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${subSearchQ}&fields=files(id,name)&spaces=drive`, {
-            headers: { Authorization: `Bearer ${account.accessToken}` }
-          });
-          if (subSearchRes.ok) {
-            const subData = await subSearchRes.json();
-            if (subData.files && subData.files.length > 0) {
-              existingSubfolderIds = subData.files.map(f => f.id);
-              const galaryItem = subData.files.find(f => f.name === 'galary');
-              if (galaryItem) {
-                galaryFolderId = galaryItem.id;
-                this.cloudFolderCache['google_galary'] = galaryItem.id;
-              }
+          const folderQ = encodeURIComponent(
+            `mimeType = 'application/vnd.google-apps.folder' and (name = 'aurasync-mobile' or name = 'AuraSync' or name = 'AuraSync_Mobile') and trashed = false`
+          );
+          const folderRes = await this.authenticatedFetch(
+            `https://www.googleapis.com/drive/v3/files?q=${folderQ}&fields=files(id,name)&spaces=drive`,
+            {},
+            account
+          );
+          if (folderRes && folderRes.ok) {
+            const folderData = await folderRes.json();
+            if (folderData.files && folderData.files.length > 0) {
+              allParentIds = folderData.files.map(f => f.id);
             }
           }
         } catch (_) {}
 
-        const allParentIds = [folderId, ...existingSubfolderIds];
-        const parentFilter = allParentIds.length > 1
-          ? `(${allParentIds.map(id => `'${id}' in parents`).join(' or ')})`
-          : `'${folderId}' in parents`;
+        // Ensure at least aurasync-mobile exists if no folder found
+        if (allParentIds.length === 0) {
+          try {
+            const fId = await this.ensureCloudFolder('google');
+            if (fId) allParentIds.push(fId);
+          } catch (_) {}
+        }
 
-        const q = encodeURIComponent(`${parentFilter} and mimeType != 'application/vnd.google-apps.folder' and trashed = false`);
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,webContentLink,parents)&pageSize=1000`, {
-          headers: { Authorization: `Bearer ${account.accessToken}` }
-        });
+        // Search subfolders inside parent folders
+        if (allParentIds.length > 0) {
+          try {
+            const subConditions = allParentIds.map(id => `'${id}' in parents`).join(' or ');
+            const subSearchQ = encodeURIComponent(
+              `mimeType = 'application/vnd.google-apps.folder' and (${subConditions}) and trashed = false`
+            );
+            const subSearchRes = await this.authenticatedFetch(
+              `https://www.googleapis.com/drive/v3/files?q=${subSearchQ}&fields=files(id,name)&spaces=drive`,
+              {},
+              account
+            );
+            if (subSearchRes && subSearchRes.ok) {
+              const subData = await subSearchRes.json();
+              if (subData.files && subData.files.length > 0) {
+                allParentIds.push(...subData.files.map(f => f.id));
+                const galaryItem = subData.files.find(f => f.name === 'galary');
+                if (galaryItem) {
+                  galaryFolderId = galaryItem.id;
+                  this.cloudFolderCache['google_galary'] = galaryItem.id;
+                }
+              }
+            }
+          } catch (_) {}
+        }
 
-        if (res.ok) {
-          const data = await res.json();
+        // Query files: either in AuraSync parent folders OR anywhere in Drive if no folders exist
+        let q = '';
+        if (allParentIds.length > 1) {
+          const parentFilter = allParentIds.map(id => `'${id}' in parents`).join(' or ');
+          q = encodeURIComponent(`(${parentFilter}) and mimeType != 'application/vnd.google-apps.folder' and trashed = false`);
+        } else if (allParentIds.length === 1) {
+          q = encodeURIComponent(`'${allParentIds[0]}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false`);
+        } else {
+          q = encodeURIComponent(`mimeType != 'application/vnd.google-apps.folder' and trashed = false`);
+        }
+
+        let res = await this.authenticatedFetch(
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,webContentLink,parents)&pageSize=1000`,
+          {},
+          account
+        );
+
+        // If folder query returned 0 files, check if there are any non-folder files in Drive
+        if (res && res.ok) {
+          let data = await res.json();
+          if ((!data.files || data.files.length === 0) && allParentIds.length > 0) {
+            const fallbackQ = encodeURIComponent(`mimeType != 'application/vnd.google-apps.folder' and trashed = false`);
+            const fallbackRes = await this.authenticatedFetch(
+              `https://www.googleapis.com/drive/v3/files?q=${fallbackQ}&fields=files(id,name,mimeType,size,modifiedTime,thumbnailLink,webContentLink,parents)&pageSize=1000`,
+              {},
+              account
+            );
+            if (fallbackRes && fallbackRes.ok) {
+              const fallbackData = await fallbackRes.json();
+              if (fallbackData.files && fallbackData.files.length > 0) {
+                data = fallbackData;
+              }
+            }
+          }
+
           const remoteFiles = (data.files || []).map(f => {
             const isVideo = f.mimeType && f.mimeType.startsWith('video');
             const isImage = f.mimeType && f.mimeType.startsWith('image');
@@ -1678,28 +1820,42 @@ class MobileEngine {
             };
           });
 
-          // Merge with local uploadedFiles without duplicating
-          const merged = [...this.uploadedFiles];
-          for (const rf of remoteFiles) {
-            const idx = merged.findIndex(lf => (lf.cloudId && lf.cloudId === rf.cloudId) || lf.name === rf.name);
-            if (idx >= 0) {
-              merged[idx] = { ...merged[idx], ...rf, status: 'synced' };
-            } else {
-              merged.push(rf);
-            }
-          }
+          // True 2-Way Synchronization: Google Drive is the authoritative source of truth!
+          const localMapByName = new Map((this.uploadedFiles || []).map(lf => [lf.name, lf]));
+          const localMapById = new Map((this.uploadedFiles || []).map(lf => [lf.cloudId || lf.id, lf]));
 
-          this.uploadedFiles = merged;
-          this.saveUploadedFiles(merged);
-          this.notifyListeners('files_updated', merged);
-          return merged;
+          const reconciled = remoteFiles.map(rf => {
+            const local = localMapById.get(rf.cloudId) || localMapByName.get(rf.name);
+            if (local) {
+              return {
+                ...rf,
+                localMediaId: local.localMediaId || rf.localMediaId,
+                localMediaType: local.localMediaType || rf.localMediaType,
+                status: 'synced'
+              };
+            }
+            return rf;
+          });
+
+          // Retain only files from other providers or in-flight uploads
+          const currentUploading = (this.uploadedFiles || []).filter(lf => 
+            lf.status === 'uploading' || lf.status === 'pending'
+          );
+
+          const finalFiles = [...currentUploading, ...reconciled];
+          this.uploadedFiles = finalFiles;
+          this.saveUploadedFiles(finalFiles);
+          this.notifyListeners('files_updated', finalFiles);
+          return finalFiles;
         }
       } else if (account.provider === 'onedrive') {
-        const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${MOBILE_FOLDER_NAME}:/children`, {
-          headers: { Authorization: `Bearer ${account.accessToken}` }
-        });
+        const res = await this.authenticatedFetch(
+          `https://graph.microsoft.com/v1.0/me/drive/root:/${MOBILE_FOLDER_NAME}:/children`,
+          {},
+          account
+        );
 
-        if (res.ok) {
+        if (res && res.ok) {
           const data = await res.json();
           const remoteFiles = (data.value || []).map(f => {
             const isVideo = f.file?.mimeType && f.file.mimeType.startsWith('video');
@@ -1725,20 +1881,32 @@ class MobileEngine {
             };
           });
 
-          const merged = [...this.uploadedFiles];
-          for (const rf of remoteFiles) {
-            const idx = merged.findIndex(lf => (lf.cloudId && lf.cloudId === rf.cloudId) || lf.name === rf.name);
-            if (idx >= 0) {
-              merged[idx] = { ...merged[idx], ...rf, status: 'synced' };
-            } else {
-              merged.push(rf);
-            }
-          }
+          // True 2-Way Synchronization: OneDrive is the authoritative source of truth!
+          const localMapByName = new Map((this.uploadedFiles || []).map(lf => [lf.name, lf]));
+          const localMapById = new Map((this.uploadedFiles || []).map(lf => [lf.cloudId || lf.id, lf]));
 
-          this.uploadedFiles = merged;
-          this.saveUploadedFiles(merged);
-          this.notifyListeners('files_updated', merged);
-          return merged;
+          const reconciled = remoteFiles.map(rf => {
+            const local = localMapById.get(rf.cloudId) || localMapByName.get(rf.name);
+            if (local) {
+              return {
+                ...rf,
+                localMediaId: local.localMediaId || rf.localMediaId,
+                localMediaType: local.localMediaType || rf.localMediaType,
+                status: 'synced'
+              };
+            }
+            return rf;
+          });
+
+          const currentUploading = (this.uploadedFiles || []).filter(lf => 
+            lf.status === 'uploading' || lf.status === 'pending'
+          );
+
+          const finalFiles = [...currentUploading, ...reconciled];
+          this.uploadedFiles = finalFiles;
+          this.saveUploadedFiles(finalFiles);
+          this.notifyListeners('files_updated', finalFiles);
+          return finalFiles;
         }
       }
     } catch (err) {

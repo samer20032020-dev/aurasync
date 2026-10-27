@@ -65,6 +65,12 @@ export default function MobileCloudExplorer({
       window.onAuraSyncPermissionsResult = (granted) => {
         if (granted) refreshLocalMedia();
       };
+      window.onAuraSyncMediaDeleted = () => {
+        refreshLocalMedia();
+        mobileEngine.syncCloudFiles().then(fresh => {
+          if (fresh) setFiles(fresh);
+        }).catch(() => {});
+      };
     }
 
     return () => {
@@ -72,6 +78,7 @@ export default function MobileCloudExplorer({
       window.removeEventListener('focus', handleFocus);
       if (typeof window !== 'undefined') {
         delete window.onAuraSyncPermissionsResult;
+        delete window.onAuraSyncMediaDeleted;
       }
     };
   }, [refreshLocalMedia]);
@@ -261,7 +268,12 @@ export default function MobileCloudExplorer({
   const handleDeleteFile = async (fileId) => {
     triggerHaptic(30);
     try {
-      await mobileEngine.deleteUploadedFile(fileId);
+      const fileObj = files.find(f => f.id === fileId);
+      await mobileEngine.deleteUploadedFiles([fileId], {
+        fromCloud: true,
+        fromPhone: false,
+        files: fileObj ? [fileObj] : []
+      });
       setFiles(prev => prev.filter(f => f.id !== fileId));
       setSelectedFile(null);
       refreshLocalMedia();
@@ -273,6 +285,11 @@ export default function MobileCloudExplorer({
           'info'
         );
       }
+      setTimeout(() => {
+        mobileEngine.syncCloudFiles().then(fresh => {
+          if (fresh) setFiles(fresh);
+        }).catch(() => {});
+      }, 500);
     } catch (err) {
       if (onShowToast) {
         onShowToast(isRtl ? `تعذر الحذف: ${err.message}` : `Delete failed: ${err.message}`, 'error');
@@ -344,28 +361,23 @@ export default function MobileCloudExplorer({
     const fromCloud = deleteTargetMode === 'cloud' || deleteTargetMode === 'both';
     const fromPhone = deleteTargetMode === 'phone' || deleteTargetMode === 'both';
 
-    // Check all-files permission on Android if deleting from phone
+    // If deleting from phone and permission not yet granted, prompt in background without blocking execution
     if (fromPhone && typeof window !== 'undefined' && window.AuraSyncAndroid?.hasAllFilesPermission) {
       try {
         if (!window.AuraSyncAndroid.hasAllFilesPermission()) {
           window.AuraSyncAndroid.requestAllFilesPermission();
-          if (onShowToast) {
-            onShowToast(
-              isRtl
-                ? 'ℹ️ لحذف الصور من ذاكرة الهاتف، يرجى تفعيل إذن (الوصول إلى جميع الملفات) بالنافذة المفتوحة ثم إعادة الضغط على حذف'
-                : 'ℹ️ Please grant All Files Access to delete photos directly from phone memory',
-              'info'
-            );
-          }
-          setIsBatchDeleting(false);
-          return;
         }
       } catch (_) {}
     }
 
     try {
       const filesMap = new Map((files || []).map(f => [f.id, f]));
-      await mobileEngine.deleteUploadedFiles(idsToDelete, { fromCloud, fromPhone });
+      const selectedFilesList = idsToDelete.map(id => filesMap.get(id)).filter(Boolean);
+      await mobileEngine.deleteUploadedFiles(idsToDelete, { 
+        fromCloud, 
+        fromPhone, 
+        files: selectedFilesList 
+      });
 
       // Immediate UI synchronization:
       if (fromCloud) {
@@ -408,6 +420,13 @@ export default function MobileCloudExplorer({
       if (onShowToast) {
         onShowToast(msg, 'success');
       }
+
+      // Re-sync with cloud in background to guarantee 100% exact parity with remote storage
+      setTimeout(() => {
+        mobileEngine.syncCloudFiles().then(fresh => {
+          if (fresh) setFiles(fresh);
+        }).catch(() => {});
+      }, 500);
     } catch (err) {
       if (onShowToast) {
         onShowToast(

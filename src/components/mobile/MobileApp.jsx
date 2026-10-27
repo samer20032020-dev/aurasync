@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.57',
+  version = '1.0.58',
   accounts = [],
   storage = {},
   stats = {},
