@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.51',
+  version = '1.0.52',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -808,65 +808,60 @@ export default function MobileHome({
         </div>
       )}
 
-      {/* ── 2. Unified Cloud Transfer & Sync Hub (الخيارين: 1- مزامنة ملفات | 2- سحب المعرض كامل) ── */}
+      {/* ── 2. Unified Cloud Transfer & Sync Hub (تصميم أنعم، أبسط، كلمات أقل واحترافي) ── */}
       <div style={{
         background: colors.card,
         borderRadius: 24,
-        padding: '24px 18px',
+        padding: '20px 16px',
         border: `1px solid ${colors.cardBorder}`,
         boxShadow: colors.cardGlow,
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
+        gap: 14,
       }}>
-        {/* Top Header & Multi-Device Sync Pill */}
-        <div style={{ textAlign: 'center' }}>
+        {/* Header: Clean & Minimalist */}
+        <div style={{ textAlign: 'center', marginBottom: 2 }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 52, height: 52, borderRadius: 18,
-            background: isDark ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(124, 58, 237, 0.2))' : 'linear-gradient(135deg, #dbeafe, #ede9fe)',
-            color: '#3b82f6', marginBottom: 12,
-            boxShadow: '0 4px 16px rgba(37, 99, 235, 0.15)',
+            width: 46, height: 46, borderRadius: 16,
+            background: isDark ? 'rgba(59, 130, 246, 0.12)' : '#eff6ff',
+            color: '#3b82f6', marginBottom: 8,
           }}>
-            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
               <polyline points="12 13 12 9 10 11"/>
             </svg>
           </div>
 
-          <h2 style={{ fontSize: 17, fontWeight: 900, color: colors.text, margin: '0 0 4px' }}>
-            {isRtl ? 'مركز النقل والمزامنة السحابية' : 'Cloud Sync & Media Transfer'}
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: colors.text, margin: '0 0 3px' }}>
+            {isRtl ? 'المزامنة السحابية' : 'Cloud Sync'}
           </h2>
-          <p style={{ fontSize: 11, color: colors.textMuted, margin: '0 0 14px', lineHeight: 1.5 }}>
-            {isRtl
-              ? 'اختر نوع العملية لحفظ بياناتك في سحابتك ومزامنتها بين أجهزتك فوراً'
-              : 'Select transfer mode to backup and sync your data with other devices'}
+          <p style={{ fontSize: 11, color: colors.textMuted, margin: '0 0 10px' }}>
+            {isRtl ? 'نسخ احتياطي فوري ومزامنة مشفرة لكافة أجهزتك' : 'Instant encrypted backup and multi-device sync'}
           </p>
 
-          {/* Device Sync Status Pill */}
+          {/* Device Sync Status Badge */}
           <div
             onClick={handleManualSync}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              padding: '5px 12px',
+              padding: '4px 10px',
               borderRadius: 999,
-              background: isDark ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.12)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
+              background: isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
               color: '#10b981',
               fontSize: 10,
               fontWeight: 700,
               cursor: 'pointer',
-              userSelect: 'none',
-              transition: 'all 0.2s ease',
             }}
-            title={isRtl ? 'اضغط لتحديث المزامنة مع كافة الهواتف' : 'Tap to sync with all phones now'}
+            title={isRtl ? 'تحديث المزامنة' : 'Sync now'}
           >
             <span style={{
-              fontSize: 11,
+              fontSize: 10,
               display: 'inline-block',
               animation: isManualSyncing ? 'spin 1s linear infinite' : 'none',
             }}>
@@ -874,60 +869,130 @@ export default function MobileHome({
             </span>
             <span>
               {isManualSyncing
-                ? (isRtl ? 'جاري المزامنة مع الأجهزة...' : 'Syncing with devices…')
+                ? (isRtl ? 'جاري المزامنة...' : 'Syncing…')
                 : (uploadedFiles.length > 0
-                    ? (isRtl ? `مزامنة الأجهزة نشطة (${uploadedFiles.length} ملف)` : `Device Sync Active (${uploadedFiles.length} files)`)
-                    : (isRtl ? 'مزامنة الأجهزة نشطة عبر نفس الحساب' : 'Device Sync Active via Same Account'))
+                    ? (isRtl ? `متزامن (${uploadedFiles.length} ملف)` : `Synced (${uploadedFiles.length} files)`)
+                    : (isRtl ? 'المزامنة نشطة' : 'Sync Active'))
               }
             </span>
           </div>
         </div>
 
-        {/* ── Option 1: مزامنة ملفات ── */}
+        {/* ── Card 1: نسخ المعرض كامل (Primary / Clean & Soft) ── */}
         <div style={{
-          background: isDark ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc',
-          borderRadius: 18,
+          background: isDark
+            ? 'linear-gradient(145deg, rgba(37, 99, 235, 0.08), rgba(124, 58, 237, 0.1))'
+            : '#f8fafc',
+          borderRadius: 20,
           padding: '16px',
-          border: `1px solid ${isDark ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.2)'}`,
+          border: `1px solid ${isDark ? 'rgba(124, 58, 237, 0.25)' : 'rgba(124, 58, 237, 0.15)'}`,
           display: 'flex',
           flexDirection: 'column',
-          gap: 10,
-          transition: 'all 0.2s ease',
+          gap: 12,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: 12,
-                background: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.12)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#3b82f6', fontSize: 18,
-              }}>
-                📁
-              </div>
-              <div style={{ textAlign: isRtl ? 'right' : 'left' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 14,
+              background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#ffffff', fontSize: 18,
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+              flexShrink: 0,
+            }}>
+              📸
+            </div>
+            <div style={{ textAlign: isRtl ? 'right' : 'left', flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0, color: colors.text }}>
-                  {isRtl ? '1. مزامنة ملفات' : '1. Sync Files'}
+                  {isRtl ? 'نسخ المعرض كامل' : 'Gallery Backup'}
                 </h3>
-                <span style={{ fontSize: 10, color: colors.textMuted }}>
-                  {isRtl ? 'مستندات، أرشيف، ملفات عامة، أو وسائط' : 'Documents, archives, media or any files'}
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                  background: isDark ? 'rgba(124, 58, 237, 0.2)' : '#ede9fe',
+                  color: isDark ? '#c084fc' : '#7c3aed',
+                }}>
+                  {isRtl ? 'تلقائي' : 'Auto'}
                 </span>
               </div>
+              <span style={{ fontSize: 11, color: colors.textMuted, display: 'block', marginTop: 2 }}>
+                {isRtl ? 'نسخ كافة الصور والفيديوهات وحفظها بجودتها الأصلية' : 'Backup all photos & videos in original quality'}
+              </span>
             </div>
-            <span style={{
-              fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 8,
-              background: isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
-              color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.25)',
-              fontFamily: 'monospace',
-            }}>
-              /{AURASYNC_MOBILE_FOLDER}
-            </span>
           </div>
 
-          <p style={{ fontSize: 11, color: colors.textMuted, margin: 0, lineHeight: 1.4, textAlign: isRtl ? 'right' : 'left' }}>
-            {isRtl
-              ? 'مزامنة واختيار أي ملفات أو وسائط وحفظها مباشرة داخل مجلد السحابة الرئيسي.'
-              : 'Choose any files and sync them directly to your root cloud folder.'}
-          </p>
+          <button
+            onClick={handleStartGalleryTransfer}
+            disabled={isBackingUpGallery}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              borderRadius: 14,
+              border: 'none',
+              background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+              color: '#ffffff',
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: isBackingUpGallery ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {isBackingUpGallery && transferMode === 'gallery' ? (
+              <>
+                <svg className="animate-spin" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+                  <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
+                </svg>
+                <span>{isRtl ? `جاري النسخ (${galleryProgress}%)...` : `Backing up (${galleryProgress}%)…`}</span>
+              </>
+            ) : (
+              <span>{isRtl ? 'سحب المعرض إلى السحابة' : 'Backup Gallery Now'}</span>
+            )}
+          </button>
+        </div>
+
+        {/* ── Card 2: مزامنة ملفات ومستندات (Secondary / Minimalist) ── */}
+        <div style={{
+          background: isDark ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc',
+          borderRadius: 20,
+          padding: '16px',
+          border: `1px solid ${colors.cardBorder}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 14,
+              background: isDark ? 'rgba(37, 99, 235, 0.12)' : '#eff6ff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#3b82f6', fontSize: 18,
+              flexShrink: 0,
+            }}>
+              📁
+            </div>
+            <div style={{ textAlign: isRtl ? 'right' : 'left', flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0, color: colors.text }}>
+                  {isRtl ? 'مزامنة ملفات محددة' : 'Sync Specific Files'}
+                </h3>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                  background: isDark ? 'rgba(255, 255, 255, 0.06)' : '#f1f5f9',
+                  color: colors.textMuted,
+                }}>
+                  {isRtl ? 'مخصص' : 'Custom'}
+                </span>
+              </div>
+              <span style={{ fontSize: 11, color: colors.textMuted, display: 'block', marginTop: 2 }}>
+                {isRtl ? 'اختيار مستندات أو وسائط معينة لحفظها' : 'Select documents or media files to sync'}
+              </span>
+            </div>
+          </div>
 
           <button
             onClick={handleStartFilesSync}
@@ -935,12 +1000,12 @@ export default function MobileHome({
             style={{
               width: '100%',
               padding: '11px 14px',
-              borderRadius: 12,
-              border: `1px solid ${isDark ? 'rgba(59, 130, 246, 0.35)' : 'rgba(59, 130, 246, 0.3)'}`,
-              background: isDark ? 'rgba(59, 130, 246, 0.1)' : '#eff6ff',
-              color: '#3b82f6',
+              borderRadius: 14,
+              border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.1)'}`,
+              background: isDark ? 'rgba(255, 255, 255, 0.04)' : '#ffffff',
+              color: colors.text,
               fontSize: 12,
-              fontWeight: 800,
+              fontWeight: 700,
               cursor: isBackingUpGallery ? 'wait' : 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -949,124 +1014,25 @@ export default function MobileHome({
               transition: 'all 0.2s ease',
             }}
           >
-            <span>📂</span>
-            <span>{isRtl ? 'اختيار ومزامنة ملفات الآن' : 'Select & Sync Files Now'}</span>
+            <span>{isRtl ? 'اختيار ملفات ومزامنتها' : 'Choose Files to Sync'}</span>
           </button>
         </div>
 
-        {/* ── Option 2: سحب المعرض كامل (PRO Highlighted) ── */}
-        <div style={{
-          background: isDark
-            ? 'linear-gradient(145deg, rgba(37, 99, 235, 0.1) 0%, rgba(124, 58, 237, 0.12) 100%)'
-            : 'linear-gradient(145deg, #f0fdf4 0%, #ede9fe 100%)',
-          borderRadius: 18,
-          padding: '16px',
-          border: `1px solid ${isDark ? 'rgba(124, 58, 237, 0.35)' : 'rgba(124, 58, 237, 0.25)'}`,
-          boxShadow: isDark ? '0 6px 20px rgba(124, 58, 237, 0.12)' : '0 4px 14px rgba(124, 58, 237, 0.06)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
-          {/* Top Badge */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{
-              fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 999,
-              background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-              color: '#ffffff', boxShadow: '0 2px 8px rgba(124, 58, 237, 0.3)',
-            }}>
-              {isRtl ? '⚡ نقل شامل وتلقائي' : '⚡ Full Auto-Transfer'}
-            </span>
-            <span style={{
-              fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 8,
-              background: isDark ? 'rgba(124, 58, 237, 0.18)' : '#f5f3ff',
-              color: '#a855f7', border: '1px solid rgba(124, 58, 237, 0.3)',
-              fontFamily: 'monospace',
-            }}>
-              /{AURASYNC_MOBILE_FOLDER}/galary
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 12,
-              background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#ffffff', fontSize: 18,
-              boxShadow: '0 3px 12px rgba(37, 99, 235, 0.3)',
-            }}>
-              📸
-            </div>
-            <div style={{ textAlign: isRtl ? 'right' : 'left', flex: 1 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 900, margin: 0, color: colors.text }}>
-                {isRtl ? '2. سحب المعرض كامل' : '2. Pull Entire Gallery'}
-              </h3>
-              <span style={{ fontSize: 10, color: colors.textMuted }}>
-                {isRtl ? 'سحب كل الصور والفيديوهات تلقائياً (حتى 40,000+ ملف)' : 'Automatic transfer for all photos & videos (40,000+ files)'}
-              </span>
-            </div>
-          </div>
-
-          <p style={{ fontSize: 11, color: colors.textMuted, margin: 0, lineHeight: 1.4, textAlign: isRtl ? 'right' : 'left' }}>
-            {isRtl
-              ? 'يسحب كل محتويات المعرض تلقائياً وينشئ مجلد galary مخصص داخل aurasync-mobile لنقل وحفظ الألبوم كاملاً.'
-              : 'Pulls your complete gallery and creates a dedicated galary folder inside aurasync-mobile.'}
-          </p>
-
-          <button
-            onClick={handleStartGalleryTransfer}
-            disabled={isBackingUpGallery}
-            style={{
-              width: '100%',
-              padding: '13px 16px',
-              borderRadius: 14,
-              border: 'none',
-              background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 800,
-              cursor: isBackingUpGallery ? 'wait' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              boxShadow: '0 4px 18px rgba(37, 99, 235, 0.35)',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            {isBackingUpGallery && transferMode === 'gallery' ? (
-              <>
-                <svg className="animate-spin" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                  <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
-                </svg>
-                <span>{isRtl ? `جاري سحب المعرض (${galleryProgress}%)...` : `Pulling Gallery (${galleryProgress}%)…`}</span>
-              </>
-            ) : (
-              <>
-                <span>🚀</span>
-                <span>{isRtl ? 'سحب المعرض كامل إلى السحابة الآن' : 'Pull Entire Gallery to Cloud Now'}</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Feature Badges Footer */}
+        {/* Feature Badges Footer: Crisp & Elegant */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-around',
+          justifyContent: 'center',
+          gap: 14,
           paddingTop: 4,
           fontSize: 10,
-          fontWeight: 700,
           color: colors.textMuted,
         }}>
-          <span>✨ {isRtl ? 'جودة أصلية 100%' : '100% Original Quality'}</span>
+          <span>🔒 {isRtl ? 'تشفير تام' : 'Encrypted'}</span>
           <span>•</span>
-          <span>⚡ {isRtl ? 'سرعة فائقة' : 'Ultra Fast'}</span>
+          <span>✨ {isRtl ? 'جودة أصلية' : 'Original Quality'}</span>
           <span>•</span>
-          <span>🔒 {isRtl ? 'حفظ مشفر' : 'Encrypted Safe'}</span>
+          <span>⚡ {isRtl ? 'خلفية ذكية' : 'Background Sync'}</span>
         </div>
       </div>
 
