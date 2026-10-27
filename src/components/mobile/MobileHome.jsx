@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.46',
+  version = '1.0.47',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -62,6 +62,8 @@ export default function MobileHome({
   const [userEmailInput, setUserEmailInput] = useState('');
   const [showGalleryConfirmModal, setShowGalleryConfirmModal] = useState(false);
   const [detectedGalleryCount, setDetectedGalleryCount] = useState(0);
+  const [pendingResumeSession, setPendingResumeSession] = useState(null);
+  const [showResumeModal, setShowResumeModal] = useState(false);
 
   // Gallery transfer & sync state
   const [isBackingUpGallery, setIsBackingUpGallery] = useState(false);
@@ -256,6 +258,15 @@ export default function MobileHome({
     return unsub;
   }, [executeTransfer, isRtl, onShowToast, transferMode]);
 
+  // Detect interrupted session when app is launched / reopened
+  useEffect(() => {
+    const saved = mobileEngine.getPendingGallerySession();
+    if (saved && saved.inProgress && (saved.totalCount - saved.processed > 0)) {
+      setPendingResumeSession(saved);
+      setShowResumeModal(true);
+    }
+  }, []);
+
   // Option 1: مزامنة ملفات (حفظ أي ملفات في aurasync-mobile مباشرة)
   const handleStartFilesSync = useCallback(() => {
     triggerHaptic(25);
@@ -400,6 +411,12 @@ export default function MobileHome({
             }
           });
 
+          if (res.cancelled) {
+            setIsBackingUpGallery(false);
+            setGalleryDone(false);
+            return;
+          }
+
           if (res.successful && res.successful.length > 0) {
             setGalleryProgress(100);
             triggerHaptic(60);
@@ -458,6 +475,36 @@ export default function MobileHome({
       galleryInputRef.current.click();
     }
   }, [accounts, detectedGalleryCount, isRtl, onShowToast, triggerHaptic]);
+
+  const handleCancelGalleryTransfer = useCallback(() => {
+    triggerHaptic(30);
+    mobileEngine.cancelGalleryPull();
+    setIsBackingUpGallery(false);
+    if (onShowToast) {
+      onShowToast(
+        isRtl
+          ? '⏸️ تم إيقاف عملية نسخ المعرض. تم حفظ تقدمك ويمكنك الاستئناف في أي وقت'
+          : '⏸️ Gallery copy paused. Progress saved and can be resumed anytime',
+        'info'
+      );
+    }
+  }, [isRtl, onShowToast, triggerHaptic]);
+
+  const handleResumeSession = useCallback(() => {
+    setShowResumeModal(false);
+    triggerHaptic(30);
+    handleConfirmGalleryTransfer();
+  }, [handleConfirmGalleryTransfer, triggerHaptic]);
+
+  const handleDismissResumeSession = useCallback(() => {
+    setShowResumeModal(false);
+    setPendingResumeSession(null);
+    mobileEngine.clearPendingGallerySession();
+    triggerHaptic(15);
+    if (onShowToast) {
+      onShowToast(isRtl ? 'تم إلغاء واستبعاد الجلسة السابقة' : 'Previous session discarded', 'info');
+    }
+  }, [isRtl, onShowToast, triggerHaptic]);
 
   // Hook into native permissions result callback
   useEffect(() => {
@@ -1035,7 +1082,30 @@ export default function MobileHome({
             background: colors.card, borderRadius: 28, padding: 26,
             border: `1px solid ${colors.cardBorder}`,
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6)', textAlign: 'center',
+            position: 'relative',
           }}>
+            {/* Cancel (X) Button */}
+            <button
+              onClick={handleCancelGalleryTransfer}
+              title={isRtl ? 'إيقاف النسخ مؤقتاً' : 'Cancel copy'}
+              style={{
+                position: 'absolute',
+                top: 16,
+                [isRtl ? 'left' : 'right']: 16,
+                width: 32, height: 32,
+                borderRadius: '50%',
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'}`,
+                background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                color: colors.textMuted,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, fontWeight: 900,
+                cursor: 'pointer',
+                zIndex: 10,
+                transition: 'all 0.2s ease',
+              }}
+            >
+              ✕
+            </button>
             <div style={{
               width: 60, height: 60, borderRadius: 20,
               background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
@@ -1268,6 +1338,85 @@ export default function MobileHome({
                 }}
               >
                 {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 8. Resume Gallery Backup Prompt Modal (when reopened after app kill) ── */}
+      {showResumeModal && pendingResumeSession && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 96,
+          background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(12px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 360,
+            background: colors.card, borderRadius: 28, padding: 24,
+            border: `1.5px solid ${isDark ? 'rgba(59, 130, 246, 0.4)' : 'rgba(37, 99, 235, 0.25)'}`,
+            boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              width: 54, height: 54, borderRadius: 18,
+              background: 'linear-gradient(135deg, #10b981, #2563eb)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 26, margin: '0 auto 16px',
+              boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)',
+            }}>
+              🔄
+            </div>
+
+            <h3 style={{ fontSize: 17, fontWeight: 900, color: colors.text, margin: '0 0 10px' }}>
+              {isRtl ? 'استئناف نسخ المعرض إلى السحابة؟' : 'Resume Gallery Cloud Backup?'}
+            </h3>
+
+            <p style={{ fontSize: 12, color: colors.textMuted, margin: '0 0 16px', lineHeight: 1.6 }}>
+              {isRtl
+                ? `عثر التطبيق على عملية نسخ سابقة لم تكتمل، تبقى منها ${(pendingResumeSession.totalCount - pendingResumeSession.processed).toLocaleString()} ملف من أصل ${pendingResumeSession.totalCount.toLocaleString()}. هل ترغب في متابعة النسخ من حيث توقفت؟`
+                : `A previous gallery backup was paused with ${(pendingResumeSession.totalCount - pendingResumeSession.processed).toLocaleString()} items remaining out of ${pendingResumeSession.totalCount.toLocaleString()}. Do you want to resume now?`}
+            </p>
+
+            <div style={{
+              padding: '10px 14px', borderRadius: 14,
+              background: isDark ? 'rgba(37, 99, 235, 0.12)' : '#eff6ff',
+              border: `1px solid ${isDark ? 'rgba(37, 99, 235, 0.3)' : 'rgba(37, 99, 235, 0.2)'}`,
+              marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              fontSize: 11, fontWeight: 700, color: '#3b82f6',
+            }}>
+              <span>📁 {isRtl ? 'المجلد:' : 'Target:'}</span>
+              <span style={{ direction: 'ltr', fontFamily: 'monospace' }}>
+                {AURASYNC_MOBILE_FOLDER}/galary
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                onClick={handleResumeSession}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: 16,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #10b981, #2563eb)',
+                  color: '#ffffff', fontSize: 13, fontWeight: 900,
+                  cursor: 'pointer',
+                  boxShadow: '0 6px 20px rgba(16, 185, 129, 0.4)',
+                }}
+              >
+                {isRtl ? '⚡ نعم، استئناف النسخ الآن' : '⚡ Yes, Resume Copy Now'}
+              </button>
+
+              <button
+                onClick={handleDismissResumeSession}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: 16,
+                  border: `1px solid ${colors.cardBorder}`,
+                  background: 'transparent',
+                  color: colors.textMuted, fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {isRtl ? '✕ إلغاء وحذف الجلسة' : '✕ Discard Session'}
               </button>
             </div>
           </div>

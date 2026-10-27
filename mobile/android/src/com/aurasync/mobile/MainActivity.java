@@ -62,6 +62,10 @@ import android.content.Context;
 import android.content.IntentFilter;
 import android.os.PowerManager;
 import java.util.Map;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 
 public class MainActivity extends Activity {
     private static final int GOOGLE_PORT = 58291;
@@ -836,6 +840,9 @@ public class MainActivity extends Activity {
                             perms.add("android.permission.READ_MEDIA_IMAGES");
                             perms.add("android.permission.READ_MEDIA_VIDEO");
                             perms.add("android.permission.READ_MEDIA_AUDIO");
+                            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                                perms.add("android.permission.POST_NOTIFICATIONS");
+                            }
                             if (Build.VERSION.SDK_INT >= 34) {
                                 try {
                                     perms.add("android.permission.READ_MEDIA_VISUAL_USER_SELECTED");
@@ -1256,6 +1263,85 @@ public class MainActivity extends Activity {
                     wakeLock = null;
                 }
             } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void showProgressNotification(final String title, final String message, final int progress, final int max) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                        if (nm == null) return;
+
+                        final String CHANNEL_ID = "aurasync_gallery_backup";
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            NotificationChannel channel = nm.getNotificationChannel(CHANNEL_ID);
+                            if (channel == null) {
+                                channel = new NotificationChannel(
+                                    CHANNEL_ID,
+                                    "AuraSync Gallery Backup",
+                                    NotificationManager.IMPORTANCE_LOW
+                                );
+                                channel.setDescription("Progress notification for AuraSync cloud gallery backup");
+                                channel.enableLights(false);
+                                channel.enableVibration(false);
+                                channel.setShowBadge(false);
+                                nm.createNotificationChannel(channel);
+                            }
+                        }
+
+                        Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+                        PendingIntent pendingIntent = null;
+                        if (launchIntent != null) {
+                            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                flags |= PendingIntent.FLAG_IMMUTABLE;
+                            }
+                            pendingIntent = PendingIntent.getActivity(MainActivity.this, 0, launchIntent, flags);
+                        }
+
+                        Notification.Builder builder;
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            builder = new Notification.Builder(MainActivity.this, CHANNEL_ID);
+                        } else {
+                            builder = new Notification.Builder(MainActivity.this);
+                        }
+
+                        int appIcon = getApplicationInfo().icon != 0 ? getApplicationInfo().icon : android.R.drawable.stat_sys_upload;
+
+                        builder.setContentTitle(title)
+                               .setContentText(message)
+                               .setSmallIcon(appIcon)
+                               .setOngoing(true)
+                               .setOnlyAlertOnce(true)
+                               .setProgress(Math.max(1, max), Math.max(0, progress), false);
+
+                        if (pendingIntent != null) {
+                            builder.setContentIntent(pendingIntent);
+                        }
+
+                        nm.notify(9001, builder.build());
+                    } catch (Exception e) {
+                        // ignore notification exceptions gracefully
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void dismissProgressNotification() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                        if (nm != null) {
+                            nm.cancel(9001);
+                        }
+                    } catch (Exception ignored) {}
+                }
+            });
         }
 
         @JavascriptInterface

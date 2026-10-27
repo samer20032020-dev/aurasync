@@ -37,7 +37,7 @@ const SettingsIcon = ({ active }) => (
 );
 
 export default function MobileApp({
-  version = '1.0.46',
+  version = '1.0.47',
   accounts = [],
   storage = {},
   stats = {},
@@ -369,42 +369,48 @@ export default function MobileApp({
         paddingBottom: 96, position: 'relative', zIndex: 10,
       }}>
         <div style={{ maxWidth: 500, margin: '0 auto', padding: '16px 16px 0' }}>
-          {activeTab === 'home' && (
+          <div style={{ display: activeTab === 'home' ? 'block' : 'none' }}>
             <MobileHome
               version={version}
               theme={theme}
               onNavigateTab={handleTabChange}
               onShowToast={showToast}
             />
-          )}
-          {activeTab === 'backup' && (
-            <MobileAutoBackup
-              onShowToast={showToast}
-            />
-          )}
-          {activeTab === 'files' && (
-            <MobileCloudExplorer
-              theme={theme}
-              onShowToast={showToast}
-            />
-          )}
-          {activeTab === 'settings' && (
-            <MobileSettings
-              version={version}
-              theme={theme}
-              language={language}
-              onSetLanguage={setLanguage}
-              onToggleTheme={handleToggleTheme}
-              onShowToast={showToast}
-              availableUpdate={availableUpdate}
-              onTriggerUpdate={() => setShowUpdateModal(true)}
-              onSignOut={() => {
-                mobileEngine.saveAccounts([]);
-                setEngineAccounts([]);
-                showToast(isRtl ? 'تم تسجيل الخروج بنجاح' : 'Signed out successfully', 'info');
-              }}
-            />
-          )}
+          </div>
+          <div style={{ display: activeTab === 'backup' ? 'block' : 'none' }}>
+            {activeTab === 'backup' && (
+              <MobileAutoBackup
+                onShowToast={showToast}
+              />
+            )}
+          </div>
+          <div style={{ display: activeTab === 'files' ? 'block' : 'none' }}>
+            {activeTab === 'files' && (
+              <MobileCloudExplorer
+                theme={theme}
+                onShowToast={showToast}
+              />
+            )}
+          </div>
+          <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
+            {activeTab === 'settings' && (
+              <MobileSettings
+                version={version}
+                theme={theme}
+                language={language}
+                onSetLanguage={setLanguage}
+                onToggleTheme={handleToggleTheme}
+                onShowToast={showToast}
+                availableUpdate={availableUpdate}
+                onTriggerUpdate={() => setShowUpdateModal(true)}
+                onSignOut={() => {
+                  mobileEngine.saveAccounts([]);
+                  setEngineAccounts([]);
+                  showToast(isRtl ? 'تم تسجيل الخروج بنجاح' : 'Signed out successfully', 'info');
+                }}
+              />
+            )}
+          </div>
         </div>
       </main>
 

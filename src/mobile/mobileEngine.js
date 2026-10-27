@@ -569,7 +569,7 @@ class MobileEngine {
     }
   }
 
-  async uploadFileToCloud(file, account, onProgress, subFolder = '', isRetry = false) {
+  async uploadFileToCloud(file, account, onProgress, subFolder = '', isRetry = false, targetFolderId = null) {
     if (!account) {
       throw new Error('No cloud account provided');
     }
@@ -605,7 +605,7 @@ class MobileEngine {
 
     // 1. Google Drive Multipart Upload (Direct to aurasync-mobile or aurasync-mobile/galary)
     if (account.provider === 'google') {
-      const folderId = await this.ensureCloudFolder('google', cleanSub);
+      const folderId = targetFolderId || (await this.ensureCloudFolder('google', cleanSub));
       const boundary = '-------AuraSyncMobileBoundary' + Date.now();
       const metadata = {
         name: file.name || `photo_${Date.now()}.jpg`,
@@ -618,6 +618,15 @@ class MobileEngine {
 
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        this._activeUploadXhrs = this._activeUploadXhrs || new Set();
+        this._activeUploadXhrs.add(xhr);
+
+        const cleanup = () => {
+          if (this._activeUploadXhrs) {
+            this._activeUploadXhrs.delete(xhr);
+          }
+        };
+
         xhr.open('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart');
         xhr.setRequestHeader('Authorization', `Bearer ${account.accessToken}`);
         xhr.setRequestHeader('Content-Type', `multipart/related; boundary=${boundary}`);
@@ -632,6 +641,7 @@ class MobileEngine {
         }
 
         xhr.onload = () => {
+          cleanup();
           if (xhr.status >= 200 && xhr.status < 300) {
             let resJson = {};
             try { resJson = JSON.parse(xhr.responseText); } catch (_) {}
@@ -654,7 +664,7 @@ class MobileEngine {
               if (!isRetry && account.refreshToken) {
                 this.refreshAccessToken(account)
                   .then((refreshedAcc) => {
-                    return this.uploadFileToCloud(file, refreshedAcc, onProgress, subFolder, true);
+                    return this.uploadFileToCloud(file, refreshedAcc, onProgress, subFolder, true, targetFolderId);
                   })
                   .then(resolve)
                   .catch(() => {
@@ -669,8 +679,9 @@ class MobileEngine {
           }
         };
 
-        xhr.onerror = () => reject(new Error('Network error uploading to Google Drive'));
-        xhr.ontimeout = () => reject(new Error('Timeout uploading to Google Drive'));
+        xhr.onerror = () => { cleanup(); reject(new Error('Network error uploading to Google Drive')); };
+        xhr.onabort = () => { cleanup(); reject(new Error('UPLOAD_ABORTED')); };
+        xhr.ontimeout = () => { cleanup(); reject(new Error('Timeout uploading to Google Drive')); };
         xhr.send(bodyBlob);
       });
     }
@@ -893,11 +904,99 @@ class MobileEngine {
     }
   }
 
-  // Native Full Gallery Pull Engine (Transfers all media directly to aurasync-mobile/galary)
+  // Persistent tracking of uploaded gallery item keys to prevent redundant re-uploads
+  _getUploadedGalleryKeys() {
+    if (this._uploadedGalleryKeys) return this._uploadedGalleryKeys;
+    try {
+      const raw = localStorage.getItem('aurasync_gallery_uploaded_keys');
+      if (raw) {
+        this._uploadedGalleryKeys = new Set(JSON.parse(raw));
+        return this._uploadedGalleryKeys;
+      }
+    } catch (_) {}
+    this._uploadedGalleryKeys = new Set();
+    return this._uploadedGalleryKeys;
+  }
+
+  _recordUploadedGalleryKey(key) {
+    if (!key) return;
+    const keys = this._getUploadedGalleryKeys();
+    keys.add(String(key));
+    if (keys.size % 10 === 0) {
+      this._saveUploadedGalleryKeys();
+    }
+  }
+
+  _saveUploadedGalleryKeys() {
+    try {
+      if (this._uploadedGalleryKeys) {
+        const arr = Array.from(this._uploadedGalleryKeys);
+        localStorage.setItem('aurasync_gallery_uploaded_keys', JSON.stringify(arr.slice(-100000)));
+      }
+    } catch (_) {}
+  }
+
+  // Pending session tracking (so if app is killed by Android, re-opening prompts the user)
+  getPendingGallerySession() {
+    try {
+      const raw = localStorage.getItem('aurasync_gallery_session');
+      if (raw) {
+        const session = JSON.parse(raw);
+        if (session && session.inProgress && (session.totalCount - session.processed > 0)) {
+          return session;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  savePendingGallerySession(sessionData) {
+    try {
+      localStorage.setItem('aurasync_gallery_session', JSON.stringify({
+        ...sessionData,
+        updatedAt: Date.now()
+      }));
+    } catch (_) {}
+  }
+
+  clearPendingGallerySession() {
+    try {
+      localStorage.removeItem('aurasync_gallery_session');
+    } catch (_) {}
+  }
+
+  cancelGalleryPull() {
+    this._isGalleryPullCancelled = true;
+    this._isGalleryPullActive = false;
+    if (this._activeUploadXhrs) {
+      for (const xhr of this._activeUploadXhrs) {
+        try { xhr.abort(); } catch (_) {}
+      }
+      this._activeUploadXhrs.clear();
+    }
+    this.releaseWakeLock();
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.dismissProgressNotification) {
+      try { window.AuraSyncAndroid.dismissProgressNotification(); } catch (_) {}
+    }
+    const currentSession = this.getPendingGallerySession();
+    if (currentSession) {
+      this.savePendingGallerySession({
+        ...currentSession,
+        inProgress: true,
+        isPaused: true
+      });
+    }
+    this.notifyListeners('gallery_pull_cancelled');
+  }
+
+  // Native Full Gallery Pull Engine (High-Speed Parallel Streaming with Auto-Resume)
   async pullEntireGalleryNative(options = {}) {
     const account = options.account || this.getPrimaryAccount();
     if (!account) throw new Error('No cloud account connected');
-    this.acquireWakeLock(3600000);
+
+    this._isGalleryPullActive = true;
+    this._isGalleryPullCancelled = false;
+    this.acquireWakeLock(7200000); // 2 hours max wake lock
 
     let totalCount = 0;
     if (typeof window !== 'undefined' && window.AuraSyncAndroid?.getGalleryMediaTotalCount) {
@@ -907,24 +1006,38 @@ class MobileEngine {
     }
 
     if (totalCount <= 0) {
+      this._isGalleryPullActive = false;
       this.releaseWakeLock();
       return { successful: [], failed: [], totalCount: 0 };
     }
 
-    // Ensure dedicated galary folder exists once only when Option 2 is triggered
+    // Pre-resolve dedicated galary folder once
+    let galaryFolderId = null;
     try {
-      await this.ensureCloudFolder(account.provider, 'galary');
+      galaryFolderId = await this.ensureCloudFolder(account.provider, 'galary');
     } catch (_) {}
 
-    const pageSize = 50;
+    const uploadedKeys = this._getUploadedGalleryKeys();
+    const pageSize = 100;
     let offset = 0;
     let processed = 0;
     const successful = [];
     const failed = [];
     const startTime = Date.now();
     let totalBytesUploaded = 0;
+    let lastNotificationTime = 0;
 
-    while (offset < totalCount) {
+    // Save initial session
+    this.savePendingGallerySession({
+      inProgress: true,
+      totalCount,
+      processed: 0,
+      provider: account.provider
+    });
+
+    const CONCURRENCY = 6; // 6 parallel uploads simultaneously
+
+    while (offset < totalCount && !this._isGalleryPullCancelled) {
       let rawJson = '[]';
       try {
         rawJson = window.AuraSyncAndroid.scanGalleryMedia(pageSize, offset);
@@ -936,87 +1049,161 @@ class MobileEngine {
       try { items = JSON.parse(rawJson); } catch (_) {}
       if (!items || items.length === 0) break;
 
-      for (const item of items) {
-        try {
-          if (options.onStatus) options.onStatus(`جاري جلب: ${item.name}`);
-          let blob = null;
-          try {
-            const res = await fetch(`/api/mediastore/${item.type}/${item.id}`);
-            if (res.ok) {
-              blob = await res.blob();
-            }
-          } catch (_) {}
+      let itemIndex = 0;
 
-          // Fallback to direct native Base64 bridge if fetch was blocked or empty
-          if ((!blob || blob.size === 0) && typeof window !== 'undefined' && window.AuraSyncAndroid?.getMediaItemBase64) {
+      const worker = async () => {
+        while (itemIndex < items.length && !this._isGalleryPullCancelled) {
+          const item = items[itemIndex++];
+          if (!item) break;
+
+          const itemKey = `${item.id}_${item.name}_${item.size || 0}`;
+
+          // Deduplication: if already uploaded, skip immediately!
+          if (uploadedKeys.has(itemKey)) {
+            processed++;
+            continue;
+          }
+
+          try {
+            if (options.onStatus && !this._isGalleryPullCancelled) {
+              options.onStatus(`جاري جلب ورفع: ${item.name}`);
+            }
+
+            let blob = null;
             try {
-              const b64 = window.AuraSyncAndroid.getMediaItemBase64(item.type, item.id);
-              if (b64 && b64.length > 0) {
-                const mime = item.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg');
-                blob = this.base64ToBlob(b64, mime);
+              const res = await fetch(`/api/mediastore/${item.type}/${item.id}`);
+              if (res.ok) {
+                blob = await res.blob();
               }
             } catch (_) {}
+
+            if ((!blob || blob.size === 0) && typeof window !== 'undefined' && window.AuraSyncAndroid?.getMediaItemBase64) {
+              try {
+                const b64 = window.AuraSyncAndroid.getMediaItemBase64(item.type, item.id);
+                if (b64 && b64.length > 0) {
+                  const mime = item.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg');
+                  blob = this.base64ToBlob(b64, mime);
+                }
+              } catch (_) {}
+            }
+
+            if (this._isGalleryPullCancelled) break;
+
+            if (!blob || blob.size === 0) {
+              throw new Error(`تعذر قراءة ملف ${item.name} من وسائط الهاتف`);
+            }
+
+            const file = new File([blob], item.name, {
+              type: item.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg')
+            });
+
+            const uploadResult = await this.uploadFileToCloud(file, account, null, 'galary', false, galaryFolderId);
+            totalBytesUploaded += file.size;
+
+            this._recordUploadedGalleryKey(itemKey);
+
+            const record = {
+              id: uploadResult.cloudId || `gallery_${Date.now()}_${item.id}`,
+              name: item.name,
+              type: item.type === 'video' ? 'video' : 'image',
+              sizeMB: Number((file.size / (1024 * 1024)).toFixed(1)) || 1.0,
+              uploadedAt: Date.now(),
+              cloudFolder: `${MOBILE_FOLDER_NAME}/galary`,
+              cloudProvider: account.provider,
+              encrypted: true,
+              status: 'synced'
+            };
+            successful.push(record);
+          } catch (itemErr) {
+            if (itemErr.message === 'UPLOAD_ABORTED' || this._isGalleryPullCancelled) {
+              break;
+            }
+            console.error(`Gallery item upload error: ${item.name}`, itemErr);
+            failed.push({ item, error: itemErr.message });
           }
 
-          if (!blob || blob.size === 0) {
-            throw new Error(`تعذر قراءة ملف ${item.name} من وسائط الهاتف`);
+          processed++;
+          const elapsedSec = (Date.now() - startTime) / 1000;
+          const overallPercent = Math.min(99, Math.round((processed / totalCount) * 100));
+          const speedMBps = elapsedSec > 0 ? Number((totalBytesUploaded / (1024 * 1024) / elapsedSec).toFixed(1)) : 8.5;
+
+          if (options.onProgress && !this._isGalleryPullCancelled) {
+            options.onProgress({
+              overallPercent,
+              currentFileName: item.name,
+              fileIndex: processed,
+              totalFiles: totalCount,
+              speedMBps: Math.max(1.0, speedMBps)
+            });
           }
 
-          const file = new File([blob], item.name, {
-            type: item.mimeType || (item.type === 'video' ? 'video/mp4' : 'image/jpeg')
-          });
+          // Update Android Status Bar Notification
+          const now = Date.now();
+          if (now - lastNotificationTime > 1200 && !this._isGalleryPullCancelled) {
+            lastNotificationTime = now;
+            if (typeof window !== 'undefined' && window.AuraSyncAndroid?.showProgressNotification) {
+              const title = 'AuraSync — نسخ المعرض للسحابة';
+              const msg = `${processed.toLocaleString()}/${totalCount.toLocaleString()} (${overallPercent}%) • ${speedMBps} MB/s`;
+              window.AuraSyncAndroid.showProgressNotification(title, msg, overallPercent, 100);
+            }
+          }
 
-          const uploadResult = await this.uploadFileToCloud(file, account, null, 'galary');
-          totalBytesUploaded += file.size;
-
-          const record = {
-            id: uploadResult.cloudId || `gallery_${Date.now()}_${item.id}`,
-            name: item.name,
-            type: item.type === 'video' ? 'video' : 'image',
-            sizeMB: Number((file.size / (1024 * 1024)).toFixed(1)) || 1.0,
-            uploadedAt: Date.now(),
-            cloudFolder: `${MOBILE_FOLDER_NAME}/galary`,
-            cloudProvider: account.provider,
-            encrypted: true,
-            status: 'synced'
-          };
-          successful.push(record);
-        } catch (itemErr) {
-          console.error(`Gallery item pull/upload error: ${item.name}`, itemErr);
-          failed.push({ item, error: itemErr.message });
+          // Update saved session periodically
+          if (processed % 15 === 0) {
+            this.savePendingGallerySession({
+              inProgress: true,
+              totalCount,
+              processed,
+              lastFileName: item.name,
+              provider: account.provider
+            });
+          }
         }
+      };
 
-        processed++;
-        const elapsedSec = (Date.now() - startTime) / 1000;
-        const overallPercent = Math.min(99, Math.round((processed / totalCount) * 100));
-        const speedMBps = elapsedSec > 0 ? Number((totalBytesUploaded / (1024 * 1024) / elapsedSec).toFixed(1)) : 5.0;
+      // Run parallel workers concurrently
+      const workers = Array.from({ length: Math.min(CONCURRENCY, items.length) }, () => worker());
+      await Promise.all(workers);
 
-        if (options.onProgress) {
-          options.onProgress({
-            overallPercent,
-            currentFileName: item.name,
-            fileIndex: processed,
-            totalFiles: totalCount,
-            speedMBps: Math.max(1.0, speedMBps)
-          });
-        }
-      }
+      if (this._isGalleryPullCancelled) break;
 
       offset += items.length;
     }
+
+    this._saveUploadedGalleryKeys();
 
     if (successful.length > 0) {
       const updated = [...successful, ...this.uploadedFiles];
       this.saveUploadedFiles(updated);
     }
 
+    this._isGalleryPullActive = false;
     this.releaseWakeLock();
+
+    if (typeof window !== 'undefined' && window.AuraSyncAndroid?.dismissProgressNotification) {
+      try { window.AuraSyncAndroid.dismissProgressNotification(); } catch (_) {}
+    }
+
+    if (this._isGalleryPullCancelled) {
+      this.savePendingGallerySession({
+        inProgress: true,
+        isPaused: true,
+        totalCount,
+        processed,
+        provider: account.provider
+      });
+      return { successful, failed, totalCount, cancelled: true };
+    }
+
+    // If completely finished, clear pending session
+    this.clearPendingGallerySession();
     this.syncCloudFiles().catch(() => {});
 
     return {
       successful,
       failed,
-      totalCount
+      totalCount,
+      cancelled: false
     };
   }
 
