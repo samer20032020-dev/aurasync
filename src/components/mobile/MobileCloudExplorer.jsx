@@ -102,15 +102,26 @@ export default function MobileCloudExplorer({
         setIsUploading(false);
         setUploadProgress(0);
         if (fileInputRef.current) fileInputRef.current.value = '';
-        const successCount = result.successful.length;
+        const successCount = result.successful ? result.successful.length : 0;
+        const failedCount = result.failed ? result.failed.length : 0;
         const targetCloudName = accounts[0]?.label || 'السحابة';
-        if (onShowToast) {
-          onShowToast(
-            isRtl
-              ? `✓ تم رفع ${successCount} ملف بنجاح في مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName}`
-              : `✓ Uploaded ${successCount} file(s) to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName}`,
-            'success'
-          );
+        if (successCount > 0) {
+          if (onShowToast) {
+            onShowToast(
+              isRtl
+                ? `✓ تم رفع ${successCount} ملف بنجاح في مجلد ${AURASYNC_MOBILE_FOLDER} في ${targetCloudName}`
+                : `✓ Uploaded ${successCount} file(s) to ${AURASYNC_MOBILE_FOLDER} in ${targetCloudName}`,
+              'success'
+            );
+          }
+        } else if (failedCount > 0) {
+          const detail = result.failed[0]?.error || (isRtl ? 'تعذر رفع الملف' : 'Upload failed');
+          if (onShowToast) {
+            onShowToast(
+              isRtl ? `تعذر الرفع للسحابة: ${detail}` : `Upload failed: ${detail}`,
+              'error'
+            );
+          }
         }
       }, 350);
     }).catch((err) => {

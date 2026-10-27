@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.43',
+  version = '1.0.44',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -145,7 +145,8 @@ export default function MobileHome({
       triggerHaptic(60);
 
       const targetCloudName = accounts[0].label || 'السحابة';
-      const successCount = result.successful.length;
+      const successCount = result.successful ? result.successful.length : 0;
+      const failedCount = result.failed ? result.failed.length : 0;
 
       // Automatically sync remote files so other devices have immediate access
       mobileEngine.syncCloudFiles().catch(() => {});
@@ -153,12 +154,18 @@ export default function MobileHome({
       setTimeout(() => {
         setIsBackingUpGallery(false);
         setGalleryDone(true);
-        if (onShowToast) {
+        if (successCount > 0 && onShowToast) {
           onShowToast(
             isRtl
               ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${targetFolderDisplay} في ${targetCloudName} بنجاح ومزامنته فوراً!`
               : `✓ Transferred ${successCount.toLocaleString()} files to ${targetFolderDisplay} in ${targetCloudName} and synced!`,
             'success'
+          );
+        } else if (failedCount > 0 && onShowToast) {
+          const detail = result.failed[0]?.error || (isRtl ? 'تعذر نقل الملفات' : 'Transfer failed');
+          onShowToast(
+            isRtl ? `تعذر النقل: ${detail}` : `Transfer failed: ${detail}`,
+            'error'
           );
         }
       }, 500);

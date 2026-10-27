@@ -162,13 +162,18 @@ export default function MobileAutoBackup({ onShowToast }) {
       triggerHaptic(50);
       setIsBackingUp(false);
       setIsComplete(true);
-      if (onShowToast) {
+      const successCount = result.successful ? result.successful.length : 0;
+      const failedCount = result.failed ? result.failed.length : 0;
+      if (successCount > 0 && onShowToast) {
         onShowToast(
           isRtl
-            ? `✓ تم رفع ${result.successful.length} ملف بنجاح إلى مجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة!`
-            : `✓ Backed up ${result.successful.length} file(s) to ${AURASYNC_MOBILE_FOLDER} in cloud!`,
+            ? `✓ تم رفع ${successCount} ملف بنجاح إلى مجلد ${AURASYNC_MOBILE_FOLDER} بالسحابة!`
+            : `✓ Backed up ${successCount} file(s) to ${AURASYNC_MOBILE_FOLDER} in cloud!`,
           'success'
         );
+      } else if (failedCount > 0 && onShowToast) {
+        const detail = result.failed[0]?.error || (isRtl ? 'تعذر النسخ' : 'Backup failed');
+        onShowToast(isRtl ? `تعذر النسخ: ${detail}` : `Backup failed: ${detail}`, 'error');
       }
     } catch (err) {
       setIsBackingUp(false);
