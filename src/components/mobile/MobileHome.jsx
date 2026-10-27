@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.52',
+  version = '1.0.53',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -170,12 +170,23 @@ export default function MobileHome({
               'warn'
             );
           } else if (successCount > 0) {
-            onShowToast(
-              isRtl
-                ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${targetFolderDisplay} في ${targetCloudName} بنجاح ومزامنته فوراً!`
-                : `✓ Transferred ${successCount.toLocaleString()} files to ${targetFolderDisplay} in ${targetCloudName} and synced!`,
-              'success'
-            );
+            const skippedDups = result.successful ? result.successful.filter(s => s.skipped).length : 0;
+            const uploadedNew = successCount - skippedDups;
+            let msg = '';
+            if (skippedDups > 0 && uploadedNew > 0) {
+              msg = isRtl
+                ? `✓ تم رفع ${uploadedNew.toLocaleString()} جديد وتخطي ${skippedDups.toLocaleString()} مكرر! الملفات محفوظة بالسحابة.`
+                : `✓ Uploaded ${uploadedNew.toLocaleString()} and skipped ${skippedDups.toLocaleString()} duplicates!`;
+            } else if (skippedDups > 0 && uploadedNew === 0) {
+              msg = isRtl
+                ? `✓ جميع الملفات (${skippedDups.toLocaleString()}) محفوظة مسبقاً بالسحابة بأمان ولم يتم استهلاك سعة إضافية!`
+                : `✓ All files (${skippedDups.toLocaleString()}) already safely in cloud!`;
+            } else {
+              msg = isRtl
+                ? `✓ تم نقل ${successCount.toLocaleString()} ملف إلى مجلد ${targetFolderDisplay} في ${targetCloudName} بنجاح ومزامنته!`
+                : `✓ Transferred ${successCount.toLocaleString()} files to ${targetFolderDisplay} in ${targetCloudName} and synced!`;
+            }
+            onShowToast(msg, 'success');
           }
         }
       }, 500);

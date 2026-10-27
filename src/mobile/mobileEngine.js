@@ -98,8 +98,11 @@ class MobileEngine {
       language:                 'ar',
       biometricLock:            false,
       syncMode:                 'mirror', // 'mirror' | 'free_up_space'
+      autoSyncNewMedia:         true,
+      preventDuplicates:        true,
       deleteFromPhoneKeepsCloud: true,
       deleteFromCloudKeepsPhone: true,
+      smartCleanAlert:          true,
       targetFolder:             MOBILE_FOLDER_NAME,
       permsGranted:             false,
       backupPhotos:             true,
@@ -824,6 +827,36 @@ class MobileEngine {
       let preview = null;
       if (isFile && isImage && typeof URL !== 'undefined') {
         try { preview = URL.createObjectURL(f); } catch (_) {}
+      }
+
+      // Check if duplicate prevention is enabled and file already exists
+      if (this.settings.preventDuplicates !== false) {
+        const alreadyExists = this.uploadedFiles.some(existing => 
+          existing.name === name && (existing.cloudFolder === destFolder || !existing.cloudFolder || existing.cloudFolder === MOBILE_FOLDER_NAME)
+        );
+        if (alreadyExists) {
+          successful.push({
+            id: `dup_${name}_${Date.now()}`,
+            name,
+            type,
+            sizeMB,
+            skipped: true,
+            isDuplicate: true,
+            cloudFolder: destFolder
+          });
+          if (options.onProgress) {
+            const overallBase = ((i + 1) / totalFiles) * 100;
+            options.onProgress({
+              overallPercent: Math.min(99, Math.round(overallBase)),
+              currentFileName: name,
+              fileIndex: i + 1,
+              totalFiles,
+              speedMBps: 35.0,
+              filePercent: 100
+            });
+          }
+          continue;
+        }
       }
 
       try {

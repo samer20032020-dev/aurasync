@@ -218,7 +218,7 @@ function SettingItem({
 
 // ─── Main MobileSettings Component ───────────────────────────────────────────
 export default function MobileSettings({
-  version = '1.0.52',
+  version = '1.0.53',
   theme = 'dark',
   language: propLanguage,
   onSetLanguage,
@@ -296,21 +296,44 @@ export default function MobileSettings({
     }
   }, [currentLang, i18n, onSetLanguage, onShowToast, triggerHaptic]);
 
-  // Handle setting toggles (Wi-Fi, Charging, Zero-Deletion, Biometrics)
+  // Handle setting toggles (Wi-Fi, Auto-sync, Duplicates, Zero-Deletion, Space Clean, Biometrics)
   const handleToggle = useCallback((key) => {
     triggerHaptic(15);
-    const updated = { ...settings, [key]: !settings[key] };
+    const defaults = {
+      autoSyncNewMedia: true,
+      preventDuplicates: true,
+      deleteFromPhoneKeepsCloud: true,
+      smartCleanAlert: true,
+      wifiOnly: false,
+      chargingOnly: false,
+      biometricLock: false,
+    };
+    const currentVal = settings[key] !== undefined ? Boolean(settings[key]) : Boolean(defaults[key]);
+    const newVal = !currentVal;
+    const updated = { ...settings, [key]: newVal };
     setSettings(updated);
     mobileEngine.saveSettings(updated);
 
     const feedback = {
+      autoSyncNewMedia: {
+        ar: ['تم تعطيل المزامنة التلقائية للصور الجديدة', '✓ تم تفعيل المزامنة التلقائية فور التقاط أي صورة'],
+        en: ['Auto-sync for new media disabled', '✓ Auto-sync for new media enabled'],
+      },
+      preventDuplicates: {
+        ar: ['تم تعطيل كشف ومنع تكرار الملفات', '✓ تم تفعيل فحص وتخطي الصور المكررة بالسحابة'],
+        en: ['Duplicate prevention disabled', '✓ Duplicate check & skip enabled'],
+      },
       deleteFromPhoneKeepsCloud: {
         ar: ['تم تعطيل حماية سحابة الهاتف', '✓ تم تفعيل: ما يُحذف من الهاتف يظل محفوظاً بالسحابة'],
         en: ['Cloud deletion protection disabled', '✓ Enabled: What is deleted from phone stays in cloud'],
       },
+      smartCleanAlert: {
+        ar: ['تم تعطيل اقتراح تفريغ المساحة', '✓ تم تفعيل اقتراح تفريغ مساحة الهاتف بعد النسخ'],
+        en: ['Phone cleanup suggestion disabled', '✓ Smart phone space cleanup suggestion enabled'],
+      },
       wifiOnly: {
-        ar: ['المزامنة مفعلة على كافة الشبكات', '✓ تم تفعيل المزامنة عبر Wi-Fi فقط لتوفير البيانات'],
-        en: ['Sync enabled on all networks', '✓ Sync restricted to Wi-Fi only to save data'],
+        ar: ['المزامنة مفعلة على كافة الشبكات (بيانات الهاتف + Wi-Fi)', '✓ تم تفعيل المزامنة عبر Wi-Fi فقط لتوفير باقة الهاتف'],
+        en: ['Sync enabled on all networks', '✓ Sync restricted to Wi-Fi only to save cellular data'],
       },
       chargingOnly: {
         ar: ['المزامنة مفعلة في أي وقت', '✓ تم تفعيل المزامنة أثناء الشحن فقط للحفاظ على البطارية'],
@@ -323,8 +346,8 @@ export default function MobileSettings({
     };
 
     if (feedback[key] && onShowToast) {
-      const idx = updated[key] ? 1 : 0;
-      onShowToast(isRtl ? feedback[key].ar[idx] : feedback[key].en[idx], updated[key] ? 'success' : 'warn');
+      const idx = newVal ? 1 : 0;
+      onShowToast(isRtl ? feedback[key].ar[idx] : feedback[key].en[idx], newVal ? 'success' : 'warn');
     }
   }, [settings, isRtl, onShowToast, triggerHaptic]);
 
@@ -627,8 +650,51 @@ export default function MobileSettings({
         </SettingItem>
       </SettingsCard>
 
-      {/* ── 3. SYNC & ZERO-DELETION PROTECTION ──────────────────────── */}
+      {/* ── 3. SYNC & SAFE RETENTION ─────────────────────────────────── */}
       <SettingsCard isDark={isDark} title={isRtl ? 'المزامنة وحماية الملفات' : 'Sync & Safe Retention'}>
+        {/* Auto-Sync New Media */}
+        <SettingItem
+          isDark={isDark}
+          icon={
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+          }
+          iconBg={isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)'}
+          iconColor="#3b82f6"
+          title={isRtl ? 'مزامنة تلقائية للصور الجديدة' : 'Auto-Sync New Photos'}
+          subtitle={isRtl ? 'رفع أي صورة أو فيديو فور التقاطها إلى السحابة' : 'Instantly backup new media to cloud'}
+        >
+          <IOSSwitch
+            checked={settings.autoSyncNewMedia !== undefined ? Boolean(settings.autoSyncNewMedia) : true}
+            onChange={() => handleToggle('autoSyncNewMedia')}
+            color="#3b82f6"
+          />
+        </SettingItem>
+
+        {/* Prevent Duplicate Uploads */}
+        <SettingItem
+          isDark={isDark}
+          icon={
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              <path d="M13 15l2 2 4-4" />
+            </svg>
+          }
+          iconBg={isDark ? 'rgba(139, 92, 246, 0.15)' : 'rgba(139, 92, 246, 0.1)'}
+          iconColor="#8b5cf6"
+          title={isRtl ? 'كشف ومنع تكرار الملفات' : 'Prevent Duplicate Uploads'}
+          subtitle={isRtl ? 'تخطي رفع الصور المرفوعة مسبقاً وتوفير المساحة' : 'Skip identical media to save space and time'}
+        >
+          <IOSSwitch
+            checked={settings.preventDuplicates !== undefined ? Boolean(settings.preventDuplicates) : true}
+            onChange={() => handleToggle('preventDuplicates')}
+            color="#8b5cf6"
+          />
+        </SettingItem>
+
         {/* Zero-Deletion Guard */}
         <SettingItem
           isDark={isDark}
@@ -641,18 +707,42 @@ export default function MobileSettings({
           iconBg={isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.1)'}
           iconColor="#10b981"
           title={isRtl ? 'حفظ السحابة عند الحذف' : 'Keep Cloud Copy on Delete'}
-          subtitle={isRtl ? 'ما يُحذف من الهاتف يظل محفوظاً في السحابة' : 'Local deletions never touch cloud copies'}
+          subtitle={isRtl ? 'ما يُحذف من الهاتف يظل محفوظاً في السحابة بأمان' : 'Local deletions never touch cloud copies'}
         >
           <IOSSwitch
-            checked={Boolean(settings.deleteFromPhoneKeepsCloud)}
+            checked={settings.deleteFromPhoneKeepsCloud !== undefined ? Boolean(settings.deleteFromPhoneKeepsCloud) : true}
             onChange={() => handleToggle('deleteFromPhoneKeepsCloud')}
             color="#10b981"
+          />
+        </SettingItem>
+
+        {/* Free Up Phone Space Suggestion */}
+        <SettingItem
+          isDark={isDark}
+          icon={
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+          }
+          iconBg={isDark ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.1)'}
+          iconColor="#f59e0b"
+          title={isRtl ? 'اقتراح تفريغ مساحة الهاتف' : 'Suggest Freeing Phone Space'}
+          subtitle={isRtl ? 'تنبيه ذكي لحذف الصور من الهاتف بعد حفظها بالسحابة' : 'Smart prompt to remove local files backed up to cloud'}
+        >
+          <IOSSwitch
+            checked={settings.smartCleanAlert !== undefined ? Boolean(settings.smartCleanAlert) : true}
+            onChange={() => handleToggle('smartCleanAlert')}
+            color="#f59e0b"
           />
         </SettingItem>
 
         {/* Wi-Fi Only Sync */}
         <SettingItem
           isDark={isDark}
+          last
           icon={
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12.55a11 11 0 0 1 14.08 0" />
@@ -661,36 +751,15 @@ export default function MobileSettings({
               <line x1="12" y1="20" x2="12.01" y2="20" />
             </svg>
           }
-          iconBg={isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(2, 132, 199, 0.1)'}
-          iconColor="#0284c7"
+          iconBg={isDark ? 'rgba(6, 182, 212, 0.15)' : 'rgba(6, 182, 212, 0.1)'}
+          iconColor="#06b6d4"
           title={isRtl ? 'المزامنة عبر Wi-Fi فقط' : 'Sync on Wi-Fi Only'}
-          subtitle={isRtl ? 'توفير باقة بيانات الإنترنت للهاتف' : 'Save mobile cellular data'}
+          subtitle={isRtl ? 'توفير باقة بيانات الإنترنت للهاتف (4G / 5G)' : 'Save mobile cellular data'}
         >
           <IOSSwitch
             checked={Boolean(settings.wifiOnly)}
             onChange={() => handleToggle('wifiOnly')}
-            color="#0284c7"
-          />
-        </SettingItem>
-
-        {/* Charging Only Sync */}
-        <SettingItem
-          isDark={isDark}
-          last
-          icon={
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-          }
-          iconBg={isDark ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.1)'}
-          iconColor="#f59e0b"
-          title={isRtl ? 'المزامنة أثناء الشحن فقط' : 'Sync While Charging Only'}
-          subtitle={isRtl ? 'الحفاظ على طاقة وبطارية الهاتف' : 'Preserve device battery health'}
-        >
-          <IOSSwitch
-            checked={Boolean(settings.chargingOnly)}
-            onChange={() => handleToggle('chargingOnly')}
-            color="#f59e0b"
+            color="#06b6d4"
           />
         </SettingItem>
       </SettingsCard>
