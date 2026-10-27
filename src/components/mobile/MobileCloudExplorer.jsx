@@ -573,25 +573,6 @@ export default function MobileCloudExplorer({
               </span>
             </button>
 
-            {/* Upload Button */}
-            <button
-              onClick={() => {
-                triggerHaptic(20);
-                if (fileInputRef.current) fileInputRef.current.click();
-              }}
-              style={{
-                padding: '8px 14px', borderRadius: 12,
-                background: '#2563eb',
-                border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-                boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              <span>{isRtl ? 'رفع صور' : 'Upload'}</span>
-            </button>
           </div>
         </div>
       )}
