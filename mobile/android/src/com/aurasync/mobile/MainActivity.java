@@ -1669,6 +1669,55 @@ public class MainActivity extends Activity {
             return false;
         }
 
+        @JavascriptInterface
+        public boolean deleteMediaFileFromPhone(final String fileName) {
+            if (fileName == null || fileName.trim().isEmpty()) return false;
+            final String cleanName = fileName.trim();
+            boolean deletedAny = false;
+
+            // 1. Direct filesystem check & deletion
+            try {
+                File[] checkDirs = new File[]{
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AuraSync"),
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                    new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
+                };
+                for (File dir : checkDirs) {
+                    if (dir != null && dir.exists()) {
+                        File target = new File(dir, cleanName);
+                        if (target.exists() && target.isFile()) {
+                            if (target.delete()) deletedAny = true;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // 2. MediaStore deletion
+            try {
+                ContentResolver cr = getContentResolver();
+                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? OR " + MediaStore.MediaColumns.DATA + " LIKE ?";
+                String[] args = new String[]{cleanName, "%/" + cleanName};
+                try {
+                    int d1 = cr.delete(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, sel, args);
+                    if (d1 > 0) deletedAny = true;
+                } catch (Exception ignored) {}
+                try {
+                    int d2 = cr.delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, sel, args);
+                    if (d2 > 0) deletedAny = true;
+                } catch (Exception ignored) {}
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    try {
+                        int d3 = cr.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI, sel, args);
+                        if (d3 > 0) deletedAny = true;
+                    } catch (Exception ignored) {}
+                }
+            } catch (Exception ignored) {}
+
+            return deletedAny;
+        }
+
         /**
          * scanGalleryMedia — Returns a page of media items using correct global LIMIT+OFFSET
          * across the unified images+videos list (sorted newest-first per type).

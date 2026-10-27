@@ -26,6 +26,7 @@ export default function MobileCloudExplorer({
   const [selectedFileIds, setSelectedFileIds] = useState(new Set());
   const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
+  const [deleteTargetMode, setDeleteTargetMode] = useState('both'); // 'cloud' | 'phone' | 'both'
 
   const triggerHaptic = useCallback((ms = 15) => {
     try {
@@ -331,26 +332,41 @@ export default function MobileCloudExplorer({
     }
   }, [filteredFiles, selectedFileIds.size, triggerHaptic]);
 
-  // Confirm and execute batch deletion from cloud only
+  // Confirm and execute batch deletion (Cloud, Phone, or Both)
   const handleConfirmBatchDelete = async () => {
     if (selectedFileIds.size === 0 || isBatchDeleting) return;
     setIsBatchDeleting(true);
     triggerHaptic(30);
     const idsToDelete = Array.from(selectedFileIds);
     const count = idsToDelete.length;
+
+    const fromCloud = deleteTargetMode === 'cloud' || deleteTargetMode === 'both';
+    const fromPhone = deleteTargetMode === 'phone' || deleteTargetMode === 'both';
+
     try {
-      await mobileEngine.deleteUploadedFiles(idsToDelete);
+      await mobileEngine.deleteUploadedFiles(idsToDelete, { fromCloud, fromPhone });
       setSelectedFileIds(new Set());
       setIsSelectionMode(false);
       setShowBatchDeleteModal(false);
       refreshLocalMedia();
+
+      let msg = '';
+      if (deleteTargetMode === 'both') {
+        msg = isRtl
+          ? `✓ تم حذف ${count} ملف نهائياً من الهاتف والسحابة معاً`
+          : `✓ Deleted ${count} file(s) from phone & cloud`;
+      } else if (deleteTargetMode === 'phone') {
+        msg = isRtl
+          ? `✓ تم حذف ${count} ملف من الهاتف فقط (تظل محفوظة بالسحابة)`
+          : `✓ Deleted ${count} file(s) from phone only (kept safe in cloud)`;
+      } else {
+        msg = isRtl
+          ? `✓ تم حذف ${count} ملف من السحابة فقط (تظل محفوظة بهاتفك)`
+          : `✓ Deleted ${count} file(s) from cloud only (kept on phone)`;
+      }
+
       if (onShowToast) {
-        onShowToast(
-          isRtl
-            ? `✓ تم حذف ${count} ملف من السحابة فقط (محفوظة بأمان على هاتفك)`
-            : `✓ Deleted ${count} file(s) from cloud only (safe on your phone)`,
-          'success'
-        );
+        onShowToast(msg, 'success');
       }
     } catch (err) {
       if (onShowToast) {
@@ -445,7 +461,7 @@ export default function MobileCloudExplorer({
                   : (isRtl ? 'اضغط لتحديد الصور...' : 'Select photos...')}
               </div>
               <div style={{ fontSize: 10, color: '#3b82f6', fontWeight: 600 }}>
-                {isRtl ? 'الحذف يمسح من السحابة فقط وتبقى بهاتفك' : 'Deletes from cloud only, keeps on phone'}
+                {isRtl ? 'اختر الحذف من الهاتف، السحابة، أو كليهما' : 'Choose to delete from phone, cloud, or both'}
               </div>
             </div>
           </div>
@@ -535,21 +551,28 @@ export default function MobileCloudExplorer({
                 onClick={handleToggleSelectMode}
                 style={{
                   height: 38, padding: '0 12px', borderRadius: 12,
-                  background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
-                  border: `1px solid ${colors.border}`,
-                  color: colors.text,
+                  background: isSelectionMode
+                    ? (isDark ? 'rgba(59, 130, 246, 0.2)' : '#dbeafe')
+                    : (isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9'),
+                  border: isSelectionMode
+                    ? '1px solid #3b82f6'
+                    : `1px solid ${colors.border}`,
+                  color: isSelectionMode ? '#3b82f6' : colors.text,
                   fontSize: 12, fontWeight: 700,
                   cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
                   transition: 'all 0.2s',
                 }}
-                title={isRtl ? 'تحديد صور وحذفها من السحابة فقط' : 'Select items'}
+                title={isRtl ? 'تحديد صور' : 'Select items'}
               >
-                <span style={{ fontSize: 13 }}>☑️</span>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 11 12 14 22 4" />
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>
                 <span>{isRtl ? 'تحديد' : 'Select'}</span>
               </button>
             )}
 
-            {/* Sync Button */}
+            {/* Modern Vector Sync Button */}
             <button
               onClick={handleSyncCloud}
               disabled={isSyncing}
@@ -557,22 +580,32 @@ export default function MobileCloudExplorer({
                 width: 38, height: 38, borderRadius: 12,
                 background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9',
                 border: `1px solid ${colors.border}`,
-                color: colors.text,
+                color: isSyncing ? '#3b82f6' : colors.text,
                 cursor: isSyncing ? 'wait' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'all 0.2s',
               }}
               title={isRtl ? 'مزامنة وتحديث الملفات' : 'Sync & refresh files'}
             >
-              <span style={{
-                display: 'inline-block',
-                animation: isSyncing ? 'spin 1s linear infinite' : 'none',
-                fontSize: 14,
-              }}>
-                🔄
-              </span>
+              <svg
+                viewBox="0 0 24 24"
+                width="17"
+                height="17"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  display: 'inline-block',
+                  animation: isSyncing ? 'spin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite' : 'none',
+                  transition: 'transform 0.3s ease',
+                }}
+              >
+                <path d="M21.5 2v6h-6M2.5 22v-6h6" />
+                <path d="M2.5 11.5a9 9 0 0 1 15.36-5.86L21.5 8M21.5 12.5a9 9 0 0 1-15.36 5.86L2.5 16" />
+              </svg>
             </button>
-
           </div>
         </div>
       )}
@@ -763,9 +796,23 @@ export default function MobileCloudExplorer({
               marginBottom: 20,
             }}
           >
-            <span style={{ display: 'inline-block', animation: isSyncing ? 'spin 1s linear infinite' : 'none', fontSize: 13 }}>
-              🔄
-            </span>
+            <svg
+              viewBox="0 0 24 24"
+              width="15"
+              height="15"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                display: 'inline-block',
+                animation: isSyncing ? 'spin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite' : 'none',
+              }}
+            >
+              <path d="M21.5 2v6h-6M2.5 22v-6h6" />
+              <path d="M2.5 11.5a9 9 0 0 1 15.36-5.86L21.5 8M21.5 12.5a9 9 0 0 1-15.36 5.86L2.5 16" />
+            </svg>
             <span>
               {isSyncing
                 ? (isRtl ? 'جاري الفحص والمزامنة...' : 'Syncing with devices…')
@@ -1075,9 +1122,14 @@ export default function MobileCloudExplorer({
               </button>
             </div>
 
-            {/* Delete button: Only from Cloud */}
+            {/* Delete button: Opens destination selection modal */}
             <button
-              onClick={() => handleDeleteFile(selectedFile.id)}
+              onClick={() => {
+                triggerHaptic(20);
+                setSelectedFileIds(new Set([selectedFile.id]));
+                setSelectedFile(null);
+                setShowBatchDeleteModal(true);
+              }}
               style={{
                 width: '100%', padding: '12px', borderRadius: 14,
                 background: 'rgba(239,68,68,0.1)',
@@ -1089,7 +1141,7 @@ export default function MobileCloudExplorer({
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
               </svg>
-              <span>{isRtl ? 'حذف من السحابة فقط (الإبقاء على الهاتف)' : 'Delete from Cloud Only (Keep on phone)'}</span>
+              <span>{isRtl ? 'خيارات حذف الملف...' : 'Delete File Options...'}</span>
             </button>
           </div>
         </div>
@@ -1099,36 +1151,161 @@ export default function MobileCloudExplorer({
       {showBatchDeleteModal && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 100,
-          background: 'rgba(0,0,0,0.75)',
-          backdropFilter: 'blur(8px)',
+          background: 'rgba(0,0,0,0.78)',
+          backdropFilter: 'blur(10px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: 20,
         }}>
           <div style={{
             width: '100%', maxWidth: 360,
             background: colors.card,
-            borderRadius: 24, padding: '24px 20px',
+            borderRadius: 24, padding: '22px 18px',
             border: `1px solid ${colors.border}`,
             boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
             textAlign: 'center',
           }}>
             <div style={{
-              width: 52, height: 52, borderRadius: 16,
+              width: 48, height: 48, borderRadius: 16,
               background: 'rgba(239,68,68,0.12)',
-              color: '#ef4444', fontSize: 24,
+              color: '#ef4444', fontSize: 22,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 14px',
+              margin: '0 auto 12px',
             }}>
-              🗑️
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
             </div>
-            <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 8px', color: colors.text }}>
-              {isRtl ? `حذف ${selectedFileIds.size} ملف من السحابة فقط؟` : `Delete ${selectedFileIds.size} files from cloud only?`}
+            <h3 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 6px', color: colors.text }}>
+              {isRtl ? `حذف ${selectedFileIds.size} ملف` : `Delete ${selectedFileIds.size} files`}
             </h3>
-            <p style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.6, margin: '0 0 20px' }}>
-              {isRtl
-                ? '🔒 ستبقى جميع هذه الصور والملفات محفوظة بأمان على هاتفك وفي الاستوديو ولن يتم مسها أبداً. سيتم حذفها فقط من مساحتك السحابية لتوفير المساحة.'
-                : '🔒 All these files will remain completely safe on your phone and gallery. They will only be removed from cloud storage.'}
+            <p style={{ fontSize: 11, color: colors.textMuted, lineHeight: 1.5, margin: '0 0 14px' }}>
+              {isRtl ? 'اختر أين تريد حذف الملفات المحددة بدقة:' : 'Select where you want to delete the files from:'}
             </p>
+
+            {/* 3 Interactive Destination Options */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '0 0 18px', textAlign: isRtl ? 'right' : 'left' }}>
+              {/* Option 1: Both Phone & Cloud */}
+              <div
+                onClick={() => { triggerHaptic(10); setDeleteTargetMode('both'); }}
+                style={{
+                  padding: '10px 12px', borderRadius: 14,
+                  background: deleteTargetMode === 'both' ? (isDark ? 'rgba(239,68,68,0.16)' : '#fee2e2') : (isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'),
+                  border: `1.5px solid ${deleteTargetMode === 'both' ? '#ef4444' : colors.border}`,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 10,
+                    background: deleteTargetMode === 'both' ? 'rgba(239,68,68,0.2)' : (isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'),
+                    color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: colors.text }}>
+                      {isRtl ? 'حذف من الهاتف والسحابة معاً' : 'Delete from Both'}
+                    </div>
+                    <div style={{ fontSize: 10, color: colors.textMuted }}>
+                      {isRtl ? 'حذف شامل ونهائي من كل مكان' : 'Remove from phone and cloud'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  width: 18, height: 18, borderRadius: '50%',
+                  border: `2px solid ${deleteTargetMode === 'both' ? '#ef4444' : colors.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: deleteTargetMode === 'both' ? '#ef4444' : 'transparent',
+                }}>
+                  {deleteTargetMode === 'both' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                </div>
+              </div>
+
+              {/* Option 2: Phone Only */}
+              <div
+                onClick={() => { triggerHaptic(10); setDeleteTargetMode('phone'); }}
+                style={{
+                  padding: '10px 12px', borderRadius: 14,
+                  background: deleteTargetMode === 'phone' ? (isDark ? 'rgba(245,158,11,0.16)' : '#fef3c7') : (isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'),
+                  border: `1.5px solid ${deleteTargetMode === 'phone' ? '#f59e0b' : colors.border}`,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 10,
+                    background: deleteTargetMode === 'phone' ? 'rgba(245,158,11,0.2)' : (isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'),
+                    color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                      <line x1="12" y1="18" x2="12.01" y2="18"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: colors.text }}>
+                      {isRtl ? 'حذف من الهاتف فقط (تفريغ مساحة)' : 'Delete from Phone Only'}
+                    </div>
+                    <div style={{ fontSize: 10, color: colors.textMuted }}>
+                      {isRtl ? 'تفريغ الذاكرة مع بقاء النسخة بالسحابة' : 'Free up phone space, keep in cloud'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  width: 18, height: 18, borderRadius: '50%',
+                  border: `2px solid ${deleteTargetMode === 'phone' ? '#f59e0b' : colors.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: deleteTargetMode === 'phone' ? '#f59e0b' : 'transparent',
+                }}>
+                  {deleteTargetMode === 'phone' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                </div>
+              </div>
+
+              {/* Option 3: Cloud Only */}
+              <div
+                onClick={() => { triggerHaptic(10); setDeleteTargetMode('cloud'); }}
+                style={{
+                  padding: '10px 12px', borderRadius: 14,
+                  background: deleteTargetMode === 'cloud' ? (isDark ? 'rgba(59,130,246,0.16)' : '#dbeafe') : (isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'),
+                  border: `1.5px solid ${deleteTargetMode === 'cloud' ? '#3b82f6' : colors.border}`,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 10,
+                    background: deleteTargetMode === 'cloud' ? 'rgba(59,130,246,0.2)' : (isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'),
+                    color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: colors.text }}>
+                      {isRtl ? 'حذف من السحابة فقط' : 'Delete from Cloud Only'}
+                    </div>
+                    <div style={{ fontSize: 10, color: colors.textMuted }}>
+                      {isRtl ? 'توفير سعة السحابة وتبقى في هاتفك' : 'Free cloud space, keep on phone'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  width: 18, height: 18, borderRadius: '50%',
+                  border: `2px solid ${deleteTargetMode === 'cloud' ? '#3b82f6' : colors.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: deleteTargetMode === 'cloud' ? '#3b82f6' : 'transparent',
+                }}>
+                  {deleteTargetMode === 'cloud' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                </div>
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <button
                 onClick={() => setShowBatchDeleteModal(false)}
@@ -1148,15 +1325,18 @@ export default function MobileCloudExplorer({
                 disabled={isBatchDeleting}
                 style={{
                   padding: '12px', borderRadius: 14,
-                  background: '#ef4444',
+                  background: deleteTargetMode === 'phone' ? '#f59e0b' : (deleteTargetMode === 'cloud' ? '#3b82f6' : '#ef4444'),
                   border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
                   cursor: isBatchDeleting ? 'wait' : 'pointer',
-                  boxShadow: '0 4px 14px rgba(239,68,68,0.35)',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
                 }}
               >
                 {isBatchDeleting
-                  ? (isRtl ? 'جاري الحذف...' : 'Deleting...')
-                  : (isRtl ? 'تأكيد الحذف' : 'Confirm Delete')}
+                  ? (isRtl ? 'جاري التنفيذ...' : 'Deleting...')
+                  : (isRtl
+                      ? (deleteTargetMode === 'both' ? 'حذف من الاثنين' : (deleteTargetMode === 'phone' ? 'حذف من الهاتف' : 'حذف من السحابة'))
+                      : (deleteTargetMode === 'both' ? 'Delete Both' : (deleteTargetMode === 'phone' ? 'Delete from Phone' : 'Delete from Cloud'))
+                    )}
               </button>
             </div>
           </div>
