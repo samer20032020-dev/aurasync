@@ -42,7 +42,7 @@ const OfflineVaultIcon = () => (
 );
 
 export default function MobileHome({
-  version = '1.0.64',
+  version = '1.0.65',
   theme = 'dark',
   onNavigateTab,
   onShowToast,
@@ -61,6 +61,7 @@ export default function MobileHome({
   const [connectingProvider, setConnectingProvider] = useState(null);
   const [userEmailInput, setUserEmailInput] = useState('');
   const [showGalleryConfirmModal, setShowGalleryConfirmModal] = useState(false);
+  const [forceGalleryReupload, setForceGalleryReupload] = useState(false);
   const [detectedGalleryCount, setDetectedGalleryCount] = useState(0);
   const [pendingResumeSession, setPendingResumeSession] = useState(null);
   const [showResumeModal, setShowResumeModal] = useState(false);
@@ -403,6 +404,9 @@ export default function MobileHome({
     const currentAcc = accounts[0];
     if (!currentAcc) return;
 
+    const forceMode = forceGalleryReupload;
+    setForceGalleryReupload(false);
+
     setTransferMode('gallery');
 
     // 1. Android Native automatic media pull (fetches all photos & videos from MediaStore)
@@ -424,6 +428,7 @@ export default function MobileHome({
         try {
           const res = await mobileEngine.pullEntireGalleryNative({
             account: currentAcc,
+            force: forceMode,
             onStatus: (st) => setGalleryCurrentFile(st),
             onProgress: ({ overallPercent, currentFileName, speedMBps, fileIndex, totalFiles }) => {
               setGalleryProgress(overallPercent);
@@ -446,10 +451,14 @@ export default function MobileHome({
               setIsBackingUpGallery(false);
               setGalleryDone(true);
               if (onShowToast) {
+                const countStr = res.successful.length.toLocaleString();
+                const alreadyStr = res.alreadySyncedCount > 0
+                  ? (isRtl ? ` (${res.alreadySyncedCount.toLocaleString()} ملف كان محفوظاً مسبقاً)` : ` (${res.alreadySyncedCount.toLocaleString()} already in cloud)`)
+                  : '';
                 onShowToast(
                   isRtl
-                    ? `✓ تم نسخ ونقل المعرض بالكامل (${res.successful.length.toLocaleString()} ملف) إلى مجلد ${AURASYNC_MOBILE_FOLDER}/galary في ${currentAcc.label || 'السحابة'} بنجاح!`
-                    : `✓ Copied full gallery (${res.successful.length.toLocaleString()} items) to ${AURASYNC_MOBILE_FOLDER}/galary!`,
+                    ? `✓ تم نسخ ونقل (${countStr} ملف) إلى مجلد ${AURASYNC_MOBILE_FOLDER}/galary في ${currentAcc.label || 'السحابة'} بنجاح!${alreadyStr}`
+                    : `✓ Copied (${countStr} items) to ${AURASYNC_MOBILE_FOLDER}/galary!${alreadyStr}`,
                   'success'
                 );
 
@@ -474,8 +483,8 @@ export default function MobileHome({
               if (onShowToast) {
                 onShowToast(
                   isRtl
-                    ? `✓ كافة ملفات المعرض (${res.alreadySyncedCount.toLocaleString()} ملف) منسوخة ومحفوظة مسبقاً في السحابة بأمان!`
-                    : `✓ All gallery media (${res.alreadySyncedCount.toLocaleString()} items) already synced and safe in cloud!`,
+                    ? `✓ كافة ملفات المعرض (${res.alreadySyncedCount.toLocaleString()} ملف) مؤكدة ومحفوظة مسبقاً في السحابة بأمان! (يمكنك تفعيل خيار فرض إعادة الرفع لإعادة إرسالها مجدداً)`
+                    : `✓ All gallery media (${res.alreadySyncedCount.toLocaleString()} items) verified safe in cloud!`,
                   'success'
                 );
               }
@@ -1321,12 +1330,35 @@ export default function MobileHome({
               padding: '10px 14px', borderRadius: 14,
               background: isDark ? 'rgba(124, 58, 237, 0.12)' : '#f5f3ff',
               border: `1px solid ${isDark ? 'rgba(124, 58, 237, 0.3)' : 'rgba(124, 58, 237, 0.2)'}`,
-              marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               fontSize: 11, fontWeight: 700, color: '#a855f7',
             }}>
               <span>📁 {isRtl ? 'مجلد الوجهة:' : 'Target:'}</span>
               <span style={{ direction: 'ltr', fontFamily: 'monospace' }}>
                 {AURASYNC_MOBILE_FOLDER}/galary
+              </span>
+            </div>
+
+            {/* Force Re-upload Option */}
+            <div
+              onClick={() => setForceGalleryReupload(!forceGalleryReupload)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '9px 12px', borderRadius: 12, marginBottom: 18,
+                background: forceGalleryReupload ? (isDark ? 'rgba(124, 58, 237, 0.2)' : '#ede9fe') : (isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc'),
+                border: `1px dashed ${forceGalleryReupload ? '#a855f7' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')}`,
+                cursor: 'pointer', userSelect: 'none', transition: 'all 0.2s'
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={forceGalleryReupload}
+                onChange={(e) => setForceGalleryReupload(e.target.checked)}
+                style={{ accentColor: '#7c3aed', width: 16, height: 16, cursor: 'pointer' }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <span style={{ fontSize: 11, fontWeight: 700, color: forceGalleryReupload ? '#a855f7' : colors.textMuted }}>
+                {isRtl ? '🔄 فرض إعادة رفع كافة الملفات (تجاوز الفحص التلقائي)' : '🔄 Force re-upload all items (bypass duplicate check)'}
               </span>
             </div>
 

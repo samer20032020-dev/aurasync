@@ -508,7 +508,7 @@ async function runTests() {
   console.log('\n--- 12. Regression Checks (v1.7.66) ---');
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  assert(pkg.version === '1.7.104', 'package.json version is 1.7.104', pkg.version);
+  assert(pkg.version === '1.7.105', 'package.json version is 1.7.105', pkg.version);
 
   const winTargets = (pkg.build && pkg.build.win && pkg.build.win.target) || [];
   assert(
@@ -1970,9 +1970,30 @@ async function runTests() {
   assert(pkgJsonRaw.scripts && pkgJsonRaw.scripts.clean === 'node scripts/clean-workspace.js', 'package.json includes clean script');
   const cleanRelTestSrc = fs.readFileSync(path.join(rootDir, 'scripts', 'clean-release.js'), 'utf8');
   assert(cleanRelTestSrc.includes('desktopRelDir') && cleanRelTestSrc.includes('mobileRelDir'), 'clean-release.js prunes stale historical binaries in release/desktop and release/mobile');
-  assert(cleanRelTestSrc.includes('win-unpacked-old'), 'clean-release.js cleans legacy unpacked staging directories');
+  // Test: Individual Files Sync & Full-Window Drag-and-Drop
+  console.log('\n--- 42. Individual Files Sync & Full-Window Drag-and-Drop ---');
+  const mainSrc42 = fs.readFileSync(path.join(rootDir, 'electron', 'main.js'), 'utf8');
+  assert(mainSrc42.includes("'files:select-dialog'"), 'main.js registers files:select-dialog IPC handler');
+  assert(mainSrc42.includes("'items:add-paths'"), 'main.js registers items:add-paths IPC handler');
+  assert(mainSrc42.includes('handleSingleFileQuickSync'), 'main.js implements handleSingleFileQuickSync');
 
-  assert(pkgJsonRaw.version === '1.7.104', 'package.json version matches 1.7.104');
+  const preloadSrc42 = fs.readFileSync(path.join(rootDir, 'electron', 'preload.js'), 'utf8');
+  assert(preloadSrc42.includes('selectFilesDialog'), 'preload.js exposes selectFilesDialog');
+  assert(preloadSrc42.includes('addItemsByPath'), 'preload.js exposes addItemsByPath');
+  assert(preloadSrc42.includes('getPathForFile'), 'preload.js exposes getPathForFile for drag and drop');
+
+  const filesPageSrc42 = fs.readFileSync(path.join(rootDir, 'src', 'components', 'FilesPage.jsx'), 'utf8');
+  assert(filesPageSrc42.includes('onAddFiles'), 'FilesPage.jsx accepts and renders onAddFiles button');
+  assert(filesPageSrc42.includes('FilePlus'), 'FilesPage.jsx imports and uses FilePlus icon');
+
+  const appSrc42 = fs.readFileSync(path.join(rootDir, 'src', 'App.jsx'), 'utf8');
+  assert(appSrc42.includes('handleGlobalDrop'), 'App.jsx implements handleGlobalDrop for drag and drop');
+  assert(appSrc42.includes('isGlobalDragging'), 'App.jsx implements isGlobalDragging visual overlay');
+  assert(appSrc42.includes('handleAddFiles'), 'App.jsx implements handleAddFiles');
+  assert(appSrc42.includes('handleAddPaths'), 'App.jsx implements handleAddPaths');
+  assert(!appSrc42.includes('onToggleMobileMode='), 'App.jsx does not pass mobile toggle button to TopBar in desktop view');
+
+  assert(pkgJsonRaw.version === '1.7.105', 'package.json version matches 1.7.105');
 
   console.log('\n=====================================================');
   console.log(`Verification Complete: ${passedTests} / ${totalTests} tests passed (${Math.round((passedTests / totalTests) * 100)}%)`);

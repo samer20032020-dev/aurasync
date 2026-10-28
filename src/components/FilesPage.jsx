@@ -17,6 +17,8 @@ import {
   ChevronRight,
   FolderOpen,
   FolderPlus,
+  FilePlus,
+  UploadCloud,
   Play,
   Pause,
   Sparkles,
@@ -37,6 +39,8 @@ export default function FilesPage({
   folders = [],
   providers = [],
   onAddFolder,
+  onAddFiles,
+  onAddPaths,
   onRemoveFolder,
   onTogglePause,
   onSyncFolder,
@@ -682,10 +686,29 @@ export default function FilesPage({
           <button
             onClick={onAddFolder}
             className="btn btn-primary shadow-lg shadow-blue-500/20"
+            title={t('folders.add')}
           >
             <FolderPlus className="w-4 h-4" />
             <span>{t('files.addFolder') || t('folders.add')}</span>
           </button>
+
+          {/* Add Files Button (audio, video, photos, exe binaries, docs, etc.) */}
+          {onAddFiles && (
+            <button
+              type="button"
+              onClick={onAddFiles}
+              className="btn border transition-all text-xs font-bold gap-1.5 px-3.5 py-2 rounded-xl shadow-sm hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+              style={{
+                background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(3, 105, 161, 0.22) 100%)',
+                borderColor: 'rgba(56, 189, 248, 0.35)',
+                color: '#38bdf8'
+              }}
+              title={t('files.addFilesTip') || 'مزامنة ملفات فردية (صوت، فيديو، صور، EXE، مستندات...)'}
+            >
+              <FilePlus className="w-4 h-4 text-sky-400" />
+              <span>{t('files.addFiles') || 'إضافة ملفات للمزامنة'}</span>
+            </button>
+          )}
 
           {/* Search bar */}
           <div className="relative flex-1 min-w-[200px]">
@@ -951,14 +974,14 @@ export default function FilesPage({
       ) : folders.length === 0 ? (
         /* Empty State */
         <div
-          className="surface py-20 px-6 text-center border-dashed"
+          className="surface py-16 px-6 text-center border-dashed relative overflow-hidden transition-all"
           style={{ borderStyle: 'dashed' }}
         >
           <div
             className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-4 shadow-xl"
             style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
           >
-            <FolderPlus className="w-8 h-8" />
+            <UploadCloud className="w-8 h-8 text-sky-400 animate-pulse" />
           </div>
           <h3 className="text-base font-extrabold mb-1.5 text-slate-100">
             {t('folders.emptyTitle')}
@@ -966,10 +989,30 @@ export default function FilesPage({
           <p className="text-xs dim max-w-md mx-auto mb-6 leading-relaxed">
             {t('folders.emptyDesc')}
           </p>
-          <button onClick={onAddFolder} className="btn btn-primary px-6 h-10 shadow-lg shadow-blue-500/25">
-            <FolderPlus className="w-4 h-4" />
-            <span>{t('folders.emptyButton')}</span>
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button onClick={onAddFolder} className="btn btn-primary px-6 h-10 shadow-lg shadow-blue-500/25">
+              <FolderPlus className="w-4 h-4" />
+              <span>{t('folders.emptyButton')}</span>
+            </button>
+            {onAddFiles && (
+              <button
+                type="button"
+                onClick={onAddFiles}
+                className="btn border px-6 h-10 shadow-lg transition-all font-bold text-xs hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(3, 105, 161, 0.25) 100%)',
+                  borderColor: 'rgba(56, 189, 248, 0.4)',
+                  color: '#38bdf8'
+                }}
+              >
+                <FilePlus className="w-4 h-4 text-sky-400" />
+                <span>{t('folders.emptyFilesButton')}</span>
+              </button>
+            )}
+          </div>
+          <div className="mt-5 flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium">
+            <span>📥 {t('folders.dragDropDirectHint')}</span>
+          </div>
         </div>
       ) : (
         /* Tree Mode: Hierarchical folder cards */

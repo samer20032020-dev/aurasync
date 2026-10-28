@@ -18,7 +18,7 @@ import DisasterRecoveryModal from './components/DisasterRecoveryModal';
 import versionData from '../version.json';
 import { I18nProvider, translate } from './i18n';
 import ErrorBoundary from './components/ErrorBoundary';
-import { Info, CheckCircle2, AlertCircle, ShieldCheck, ArrowLeftRight, X, Trash2, Cloud, CloudCog, CloudOff, Loader2, Check, FolderCog, Flame } from 'lucide-react';
+import { Info, CheckCircle2, AlertCircle, ShieldCheck, ArrowLeftRight, X, Trash2, Cloud, CloudCog, CloudOff, Loader2, Check, FolderCog, Flame, UploadCloud, FilePlus, FolderPlus } from 'lucide-react';
 
 export default function App() {
   const isInstaller =
@@ -86,7 +86,7 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [folderDeleteModal, setFolderDeleteModal] = useState(null);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState('1.7.104');
+  const [appVersion, setAppVersion] = useState('1.7.105');
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState([]);
@@ -179,16 +179,16 @@ export default function App() {
       if (res && res.updateAvailable && !res.isMobileRelease) {
         setUpdateInfo(res);
         if (interactive) setShowUpdateModal(true);
-        showToast(`يتوفر تحديث جديد للكمبيوتر: v${res.latestVersion}`, 'success');
+        showToast(`يتوفر تحديث جديد: v${res.latestVersion}`, 'success');
       } else if (res && res.isMobileRelease) {
         setUpdateInfo({ ...res, updateAvailable: false });
-        if (interactive) showToast('نسخة الكمبيوتر محدثة بالكامل (التحديث المنشور مخصص لتطبيق الهاتف فقط)', 'info');
+        if (interactive) showToast('البرنامج محدث بالكامل (التحديث الأخير مخصص لتطبيق الهاتف فقط)', 'info');
       } else if (res && res.success === false) {
         setUpdateInfo(res);
         if (interactive) showToast(`تعذر فحص التحديثات من الخادم: ${res.error || 'خطأ في الشبكة'}`, 'error');
       } else {
         setUpdateInfo(res);
-        if (interactive) showToast('أنت تستخدم أحدث إصدار للكمبيوتر بالفعل!', 'success');
+        if (interactive) showToast('أنت تستخدم أحدث إصدار بالفعل!', 'success');
       }
       return res;
     } catch (err) {
@@ -584,6 +584,53 @@ export default function App() {
     }
   };
 
+  const handleAddPaths = async (paths) => {
+    if (!window.electronAPI?.addItemsByPath || !paths || paths.length === 0) return;
+
+    const connected = providers.filter((p) => p.connected);
+    if (connected.length === 0) {
+      showToast(t('app.providerNotConnected') || 'يرجى ربط حساب سحابي أولاً لبدء المزامنة', 'error');
+      setActivePage('accounts');
+      return;
+    }
+
+    try {
+      const res = await window.electronAPI.addItemsByPath(paths, connected[0].id);
+      if (res && res.success) {
+        const parts = [];
+        if (res.foldersAdded > 0) parts.push(`${res.foldersAdded} مجلد`);
+        if (res.filesAdded > 0) parts.push(`${res.filesAdded} ملف`);
+        const label = parts.length > 0 ? parts.join(' و ') : `${paths.length} عنصر`;
+        showToast(`✓ تمت إضافة ${label} للمزامنة السحابية الفورية بنجاح! ☁️`, 'success');
+        await refreshAllData();
+      } else {
+        showToast(res?.error || 'حدث خطأ أثناء إضافة العناصر للمزامنة', 'error');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleAddFiles = async () => {
+    if (!window.electronAPI?.selectFilesDialog) return;
+
+    const connected = providers.filter((p) => p.connected);
+    if (connected.length === 0) {
+      showToast(t('app.providerNotConnected') || 'يرجى ربط حساب سحابي أولاً', 'error');
+      setActivePage('accounts');
+      return;
+    }
+
+    try {
+      const selectedFiles = await window.electronAPI.selectFilesDialog();
+      if (!selectedFiles || selectedFiles.length === 0) return;
+
+      await handleAddPaths(selectedFiles);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
   const handleRemoveFolder = async (folderId, folderName) => {
     if (!window.electronAPI) return;
     const folder = folders.find((f) => f.id === folderId);
@@ -858,6 +905,55 @@ export default function App() {
   const ToastIcon = toastIcon;
   const toastColor = toast?.type === 'error' ? 'var(--danger)' : toast?.type === 'success' ? 'var(--success)' : 'var(--accent)';
 
+  const [isGlobalDragging, setIsGlobalDragging] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleGlobalDragEnter = (e) => {
+    e.preventDefault();
+    dragCounterRef.current++;
+    if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      setIsGlobalDragging(true);
+    }
+  };
+
+  const handleGlobalDragOver = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleGlobalDragLeave = (e) => {
+    e.preventDefault();
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsGlobalDragging(false);
+    }
+  };
+
+  const handleGlobalDrop = async (e) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsGlobalDragging(false);
+
+    if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    const paths = files
+      .map((f) => {
+        if (window.electronAPI?.getPathForFile) {
+          return window.electronAPI.getPathForFile(f);
+        }
+        return f.path;
+      })
+      .filter(Boolean);
+
+    if (paths.length === 0) return;
+
+    await handleAddPaths(paths);
+  };
+
   if (isMobileMode) {
     const mobileVersion = versionData.mobileVersion || '1.0.10';
     return (
@@ -890,6 +986,10 @@ export default function App() {
       <div
         dir={settings.language === 'en' ? 'ltr' : 'rtl'}
         className={`cloud-window-shell ${isMaximized ? 'is-maximized' : 'is-floating'}`}
+        onDragEnter={handleGlobalDragEnter}
+        onDragOver={handleGlobalDragOver}
+        onDragLeave={handleGlobalDragLeave}
+        onDrop={handleGlobalDrop}
       >
         <div
           className="cloud-window-frame"
@@ -925,10 +1025,6 @@ export default function App() {
                 onOpenSearch={() => setSearchOpen(true)}
                 updateInfo={updateInfo}
                 onOpenUpdate={() => setShowUpdateModal(true)}
-                onToggleMobileMode={() => {
-                  setIsMobileMode(true);
-                  try { localStorage.setItem('aurasync_mobile_mode', 'true'); } catch (_) {}
-                }}
               />
 
           <main
@@ -948,6 +1044,8 @@ export default function App() {
                 onSyncAll={handleSyncAll}
                 isSyncing={isSyncing}
                 onAddFolder={handleAddFolder}
+                onAddFiles={handleAddFiles}
+                onAddPaths={handleAddPaths}
                 remoteFolders={remoteFolders}
                 remoteLoading={remoteLoading}
                 onRefreshRemote={() => fetchRemoteFolders(false)}
@@ -962,6 +1060,8 @@ export default function App() {
                 folders={folders}
                 providers={providers}
                 onAddFolder={handleAddFolder}
+                onAddFiles={handleAddFiles}
+                onAddPaths={handleAddPaths}
                 onRemoveFolder={handleRemoveFolder}
                 onTogglePause={handleTogglePause}
                 onSyncFolder={handleSyncFolder}
@@ -1726,6 +1826,33 @@ export default function App() {
           onRestoredSuccess={refreshAllData}
           showToast={showToast}
         />
+
+        {/* Full-window Drag & Drop Overlay for Files and Folders */}
+        {isGlobalDragging && (
+          <div className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center backdrop-blur-md bg-black/70 transition-all duration-300">
+            <div
+              className="p-8 sm:p-12 rounded-3xl border-2 border-dashed border-sky-400 bg-sky-950/90 text-center max-w-lg mx-4 shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in-95"
+              style={{
+                boxShadow: '0 0 60px rgba(56, 189, 248, 0.4), inset 0 0 40px rgba(56, 189, 248, 0.15)'
+              }}
+            >
+              <div className="w-20 h-20 rounded-2xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-400 shadow-inner">
+                <UploadCloud className="w-10 h-10 animate-pulse" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <h3 className="text-xl font-extrabold text-white tracking-wide">
+                  أفلت الملفات أو المجلدات هنا للمزامنة الفورية
+                </h3>
+                <p className="text-xs text-sky-200/90 max-w-sm leading-relaxed">
+                  يدعم كافة صيغ الملفات (صوتيات MP3، فيديوهات، صور، برامج EXE، مستندات، أو مجلدات كاملة)
+                </p>
+              </div>
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-400/10 border border-sky-400/20 text-[11px] font-semibold text-sky-300">
+                <span>⚡ تشفير آمن وحفظ فوري بالسحابة</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         </div>
       </div>

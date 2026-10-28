@@ -23,7 +23,7 @@ export default function Sidebar({
   providers = [],
   stats,
   isSyncing,
-  version = '1.7.104',
+  version = '1.7.105',
   updateInfo = null,
   onOpenUpdate = null
 }) {

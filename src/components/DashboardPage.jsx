@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Cloud,
   Plus,
+  FilePlus,
   ArrowUpRight
 } from 'lucide-react';
 import { useI18n } from '../i18n';
@@ -35,6 +36,7 @@ export default function DashboardPage({
   onSyncAll,
   isSyncing,
   onAddFolder,
+  onAddFiles,
   remoteFolders = [],
   remoteLoading = false,
   onRefreshRemote,
@@ -150,10 +152,22 @@ export default function DashboardPage({
                 <ArrowUpRight className="w-3.5 h-3.5 rtl:-scale-x-100" />
               </button>
             ) : folders.length > 0 ? (
-              <button onClick={onAddFolder} className="btn btn-outline hover:scale-[1.02] transition-transform">
-                <Plus className="w-4 h-4" />
-                {t('dash.addFolder')}
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={onAddFolder} className="btn btn-outline hover:scale-[1.02] transition-transform">
+                  <Plus className="w-4 h-4" />
+                  {t('dash.addFolder')}
+                </button>
+                {onAddFiles && (
+                  <button
+                    onClick={onAddFiles}
+                    className="btn btn-outline hover:scale-[1.02] transition-transform border-sky-500/40 text-sky-400 hover:bg-sky-500/10"
+                    title={t('files.addFilesTip')}
+                  >
+                    <FilePlus className="w-4 h-4 text-sky-400" />
+                    <span>{t('files.addFiles')}</span>
+                  </button>
+                )}
+              </div>
             ) : null}
           </div>
         </div>
@@ -178,10 +192,21 @@ export default function DashboardPage({
         {folders.length === 0 ? (
           <div className="px-6 py-10 text-center flex flex-col items-center justify-center gap-3.5">
             <span className="text-xs dim">{t('dash.noFolders')}</span>
-            <button onClick={onAddFolder} className="btn btn-primary h-8 text-[11.5px]">
-              <Plus className="w-3.5 h-3.5" />
-              {t('dash.addFirst')}
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              <button onClick={onAddFolder} className="btn btn-primary h-8 text-[11.5px]">
+                <Plus className="w-3.5 h-3.5" />
+                {t('dash.addFirst')}
+              </button>
+              {onAddFiles && (
+                <button
+                  onClick={onAddFiles}
+                  className="btn h-8 text-[11.5px] border border-sky-500/40 text-sky-400 bg-sky-950/30 hover:bg-sky-500/15"
+                >
+                  <FilePlus className="w-3.5 h-3.5 text-sky-400" />
+                  <span>{t('files.addFiles')}</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="p-3 flex flex-col gap-1">

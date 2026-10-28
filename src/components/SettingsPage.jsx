@@ -217,7 +217,7 @@ export default function SettingsPage({
   providers = [],
   folders = [],
   showToast,
-  appVersion = '1.7.104',
+  appVersion = '1.7.105',
   updateInfo = null,
   isDownloadingUpdate = false,
   updateProgress = null,
@@ -935,7 +935,7 @@ export default function SettingsPage({
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-[13.5px] font-black text-white">
-                          {updateInfo?.updateAvailable && !updateInfo?.isMobileRelease ? `إصدار جديد متاح للكمبيوتر: v${updateInfo.latestVersion}` : 'أنت تستخدم أحدث إصدار رسمي للكمبيوتر'}
+                          {updateInfo?.updateAvailable && !updateInfo?.isMobileRelease ? `إصدار جديد متاح: v${updateInfo.latestVersion}` : 'أنت تستخدم أحدث إصدار رسمي'}
                         </span>
                         <span className="badge badge-accent font-mono text-[10px]">
                           v{appVersion}
@@ -945,7 +945,7 @@ export default function SettingsPage({
                         {updateInfo?.updateAvailable && !updateInfo?.isMobileRelease
                           ? 'يتضمن هذا الإصدار تحسينات للسرعة وقفل المتصفح الفوري وميزات متطورة.'
                           : updateInfo?.isMobileRelease
-                            ? 'نسخة الكمبيوتر محدثة بالكامل — التحديث الأخير مخصص لتطبيق الهاتف (Android APK).'
+                            ? 'البرنامج محدث بالكامل — التحديث الأخير مخصص لتطبيق الهاتف (Android APK).'
                             : 'تطبيقك محصن ومحدث بأحدث قواعد الحماية والمزامنة السحابية.'}
                       </p>
                     </div>

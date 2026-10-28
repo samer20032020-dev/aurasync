@@ -218,7 +218,7 @@ function SettingItem({
 
 // ─── Main MobileSettings Component ───────────────────────────────────────────
 export default function MobileSettings({
-  version = '1.0.64',
+  version = '1.0.65',
   theme = 'dark',
   language: propLanguage,
   onSetLanguage,
